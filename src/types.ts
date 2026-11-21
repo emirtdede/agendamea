@@ -18,7 +18,12 @@ export type ThemeId =
   | 'grass'
   | 'lime'
   | 'pink'
-  | 'indigo';
+  | 'indigo'
+  | 'custom';
+
+export type AppIconId = 'match-theme' | 'obsidian-light' | ThemeId;
+
+export type CloseBehavior = 'ask' | 'tray' | 'quit';
 
 export type SmartView = 'all' | 'today' | 'important' | 'completed';
 
@@ -77,6 +82,13 @@ export interface Todo {
 export interface AppSettings {
   themeMode: ThemeMode;
   themeId: ThemeId;
+  customThemeColor?: string;
+  appIconId?: AppIconId;
+  customIconColor?: string;
+  zoomPercent?: number;
+  highContrast?: boolean;
+  reducedMotion?: boolean;
+  closeBehavior?: CloseBehavior;
   dragLocked: boolean;
   sidebarCollapsed: boolean;
   themeCustomized?: boolean;

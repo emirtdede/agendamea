@@ -35,10 +35,15 @@ import {
   type UiDictionary,
 } from '../i18n/translations';
 import {
+  buildCustomThemeTokens,
   CATEGORY_COLORS,
+  clampZoomPercent,
   COLOR_THEMES,
+  getContrastingForeground,
+  isValidAppIconId,
   isValidThemeId,
   normalizeHexColor,
+  resolveAppIconColors,
 } from './themes';
 import { TodoDatabase, ValidationError } from '../db/database';
 import type { Category, Todo } from '../types';
@@ -1081,6 +1086,12 @@ test('QA: Zero language leakage across all 73 languages, UI components, color na
     'welcomeStep4Desc',
     'welcomeStartButton',
     'welcomePrivacyLocalTitle',
+    'customThemeHexTitle',
+    'appIconSectionDesc',
+    'zoomLevelDesc',
+    'closeModalTitle',
+    'closeActionTrayDesc',
+    'closeActionQuitDesc',
   ];
 
   for (const langMeta of SUPPORTED_LANGUAGES) {
@@ -1497,6 +1508,83 @@ test('QA: Permanent ban on em-dash and en-dash characters across all 73 locales,
     }
   };
   walkDir(projectRoot);
+});
+
+test('QA: Custom HEX theme tokens, dynamic App Icon generator (.ico), accessibility & closeBehavior persist cleanly', async () => {
+  // 1. Custom HEX theme generator produces WCAG-contrasting tokens in both light and dark modes
+  assert.equal(isValidThemeId('custom'), true);
+  assert.equal(isValidAppIconId('match-theme'), true);
+  assert.equal(isValidAppIconId('obsidian-light'), true);
+  assert.equal(isValidAppIconId('custom'), true);
+  assert.equal(getContrastingForeground('#ffffff'), '#09090b');
+  assert.equal(getContrastingForeground('#18181b'), '#ffffff');
+
+  const lightCustom = buildCustomThemeTokens('#14b8a6', 'light');
+  const darkCustom = buildCustomThemeTokens('#14b8a6', 'dark');
+  assert.equal(lightCustom.accent, '#14b8a6');
+  assert.ok(darkCustom.canvas.startsWith('#') && darkCustom.accentFg.startsWith('#'));
+
+  const iconMatch = resolveAppIconColors('match-theme', 'custom', 'dark', '#ff4d8d');
+  assert.equal(iconMatch.bg, '#ff4d8d');
+  const iconCustom = resolveAppIconColors('custom', 'obsidian', 'light', '#2563eb', '#f59e0b');
+  assert.equal(iconCustom.bg, '#f59e0b');
+  assert.equal(iconCustom.fg, '#09090b');
+
+  // 2. Accessibility zoom clamping
+  assert.equal(clampZoomPercent(50), 80);
+  assert.equal(clampZoomPercent(124), 125);
+  assert.equal(clampZoomPercent(220), 150);
+
+  // 3. Pure-Node dynamic .ico generator produces valid multi-resolution Windows ICO with 7 PNG frames
+  const { createRequire } = await import('node:module');
+  const req = createRequire(import.meta.url);
+  const iconGen = req(path.join(process.cwd(), 'electron', 'iconGenerator.cjs'));
+  const { icoBuffer, trayPngBuffer } = iconGen.buildMultiSizeIcoBuffer('#7c3aed', '#ffffff');
+  assert.equal(icoBuffer.readUInt16LE(0), 0);
+  assert.equal(icoBuffer.readUInt16LE(2), 1);
+  assert.equal(icoBuffer.readUInt16LE(4), 7);
+  assert.deepEqual(
+    Array.from(trayPngBuffer.subarray(0, 8)),
+    [137, 80, 78, 71, 13, 10, 26, 10],
+    'Tray icon buffer must be a valid PNG image',
+  );
+
+  // 4. SQLite persistence for customThemeColor, appIconId, customIconColor, zoomPercent, highContrast, reducedMotion, closeBehavior
+  const db = new TodoDatabase(':memory:');
+  try {
+    const updated = db.updateSettings({
+      themeId: 'custom',
+      customThemeColor: '#0EA5E9',
+      appIconId: 'custom',
+      customIconColor: '#EC4899',
+      zoomPercent: 125,
+      highContrast: true,
+      reducedMotion: true,
+      closeBehavior: 'tray',
+    });
+    assert.equal(updated.themeId, 'custom');
+    assert.equal(updated.customThemeColor, '#0ea5e9');
+    assert.equal(updated.appIconId, 'custom');
+    assert.equal(updated.customIconColor, '#ec4899');
+    assert.equal(updated.zoomPercent, 125);
+    assert.equal(updated.highContrast, true);
+    assert.equal(updated.reducedMotion, true);
+    assert.equal(updated.closeBehavior, 'tray');
+  } finally {
+    db.close();
+  }
+
+  // 5. NSIS installer.nsh includes all 73 languages with Windows detection & English fallback
+  const nshText = fs.readFileSync(path.join(process.cwd(), 'electron-resources', 'installer.nsh'), 'utf8');
+  assert.ok(nshText.includes('GetUserDefaultUILanguage'));
+  assert.ok(nshText.includes('StrCpy $SelectedAppLang "en"'));
+  assert.ok(nshText.includes('installer-language.txt'));
+  for (const lang of SUPPORTED_LANGUAGES) {
+    assert.ok(
+      nshText.includes(`[${lang.code}]`),
+      `NSIS Setup language picker missing language [${lang.code}]`,
+    );
+  }
 });
 
 

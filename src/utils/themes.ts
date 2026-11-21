@@ -1,4 +1,4 @@
-import type { ThemeId, ThemeMode } from '../types';
+import type { AppIconId, ThemeId, ThemeMode } from '../types';
 
 export interface ThemeTokens {
   canvas: string;
@@ -589,19 +589,296 @@ export function normalizeHexColor(value: string): string | null {
   return null;
 }
 
+export const ZOOM_PRESETS = [80, 90, 100, 110, 125, 150] as const;
+
+export const VALID_APP_ICON_IDS: readonly AppIconId[] = [
+  'match-theme',
+  'obsidian',
+  'obsidian-light',
+  'slate',
+  'navy',
+  'blue',
+  'cyan',
+  'indigo',
+  'purple',
+  'pink',
+  'red',
+  'orange',
+  'yellow',
+  'emerald',
+  'grass',
+  'lime',
+  'custom',
+];
+
+export function isValidAppIconId(id: unknown): id is AppIconId {
+  return typeof id === 'string' && (VALID_APP_ICON_IDS as readonly string[]).includes(id);
+}
+
+export function clampZoomPercent(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 100;
+  let closest: number = ZOOM_PRESETS[2];
+  let bestDiff = Infinity;
+  for (const preset of ZOOM_PRESETS) {
+    const diff = Math.abs(preset - num);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      closest = preset;
+    }
+  }
+  return closest;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const clean = (normalizeHexColor(hex) ?? '#2563eb').slice(1);
+  return {
+    r: Number.parseInt(clean.slice(0, 2), 16),
+    g: Number.parseInt(clean.slice(2, 4), 16),
+    b: Number.parseInt(clean.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toByte = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${toByte(r)}${toByte(g)}${toByte(b)}`;
+}
+
+function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === rn) h = (gn - bn) / d + (gn < bn ? 6 : 0);
+  else if (max === gn) h = (bn - rn) / d + 2;
+  else h = (rn - gn) / d + 4;
+  return { h: (h / 6) * 360, s, l };
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const hue = ((h % 360) + 360) % 360;
+  const sat = Math.max(0, Math.min(1, s));
+  const lig = Math.max(0, Math.min(1, l));
+  const c = (1 - Math.abs(2 * lig - 1)) * sat;
+  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = lig - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (hue < 60) [r, g, b] = [c, x, 0];
+  else if (hue < 120) [r, g, b] = [x, c, 0];
+  else if (hue < 180) [r, g, b] = [0, c, x];
+  else if (hue < 240) [r, g, b] = [0, x, c];
+  else if (hue < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return rgbToHex((r + m) * 255, (g + m) * 255, (b + m) * 255);
+}
+
+export function getContrastingForeground(hex: string): string {
+  const { r, g, b } = hexToRgb(hex);
+  const toLinear = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+  return luminance > 0.42 ? '#09090b' : '#ffffff';
+}
+
+export function buildCustomThemeTokens(hex: string, mode: ThemeMode): ThemeTokens {
+  const normalized = normalizeHexColor(hex) ?? '#2563eb';
+  const { r, g, b } = hexToRgb(normalized);
+  const { h, s, l } = rgbToHsl(r, g, b);
+  const subtleSat = Math.min(s, 0.35);
+
+  if (mode === 'light') {
+    // Keep very bright/pale custom colors legible as accents in light mode
+    const accent = l > 0.84 ? hslToHex(h, Math.max(s, 0.25), 0.48) : normalized;
+    const accentRgb = hexToRgb(accent);
+    const accentHsl = rgbToHsl(accentRgb.r, accentRgb.g, accentRgb.b);
+    const accentHover = hslToHex(accentHsl.h, accentHsl.s, Math.max(0.14, accentHsl.l - 0.08));
+    return {
+      canvas: hslToHex(h, subtleSat * 0.45, 0.985),
+      surface: '#ffffff',
+      surfaceSubtle: hslToHex(h, subtleSat * 0.55, 0.96),
+      surfaceHover: hslToHex(h, subtleSat * 0.65, 0.93),
+      border: hslToHex(h, subtleSat * 0.55, 0.89),
+      borderStrong: hslToHex(h, subtleSat * 0.6, 0.81),
+      textPrimary: hslToHex(h, Math.min(s, 0.25), 0.09),
+      textSecondary: hslToHex(h, Math.min(s, 0.22), 0.32),
+      textMuted: hslToHex(h, Math.min(s, 0.18), 0.46),
+      accent,
+      accentHover,
+      accentSoft: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.11)`,
+      accentRing: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.28)`,
+      accentFg: getContrastingForeground(accent),
+    };
+  }
+
+  // Dark mode: lift very dark custom accents so buttons and highlights remain legible
+  const accent = l < 0.34 ? hslToHex(h, Math.max(s, 0.35), 0.62) : normalized;
+  const accentRgb = hexToRgb(accent);
+  const accentHsl = rgbToHsl(accentRgb.r, accentRgb.g, accentRgb.b);
+  const accentHover = hslToHex(accentHsl.h, accentHsl.s, Math.min(0.86, accentHsl.l + 0.09));
+  return {
+    canvas: hslToHex(h, subtleSat * 0.55, 0.055),
+    surface: hslToHex(h, subtleSat * 0.55, 0.095),
+    surfaceSubtle: hslToHex(h, subtleSat * 0.55, 0.135),
+    surfaceHover: hslToHex(h, subtleSat * 0.55, 0.175),
+    border: hslToHex(h, subtleSat * 0.55, 0.21),
+    borderStrong: hslToHex(h, subtleSat * 0.55, 0.29),
+    textPrimary: hslToHex(h, Math.min(s, 0.25), 0.96),
+    textSecondary: hslToHex(h, Math.min(s, 0.28), 0.72),
+    textMuted: hslToHex(h, Math.min(s, 0.24), 0.54),
+    accent,
+    accentHover,
+    accentSoft: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.16)`,
+    accentRing: `rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.32)`,
+    accentFg: getContrastingForeground(accent),
+  };
+}
+
 export function getThemeById(id: string): ColorTheme {
   return COLOR_THEMES.find((t) => t.id === id) ?? COLOR_THEMES[0];
 }
 
 export function isValidThemeId(id: string): id is ThemeId {
-  return COLOR_THEMES.some((t) => t.id === id);
+  return id === 'custom' || COLOR_THEMES.some((t) => t.id === id);
 }
 
-export function applyThemeToDocument(themeId: ThemeId, mode: ThemeMode): void {
+export function resolveAppIconColors(
+  appIconId: AppIconId | undefined,
+  themeId: ThemeId,
+  themeMode: ThemeMode,
+  customThemeColor?: string,
+  customIconColor?: string,
+): { bg: string; fg: string; border: string } {
+  const id = appIconId ?? 'match-theme';
+  if (id === 'obsidian') {
+    return { bg: '#111114', fg: '#fafafa', border: 'rgba(255,255,255,0.14)' };
+  }
+  if (id === 'obsidian-light') {
+    return { bg: '#fafafa', fg: '#111114', border: 'rgba(17,17,20,0.18)' };
+  }
+  if (id === 'custom') {
+    const bg = normalizeHexColor(customIconColor ?? customThemeColor ?? '#2563eb') ?? '#2563eb';
+    const fg = getContrastingForeground(bg);
+    return {
+      bg,
+      fg,
+      border: fg === '#09090b' ? 'rgba(9,9,11,0.16)' : 'rgba(255,255,255,0.14)',
+    };
+  }
+  if (id === 'match-theme') {
+    if (themeId === 'custom') {
+      const bg = normalizeHexColor(customThemeColor ?? '#2563eb') ?? '#2563eb';
+      const fg = getContrastingForeground(bg);
+      return {
+        bg,
+        fg,
+        border: fg === '#09090b' ? 'rgba(9,9,11,0.16)' : 'rgba(255,255,255,0.14)',
+      };
+    }
+    const activeTheme = getThemeById(themeId);
+    if (activeTheme.id === 'obsidian') {
+      return themeMode === 'dark'
+        ? { bg: '#fafafa', fg: '#09090b', border: 'rgba(9,9,11,0.16)' }
+        : { bg: '#18181b', fg: '#ffffff', border: 'rgba(255,255,255,0.12)' };
+    }
+    const bg = themeMode === 'dark' ? activeTheme.swatchDark : activeTheme.swatch;
+    const fg = getContrastingForeground(bg);
+    return {
+      bg,
+      fg,
+      border: fg === '#09090b' ? 'rgba(9,9,11,0.16)' : 'rgba(255,255,255,0.14)',
+    };
+  }
+  const chosenTheme = getThemeById(id);
+  const bg = chosenTheme.swatch;
+  const fg = getContrastingForeground(bg);
+  return {
+    bg,
+    fg,
+    border: fg === '#09090b' ? 'rgba(9,9,11,0.16)' : 'rgba(255,255,255,0.14)',
+  };
+}
+
+export function applyAppIconTokensToDocument(colors: {
+  bg: string;
+  fg: string;
+  border: string;
+}): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  const theme = getThemeById(themeId);
-  const tokens = mode === 'dark' ? theme.dark : theme.light;
+  root.style.setProperty('--app-icon-bg', colors.bg);
+  root.style.setProperty('--app-icon-fg', colors.fg);
+  root.style.setProperty('--app-icon-border', colors.border);
+}
+
+export function applyAccessibilityToDocument(options: {
+  zoomPercent: number;
+  highContrast: boolean;
+  reducedMotion: boolean;
+}): void {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  const zoom = clampZoomPercent(options.zoomPercent);
+
+  if (options.highContrast) {
+    root.classList.add('high-contrast');
+  } else {
+    root.classList.remove('high-contrast');
+  }
+
+  if (options.reducedMotion) {
+    root.classList.add('reduce-motion');
+  } else {
+    root.classList.remove('reduce-motion');
+  }
+
+  const electronBridge = (
+    window as unknown as {
+      agendameaWindow?: { setZoomFactor?: (factor: number) => Promise<void> | void };
+    }
+  ).agendameaWindow;
+
+  if (electronBridge && typeof electronBridge.setZoomFactor === 'function') {
+    root.style.zoom = '';
+    void electronBridge.setZoomFactor(zoom / 100);
+  } else {
+    root.style.zoom = zoom === 100 ? '' : `${zoom}%`;
+  }
+
+  try {
+    localStorage.setItem('agendamea-zoom-percent', String(zoom));
+    localStorage.setItem('agendamea-high-contrast', String(Boolean(options.highContrast)));
+    localStorage.setItem('agendamea-reduced-motion', String(Boolean(options.reducedMotion)));
+  } catch {
+    // Ignore storage restrictions
+  }
+}
+
+export function applyThemeToDocument(
+  themeId: ThemeId,
+  mode: ThemeMode,
+  customThemeColor?: string,
+): void {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  const tokens =
+    themeId === 'custom'
+      ? buildCustomThemeTokens(customThemeColor ?? '#2563eb', mode)
+      : mode === 'dark'
+        ? getThemeById(themeId).dark
+        : getThemeById(themeId).light;
 
   if (mode === 'dark') {
     root.classList.add('dark');
@@ -632,6 +909,12 @@ export function applyThemeToDocument(themeId: ThemeId, mode: ThemeMode): void {
   try {
     localStorage.setItem('agendamea-theme-mode', mode);
     localStorage.setItem('agendamea-theme-id', themeId);
+    if (customThemeColor) {
+      const normalizedCustom = normalizeHexColor(customThemeColor);
+      if (normalizedCustom) {
+        localStorage.setItem('agendamea-custom-theme-color', normalizedCustom);
+      }
+    }
     localStorage.setItem(
       'agendamea-theme-tokens',
       JSON.stringify({

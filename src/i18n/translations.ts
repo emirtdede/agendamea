@@ -257,6 +257,36 @@ export interface UiDictionary {
   welcomePrivacyCloudDesc: string;
   welcomePrivacyUndoTitle: string;
   welcomePrivacyUndoDesc: string;
+  customThemeButton: string;
+  customThemeHexTitle: string;
+  customThemeHexHint: string;
+  appIconSectionTitle: string;
+  appIconSectionDesc: string;
+  appIconMatchTheme: string;
+  appIconDarkMono: string;
+  appIconLightMono: string;
+  appIconCustom: string;
+  accessibilitySectionTitle: string;
+  zoomLevelTitle: string;
+  zoomLevelDesc: string;
+  zoomResetButton: string;
+  highContrastTitle: string;
+  highContrastDesc: string;
+  reducedMotionTitle: string;
+  reducedMotionDesc: string;
+  closeBehaviorSectionTitle: string;
+  closeBehaviorDesc: string;
+  closeBehaviorAsk: string;
+  closeBehaviorTray: string;
+  closeBehaviorQuit: string;
+  closeModalTitle: string;
+  closeModalDesc: string;
+  closeActionTrayTitle: string;
+  closeActionTrayDesc: string;
+  closeActionQuitTitle: string;
+  closeActionQuitDesc: string;
+  closeRememberChoiceLabel: string;
+  trayOpenApp: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -504,6 +534,36 @@ export const TR_DICTIONARY: UiDictionary = {
   welcomePrivacyCloudDesc: '15 günlük tarihli yedek ve format sonrası otomatik kurtarma.',
   welcomePrivacyUndoTitle: 'Çöp Kutusu ve 12 Saniyelik Geri Al',
   welcomePrivacyUndoDesc: 'Yanlışlıkla silinen görev ve kategorileri tek tıkla geri getirin.',
+  customThemeButton: 'Özel Renk',
+  customThemeHexTitle: 'Özel Tema Rengi (HEX)',
+  customThemeHexHint: 'İstediğiniz HEX renk kodunu girin veya renk seçiciden seçin.',
+  appIconSectionTitle: 'Uygulama İkonu',
+  appIconSectionDesc: 'Masaüstü kısayolu, görev çubuğu, sistem tepsisi ve pencere ikonunu anında değiştirir.',
+  appIconMatchTheme: 'Temayla Eşleştir',
+  appIconDarkMono: 'Koyu Monokrom',
+  appIconLightMono: 'Açık Monokrom',
+  appIconCustom: 'Özel İkon',
+  accessibilitySectionTitle: 'Erişilebilirlik',
+  zoomLevelTitle: 'Yakınlaştırma Yüzdesi',
+  zoomLevelDesc: 'Metin ve arayüz boyutunu göz rahatlığınıza göre ölçeklendirin.',
+  zoomResetButton: 'Sıfırla',
+  highContrastTitle: 'Yüksek Kontrast Modu',
+  highContrastDesc: 'Kenarlıkları, metin karşıtlığını ve klavye odak halkalarını güçlendirir.',
+  reducedMotionTitle: 'Azaltılmış Hareket',
+  reducedMotionDesc: 'Geçiş animasyonlarını en aza indirerek daha sakin bir deneyim sunar.',
+  closeBehaviorSectionTitle: 'Kapanış ve Sistem Tepsisi',
+  closeBehaviorDesc: 'Pencereyi kapat düğmesine bastığınızda ne yapılacağını seçin.',
+  closeBehaviorAsk: 'Her Zaman Sor',
+  closeBehaviorTray: 'Sistem Tepsisi',
+  closeBehaviorQuit: 'Tamamen Kapat',
+  closeModalTitle: 'Agendamea Kapatılsın mı?',
+  closeModalDesc: 'Uygulamayı arka planda sistem tepsisine küçültebilir veya tamamen kapatabilirsiniz.',
+  closeActionTrayTitle: 'Sistem Tepsisine Küçült',
+  closeActionTrayDesc: 'Arka planda sessizce açık kalır; tepsi simgesine tıklayarak anında açabilirsiniz.',
+  closeActionQuitTitle: 'Tamamen Kapat',
+  closeActionQuitDesc: 'Pencereyi ve arka plan sürecini tamamen sonlandırır.',
+  closeRememberChoiceLabel: 'Tercihimi hatırla (Ayarlar üzerinden her zaman değiştirilebilir)',
+  trayOpenApp: "Agendamea'yı Aç",
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -751,6 +811,36 @@ export const EN_DICTIONARY: UiDictionary = {
   welcomePrivacyCloudDesc: '15-day daily snapshots and automatic recovery after reinstall.',
   welcomePrivacyUndoTitle: 'Trash Bin & 12-Second Undo',
   welcomePrivacyUndoDesc: 'Recover accidentally deleted tasks or categories in one click.',
+  customThemeButton: 'Custom Color',
+  customThemeHexTitle: 'Custom Theme Color (HEX)',
+  customThemeHexHint: 'Enter any HEX color code or choose one from the picker.',
+  appIconSectionTitle: 'App Icon',
+  appIconSectionDesc: 'Synchronizes the window, taskbar, system tray, and Desktop / Start Menu shortcut icons live.',
+  appIconMatchTheme: 'Match Theme',
+  appIconDarkMono: 'Dark Monochrome',
+  appIconLightMono: 'Light Monochrome',
+  appIconCustom: 'Custom Icon',
+  accessibilitySectionTitle: 'Accessibility',
+  zoomLevelTitle: 'Zoom Level',
+  zoomLevelDesc: 'Scale text and interface elements for comfortable reading.',
+  zoomResetButton: 'Reset',
+  highContrastTitle: 'High Contrast Mode',
+  highContrastDesc: 'Strengthens borders, text contrast, and keyboard focus rings.',
+  reducedMotionTitle: 'Reduced Motion',
+  reducedMotionDesc: 'Minimizes UI transitions and animations for visual comfort.',
+  closeBehaviorSectionTitle: 'Close & System Tray',
+  closeBehaviorDesc: 'Choose what happens when you click the window close button.',
+  closeBehaviorAsk: 'Always Ask',
+  closeBehaviorTray: 'System Tray',
+  closeBehaviorQuit: 'Quit Completely',
+  closeModalTitle: 'Close Agendamea?',
+  closeModalDesc: 'You can minimize the app to the system tray for instant access or quit completely.',
+  closeActionTrayTitle: 'Minimize to System Tray',
+  closeActionTrayDesc: 'Stays ready silently in the background; click the tray icon to reopen instantly.',
+  closeActionQuitTitle: 'Quit Completely',
+  closeActionQuitDesc: 'Exits the window and background process completely.',
+  closeRememberChoiceLabel: 'Remember my choice (changeable anytime in Settings)',
+  trayOpenApp: 'Open Agendamea',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {

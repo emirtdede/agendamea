@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from './api/client';
+import { CloseActionModal } from './components/CloseActionModal';
 import { ColorDot } from './components/ColorDot';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { QuickAddBar } from './components/QuickAddBar';
@@ -43,15 +44,18 @@ import { I18nProvider, readInitialLanguage } from './i18n/I18nContext';
 import {
   getLanguageMeta,
   isValidLanguageCode,
+  resolveSystemLanguage,
   type LanguageCode,
 } from './i18n/languages';
 import { getDictionary } from './i18n/localesWorld';
 import { localizeErrorMessage } from './i18n/translations';
 import type {
   ActiveView,
+  AppIconId,
   BootstrapPayload,
   Category,
   CategoryPatch,
+  CloseBehavior,
   LayoutMode,
   OneDriveStatus,
   Priority,
@@ -63,7 +67,17 @@ import type {
   TodoPatch,
   UpdateCheckResult,
 } from './types';
-import { applyThemeToDocument, isValidThemeId } from './utils/themes';
+import {
+  applyAccessibilityToDocument,
+  applyAppIconTokensToDocument,
+  applyThemeToDocument,
+  clampZoomPercent,
+  isValidAppIconId,
+  isValidThemeId,
+  normalizeHexColor,
+  resolveAppIconColors,
+  ZOOM_PRESETS,
+} from './utils/themes';
 import {
   computeViewCounts,
   filterAndSortTodos,
@@ -77,20 +91,46 @@ const SettingsModal = React.lazy(() => import('./components/SettingsModal'));
 function readInitialTheme(): {
   mode: ThemeMode;
   themeId: ThemeId;
+  customThemeColor: string;
   hasStoredPreference: boolean;
 } {
   try {
     const savedMode = localStorage.getItem('agendamea-theme-mode');
     const savedId = localStorage.getItem('agendamea-theme-id');
+    const savedCustom = normalizeHexColor(
+      localStorage.getItem('agendamea-custom-theme-color') ?? '',
+    );
     const hasMode = savedMode === 'light' || savedMode === 'dark';
     const hasId = Boolean(savedId && isValidThemeId(savedId));
     return {
       mode: savedMode === 'dark' ? 'dark' : 'light',
       themeId: hasId && savedId ? (savedId as ThemeId) : 'obsidian',
+      customThemeColor: savedCustom ?? '#2563eb',
       hasStoredPreference: hasMode || hasId,
     };
   } catch {
-    return { mode: 'light', themeId: 'obsidian', hasStoredPreference: false };
+    return {
+      mode: 'light',
+      themeId: 'obsidian',
+      customThemeColor: '#2563eb',
+      hasStoredPreference: false,
+    };
+  }
+}
+
+function readInitialAccessibility(): {
+  zoomPercent: number;
+  highContrast: boolean;
+  reducedMotion: boolean;
+} {
+  try {
+    return {
+      zoomPercent: clampZoomPercent(localStorage.getItem('agendamea-zoom-percent') ?? 100),
+      highContrast: localStorage.getItem('agendamea-high-contrast') === 'true',
+      reducedMotion: localStorage.getItem('agendamea-reduced-motion') === 'true',
+    };
+  } catch {
+    return { zoomPercent: 100, highContrast: false, reducedMotion: false };
   }
 }
 
@@ -104,9 +144,18 @@ function readInitialSidebarCollapsed(): boolean {
 
 export default function App() {
   const initialTheme = useMemo(() => readInitialTheme(), []);
+  const initialAccessibility = useMemo(() => readInitialAccessibility(), []);
   const initialLang = useMemo(() => readInitialLanguage(), []);
   const [themeMode, setThemeMode] = useState<ThemeMode>(initialTheme.mode);
   const [themeId, setThemeId] = useState<ThemeId>(initialTheme.themeId);
+  const [customThemeColor, setCustomThemeColor] = useState<string>(initialTheme.customThemeColor);
+  const [appIconId, setAppIconId] = useState<AppIconId>('match-theme');
+  const [customIconColor, setCustomIconColor] = useState<string>('#2563eb');
+  const [zoomPercent, setZoomPercent] = useState<number>(initialAccessibility.zoomPercent);
+  const [highContrast, setHighContrast] = useState<boolean>(initialAccessibility.highContrast);
+  const [reducedMotion, setReducedMotion] = useState<boolean>(initialAccessibility.reducedMotion);
+  const [closeBehavior, setCloseBehavior] = useState<CloseBehavior>('ask');
+  const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>(initialLang.code);
   const [autoUpdateCheck, setAutoUpdateCheck] = useState<boolean>(true);
   const [dragLocked, setDragLocked] = useState(false);
@@ -116,6 +165,8 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
   const welcomeCheckedRef = useRef(false);
+  const iconInitializedRef = useRef(false);
+  const iconDirtyRef = useRef(false);
 
   const [updateState, setUpdateState] = useState<{
     status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'error';
@@ -204,8 +255,68 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    applyThemeToDocument(themeId, themeMode);
-  }, [themeId, themeMode]);
+    applyThemeToDocument(themeId, themeMode, customThemeColor);
+  }, [themeId, themeMode, customThemeColor]);
+
+  // Synchronize active App Icon across in-app BrandMark, Window, Taskbar, System Tray & Windows Shortcuts
+  useEffect(() => {
+    const colors = resolveAppIconColors(
+      appIconId,
+      themeId,
+      themeMode,
+      customThemeColor,
+      customIconColor,
+    );
+    applyAppIconTokensToDocument(colors);
+    try {
+      localStorage.setItem('agendamea-app-icon-tokens', JSON.stringify(colors));
+    } catch {
+      // Ignore storage restrictions
+    }
+    const shouldUpdateShortcuts = iconDirtyRef.current;
+    if (iconInitializedRef.current || iconDirtyRef.current) {
+      iconDirtyRef.current = false;
+      void window.agendameaWindow?.applyAppIcon?.({
+        bg: colors.bg,
+        fg: colors.fg,
+        updateShortcuts: shouldUpdateShortcuts,
+      });
+    } else {
+      iconInitializedRef.current = true;
+    }
+  }, [appIconId, customIconColor, themeId, themeMode, customThemeColor]);
+
+  // Apply Accessibility settings (Zoom %, High Contrast, Reduced Motion)
+  useEffect(() => {
+    applyAccessibilityToDocument({ zoomPercent, highContrast, reducedMotion });
+  }, [zoomPercent, highContrast, reducedMotion]);
+
+  // Keep Electron System Tray labels localized across all 73 languages
+  useEffect(() => {
+    void window.agendameaWindow?.updateTrayLabels?.({
+      openLabel: t.trayOpenApp,
+      newTaskLabel: t.addFirstTaskButton,
+      quitLabel: t.closeActionQuitTitle,
+    });
+  }, [t.trayOpenApp, t.addFirstTaskButton, t.closeActionQuitTitle]);
+
+  // Keep Electron Main Process close behavior in sync & listen for close / quick-add events
+  useEffect(() => {
+    void window.agendameaWindow?.setCloseBehavior?.(closeBehavior);
+  }, [closeBehavior]);
+
+  useEffect(() => {
+    const unsubClose = window.agendameaWindow?.onCloseRequested?.(() => {
+      setIsCloseModalOpen(true);
+    });
+    const unsubQuickAdd = window.agendameaWindow?.onFocusQuickAdd?.(() => {
+      scheduleFocus(() => quickAddRef.current?.focus(), 60);
+    });
+    return () => {
+      if (typeof unsubClose === 'function') unsubClose();
+      if (typeof unsubQuickAdd === 'function') unsubQuickAdd();
+    };
+  }, [scheduleFocus]);
 
   // Listen to Electron native update download progress if available
   useEffect(() => {
@@ -234,6 +345,33 @@ export default function App() {
       setAutoUpdateCheck(
         data.settings.autoUpdateCheck === undefined ? true : Boolean(data.settings.autoUpdateCheck),
       );
+      if (data.settings.customThemeColor) {
+        const norm = normalizeHexColor(data.settings.customThemeColor);
+        if (norm) setCustomThemeColor(norm);
+      }
+      if (data.settings.appIconId && isValidAppIconId(data.settings.appIconId)) {
+        setAppIconId(data.settings.appIconId);
+      }
+      if (data.settings.customIconColor) {
+        const norm = normalizeHexColor(data.settings.customIconColor);
+        if (norm) setCustomIconColor(norm);
+      }
+      if (typeof data.settings.zoomPercent === 'number') {
+        setZoomPercent(clampZoomPercent(data.settings.zoomPercent));
+      }
+      if (typeof data.settings.highContrast === 'boolean') {
+        setHighContrast(data.settings.highContrast);
+      }
+      if (typeof data.settings.reducedMotion === 'boolean') {
+        setReducedMotion(data.settings.reducedMotion);
+      }
+      if (
+        data.settings.closeBehavior === 'ask' ||
+        data.settings.closeBehavior === 'tray' ||
+        data.settings.closeBehavior === 'quit'
+      ) {
+        setCloseBehavior(data.settings.closeBehavior);
+      }
 
       if (!langDirtyRef.current && data.settings.language && isValidLanguageCode(data.settings.language)) {
         let hasCustomLang = false;
@@ -242,14 +380,32 @@ export default function App() {
         } catch {
           // Ignore storage read errors
         }
-        if (!hasCustomLang && data.settings.language === 'tr' && initialLang.code !== 'tr') {
-          setLanguage(initialLang.code);
+        if (!hasCustomLang) {
+          let resolvedInitial: LanguageCode = initialLang.code;
           try {
-            localStorage.setItem('agendamea-language-customized', 'true');
+            const nativeLocale = await window.agendameaWindow?.getInitialLocale?.();
+            if (nativeLocale) {
+              const candidates = [nativeLocale.installerLocale, nativeLocale.osLocale].filter(
+                (v): v is string => typeof v === 'string' && v.trim().length > 0,
+              );
+              if (candidates.length > 0) {
+                resolvedInitial = resolveSystemLanguage(candidates, 'en');
+              }
+            }
           } catch {
-            // Ignore storage write errors
+            // Fall back to navigator language
           }
-          void api.updateSettings({ language: initialLang.code }).catch(() => {});
+          if (data.settings.language === 'tr' && resolvedInitial !== 'tr') {
+            setLanguage(resolvedInitial);
+            try {
+              localStorage.setItem('agendamea-language-customized', 'true');
+            } catch {
+              // Ignore storage write errors
+            }
+            void api.updateSettings({ language: resolvedInitial }).catch(() => {});
+          } else {
+            setLanguage(data.settings.language);
+          }
         } else {
           setLanguage(data.settings.language);
         }
@@ -488,20 +644,24 @@ export default function App() {
   const keyStateRef = useRef({
     isSettingsOpen,
     isWelcomeOpen,
+    isCloseModalOpen,
     isMobileSidebarOpen,
     selectedTodoId,
     searchQuery,
     tagFilter,
     focusSidebarSearch,
+    zoomPercent,
   });
   keyStateRef.current = {
     isSettingsOpen,
     isWelcomeOpen,
+    isCloseModalOpen,
     isMobileSidebarOpen,
     selectedTodoId,
     searchQuery,
     tagFilter,
     focusSidebarSearch,
+    zoomPercent,
   };
 
   useEffect(() => {
@@ -515,6 +675,32 @@ export default function App() {
           target.tagName === 'SELECT' ||
           target.isContentEditable);
 
+      // Global accessibility zoom shortcuts (Ctrl/Cmd + / - / 0)
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          const idx = ZOOM_PRESETS.indexOf(state.zoomPercent as (typeof ZOOM_PRESETS)[number]);
+          const next = ZOOM_PRESETS[Math.min(ZOOM_PRESETS.length - 1, idx >= 0 ? idx + 1 : 3)];
+          setZoomPercent(next);
+          void api.updateSettings({ zoomPercent: next }).catch(() => {});
+          return;
+        }
+        if (e.key === '-') {
+          e.preventDefault();
+          const idx = ZOOM_PRESETS.indexOf(state.zoomPercent as (typeof ZOOM_PRESETS)[number]);
+          const next = ZOOM_PRESETS[Math.max(0, idx >= 0 ? idx - 1 : 1)];
+          setZoomPercent(next);
+          void api.updateSettings({ zoomPercent: next }).catch(() => {});
+          return;
+        }
+        if (e.key === '0') {
+          e.preventDefault();
+          setZoomPercent(100);
+          void api.updateSettings({ zoomPercent: 100 }).catch(() => {});
+          return;
+        }
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         state.focusSidebarSearch();
@@ -522,8 +708,8 @@ export default function App() {
       }
 
       if (e.key === 'Escape') {
-        if (state.isSettingsOpen || state.isWelcomeOpen) {
-          // SettingsModal and WelcomeModal handle Escape internally
+        if (state.isSettingsOpen || state.isWelcomeOpen || state.isCloseModalOpen) {
+          // Modals handle Escape internally
           return;
         }
         if (state.isMobileSidebarOpen) {
@@ -538,7 +724,7 @@ export default function App() {
         return;
       }
 
-      if (isTypingField || state.isSettingsOpen || state.isWelcomeOpen) return;
+      if (isTypingField || state.isSettingsOpen || state.isWelcomeOpen || state.isCloseModalOpen) return;
 
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
@@ -562,6 +748,7 @@ export default function App() {
   const handleModeChange = useCallback(
     (nextMode: ThemeMode) => {
       themeDirtyRef.current = true;
+      iconDirtyRef.current = true;
       setThemeMode(nextMode);
       void api.updateSettings({ themeMode: nextMode }).catch((err) => {
         showInfoToast(formatUiError(err), 'error');
@@ -573,12 +760,112 @@ export default function App() {
   const handleThemeChange = useCallback(
     (nextId: ThemeId) => {
       themeDirtyRef.current = true;
+      iconDirtyRef.current = true;
       setThemeId(nextId);
       void api.updateSettings({ themeId: nextId }).catch((err) => {
         showInfoToast(formatUiError(err), 'error');
       });
     },
     [showInfoToast, formatUiError],
+  );
+
+  const handleCustomThemeColorChange = useCallback(
+    (rawHex: string) => {
+      const norm = normalizeHexColor(rawHex);
+      if (!norm) return;
+      themeDirtyRef.current = true;
+      iconDirtyRef.current = true;
+      setCustomThemeColor(norm);
+      setThemeId('custom');
+      void api.updateSettings({ themeId: 'custom', customThemeColor: norm }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleAppIconChange = useCallback(
+    (nextIconId: AppIconId) => {
+      iconDirtyRef.current = true;
+      setAppIconId(nextIconId);
+      void api.updateSettings({ appIconId: nextIconId }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleCustomIconColorChange = useCallback(
+    (rawHex: string) => {
+      const norm = normalizeHexColor(rawHex);
+      if (!norm) return;
+      iconDirtyRef.current = true;
+      setCustomIconColor(norm);
+      setAppIconId('custom');
+      void api.updateSettings({ appIconId: 'custom', customIconColor: norm }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleZoomPercentChange = useCallback(
+    (nextZoom: number) => {
+      const clamped = clampZoomPercent(nextZoom);
+      setZoomPercent(clamped);
+      void api.updateSettings({ zoomPercent: clamped }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleToggleHighContrast = useCallback(
+    (enabled: boolean) => {
+      setHighContrast(enabled);
+      void api.updateSettings({ highContrast: enabled }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleToggleReducedMotion = useCallback(
+    (enabled: boolean) => {
+      setReducedMotion(enabled);
+      void api.updateSettings({ reducedMotion: enabled }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleCloseBehaviorChange = useCallback(
+    (nextBehavior: CloseBehavior) => {
+      setCloseBehavior(nextBehavior);
+      void window.agendameaWindow?.setCloseBehavior?.(nextBehavior);
+      void api.updateSettings({ closeBehavior: nextBehavior }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleCloseModalSelectAction = useCallback(
+    async (action: 'tray' | 'quit', rememberChoice: boolean) => {
+      setIsCloseModalOpen(false);
+      if (rememberChoice) {
+        setCloseBehavior(action);
+        await window.agendameaWindow?.setCloseBehavior?.(action);
+        try {
+          await api.updateSettings({ closeBehavior: action });
+        } catch {
+          // Proceed with close even if settings write fails
+        }
+      }
+      await window.agendameaWindow?.performCloseAction?.(action);
+    },
+    [],
   );
 
   const handleChangeLanguage = useCallback(
@@ -1942,9 +2229,23 @@ export default function App() {
               onClose={handleCloseSettings}
               themeMode={themeMode}
               themeId={themeId}
+              customThemeColor={customThemeColor}
+              appIconId={appIconId}
+              customIconColor={customIconColor}
+              zoomPercent={zoomPercent}
+              highContrast={highContrast}
+              reducedMotion={reducedMotion}
+              closeBehavior={closeBehavior}
               dragLocked={dragLocked}
               onChangeMode={handleModeChange}
               onChangeTheme={handleThemeChange}
+              onChangeCustomThemeColor={handleCustomThemeColorChange}
+              onChangeAppIcon={handleAppIconChange}
+              onChangeCustomIconColor={handleCustomIconColorChange}
+              onChangeZoomPercent={handleZoomPercentChange}
+              onToggleHighContrast={handleToggleHighContrast}
+              onToggleReducedMotion={handleToggleReducedMotion}
+              onChangeCloseBehavior={handleCloseBehaviorChange}
               onToggleDragLock={handleToggleDragLock}
               autoUpdateCheck={autoUpdateCheck}
               onToggleAutoUpdateCheck={handleToggleAutoUpdateCheck}
@@ -1966,6 +2267,14 @@ export default function App() {
               onOpenWelcomeGuide={handleOpenWelcomeGuide}
             />
           </Suspense>
+        )}
+
+        {/* PowerPilot-Style Close Action Modal (Minimize to Tray vs Quit Completely) */}
+        {isCloseModalOpen && (
+          <CloseActionModal
+            onSelectAction={(action, remember) => void handleCloseModalSelectAction(action, remember)}
+            onCancel={() => setIsCloseModalOpen(false)}
+          />
         )}
 
         {/* First-Launch Welcome & Onboarding Modal */}

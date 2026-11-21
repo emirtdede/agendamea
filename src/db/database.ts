@@ -14,7 +14,12 @@ import type {
   Todo,
   TodoPatch,
 } from '../types.ts';
-import { isValidThemeId, normalizeHexColor } from '../utils/themes.ts';
+import {
+  clampZoomPercent,
+  isValidAppIconId,
+  isValidThemeId,
+  normalizeHexColor,
+} from '../utils/themes.ts';
 import {
   isValidIsoDateString,
   normalizeDateRange,
@@ -369,24 +374,40 @@ export class TodoDatabase {
   }
 
   getSettings(): AppSettings {
+    const keys = [
+      'themeMode',
+      'themeId',
+      'customThemeColor',
+      'appIconId',
+      'customIconColor',
+      'zoomPercent',
+      'highContrast',
+      'reducedMotion',
+      'closeBehavior',
+      'dragLocked',
+      'sidebarCollapsed',
+      'themeCustomized',
+      'language',
+      'autoUpdateCheck',
+      'onedriveAutoSync',
+      'onedriveCustomPath',
+      'onboardingCompleted',
+    ];
+    const placeholders = keys.map(() => '?').join(', ');
     const rows = this.db
-      .prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .all(
-        'themeMode',
-        'themeId',
-        'dragLocked',
-        'sidebarCollapsed',
-        'themeCustomized',
-        'language',
-        'autoUpdateCheck',
-        'onedriveAutoSync',
-        'onedriveCustomPath',
-        'onboardingCompleted',
-      ) as SettingRow[];
+      .prepare(`SELECT key, value FROM settings WHERE key IN (${placeholders})`)
+      .all(...keys) as SettingRow[];
 
     const map = new Map(rows.map((r) => [r.key, r.value]));
     const rawMode = map.get('themeMode');
     const rawThemeId = map.get('themeId') ?? 'obsidian';
+    const rawCustomThemeColor = map.get('customThemeColor');
+    const rawAppIconId = map.get('appIconId');
+    const rawCustomIconColor = map.get('customIconColor');
+    const rawZoomPercent = map.get('zoomPercent');
+    const rawHighContrast = map.get('highContrast');
+    const rawReducedMotion = map.get('reducedMotion');
+    const rawCloseBehavior = map.get('closeBehavior');
     const rawDragLocked = map.get('dragLocked');
     const rawSidebarCollapsed = map.get('sidebarCollapsed');
     const rawThemeCustomized = map.get('themeCustomized');
@@ -405,6 +426,34 @@ export class TodoDatabase {
       language: isValidLanguageCode(rawLanguage) ? (rawLanguage as LanguageCode) : 'tr',
       autoUpdateCheck: rawAutoUpdate === undefined ? true : rawAutoUpdate === '1' || rawAutoUpdate === 'true',
     };
+    const normCustomTheme = rawCustomThemeColor ? normalizeHexColor(rawCustomThemeColor) : null;
+    if (normCustomTheme) {
+      settings.customThemeColor = normCustomTheme;
+    }
+    if (isValidAppIconId(rawAppIconId) && rawAppIconId !== 'match-theme') {
+      settings.appIconId = rawAppIconId;
+    }
+    const normCustomIcon = rawCustomIconColor ? normalizeHexColor(rawCustomIconColor) : null;
+    if (normCustomIcon) {
+      settings.customIconColor = normCustomIcon;
+    }
+    if (rawZoomPercent !== undefined) {
+      const parsedZoom = clampZoomPercent(rawZoomPercent);
+      if (parsedZoom !== 100) {
+        settings.zoomPercent = parsedZoom;
+      }
+    }
+    if (rawHighContrast === '1' || rawHighContrast === 'true') {
+      settings.highContrast = true;
+    }
+    if (rawReducedMotion === '1' || rawReducedMotion === 'true') {
+      settings.reducedMotion = true;
+    }
+    if (rawCloseBehavior === 'tray' || rawCloseBehavior === 'quit' || rawCloseBehavior === 'ask') {
+      if (rawCloseBehavior !== 'ask') {
+        settings.closeBehavior = rawCloseBehavior;
+      }
+    }
     if (rawOnedriveAutoSync === '1' || rawOnedriveAutoSync === 'true') {
       settings.onedriveAutoSync = true;
     }
@@ -428,6 +477,38 @@ export class TodoDatabase {
     if (patch.themeId && isValidThemeId(patch.themeId)) {
       stmt.run('themeId', patch.themeId);
       stmt.run('themeCustomized', '1');
+    }
+    if (typeof patch.customThemeColor === 'string') {
+      const norm = normalizeHexColor(patch.customThemeColor);
+      if (norm) {
+        stmt.run('customThemeColor', norm);
+        stmt.run('themeCustomized', '1');
+      }
+    }
+    if (patch.appIconId !== undefined && isValidAppIconId(patch.appIconId)) {
+      stmt.run('appIconId', patch.appIconId);
+    }
+    if (typeof patch.customIconColor === 'string') {
+      const norm = normalizeHexColor(patch.customIconColor);
+      if (norm) {
+        stmt.run('customIconColor', norm);
+      }
+    }
+    if (typeof patch.zoomPercent === 'number' && Number.isFinite(patch.zoomPercent)) {
+      stmt.run('zoomPercent', String(clampZoomPercent(patch.zoomPercent)));
+    }
+    if (typeof patch.highContrast === 'boolean') {
+      stmt.run('highContrast', patch.highContrast ? '1' : '0');
+    }
+    if (typeof patch.reducedMotion === 'boolean') {
+      stmt.run('reducedMotion', patch.reducedMotion ? '1' : '0');
+    }
+    if (
+      patch.closeBehavior === 'ask' ||
+      patch.closeBehavior === 'tray' ||
+      patch.closeBehavior === 'quit'
+    ) {
+      stmt.run('closeBehavior', patch.closeBehavior);
     }
     if (typeof patch.dragLocked === 'boolean') {
       stmt.run('dragLocked', patch.dragLocked ? '1' : '0');

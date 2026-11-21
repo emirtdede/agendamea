@@ -2,14 +2,14 @@
 
 ## 1. Partner Center Identity Configuration (`electron-builder.yml`)
 
-Before generating the final `.appx` / `.msix` upload package, update the `appx:` block in `electron-builder.yml` with the exact values from Microsoft Partner Center -> Product Management -> Product Identity:
+Verified official identity from Microsoft Partner Center (`Store ID: 9MT5X1NGZJXZ`, `PFN: Vellium.Agendamea_3ktyfn38rr7qr`, `Package SID: S-1-15-2-3984571263-3086734099-3931803528-2794342763-3978316428-3118755084-214371177`):
 
 ```yaml
 appx:
   applicationId: Agendamea
-  identityName: <PartnerCenter.IdentityName>
+  identityName: Vellium.Agendamea
   displayName: Agendamea
-  publisher: "CN=<PartnerCenter-Publisher-GUID>"
+  publisher: "CN=1DDB196A-421B-4090-8DC2-62C1AD43C8F0"
   publisherDisplayName: Vellium
   backgroundColor: "#09090b"
   showNameOnTiles: false

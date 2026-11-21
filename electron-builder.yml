@@ -79,10 +79,34 @@ nsis:
   uninstallerSidebar: electron-resources/uninstallerSidebar.bmp
   installerHeader: electron-resources/installerHeader.bmp
   include: electron-resources/installer.nsh
+  multiLanguageInstaller: true
   installerLanguages:
-    - tr_TR
     - en_US
-  language: "1055"
+    - tr_TR
+    - de_DE
+    - fr_FR
+    - es_ES
+    - it_IT
+    - pt_PT
+    - pt_BR
+    - ru_RU
+    - ja_JP
+    - ko_KR
+    - zh_CN
+    - zh_TW
+    - ar_SA
+    - nl_NL
+    - pl_PL
+    - uk_UA
+    - cs_CZ
+    - sk_SK
+    - hu_HU
+    - sv_SE
+    - da_DK
+    - nb_NO
+    - fi_FI
+    - vi_VN
+    - th_TH
   unicode: true
   deleteAppDataOnUninstall: false
   runAfterFinish: true

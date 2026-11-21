@@ -76,6 +76,12 @@
           if (mode === 'dark') {
             root.classList.add('dark');
           }
+          if (localStorage.getItem('agendamea-high-contrast') === 'true') {
+            root.classList.add('high-contrast');
+          }
+          if (localStorage.getItem('agendamea-reduced-motion') === 'true') {
+            root.classList.add('reduce-motion');
+          }
           var rawTokens = localStorage.getItem('agendamea-theme-tokens');
           if (rawTokens) {
             var tokens = JSON.parse(rawTokens);
@@ -85,6 +91,17 @@
                   root.style.setProperty(k, tokens[k]);
                 }
               });
+            }
+          }
+          var rawIcon = localStorage.getItem('agendamea-app-icon-tokens');
+          if (rawIcon) {
+            var ic = JSON.parse(rawIcon);
+            if (ic && typeof ic.bg === 'string' && typeof ic.fg === 'string') {
+              root.style.setProperty('--app-icon-bg', ic.bg);
+              root.style.setProperty('--app-icon-fg', ic.fg);
+              if (typeof ic.border === 'string') {
+                root.style.setProperty('--app-icon-border', ic.border);
+              }
             }
           }
         } catch (e) {}

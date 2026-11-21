@@ -1,15 +1,26 @@
 interface BrandMarkProps {
   className?: string;
+  bgColor?: string;
+  fgColor?: string;
+  borderColor?: string;
 }
 
-export function BrandMark({ className = 'h-7 w-7' }: BrandMarkProps) {
+export function BrandMark({
+  className = 'h-7 w-7',
+  bgColor,
+  fgColor,
+  borderColor,
+}: BrandMarkProps) {
   return (
     <span
       aria-hidden="true"
       className={`inline-flex shrink-0 items-center justify-center rounded-lg ${className}`}
       style={{
-        backgroundColor: 'var(--accent)',
-        color: 'var(--accent-fg)',
+        backgroundColor: bgColor ?? 'var(--app-icon-bg, var(--accent))',
+        color: fgColor ?? 'var(--app-icon-fg, var(--accent-fg))',
+        boxShadow: borderColor
+          ? `inset 0 0 0 1px ${borderColor}`
+          : 'inset 0 0 0 1px var(--app-icon-border, transparent)',
       }}
     >
       <svg

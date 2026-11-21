@@ -9,6 +9,30 @@ interface NativeWindowBridge {
   close?: () => void | Promise<void>;
   isMaximized?: () => Promise<boolean> | boolean;
   onMaximizedChange?: (cb: (isMaximized: boolean) => void) => (() => void) | void;
+  onCloseRequested?: (cb: () => void) => (() => void) | void;
+  onFocusQuickAdd?: (cb: () => void) => (() => void) | void;
+  setCloseBehavior?: (
+    behavior: import('../types').CloseBehavior,
+  ) => Promise<{ ok: boolean; closeBehavior?: import('../types').CloseBehavior }>;
+  performCloseAction?: (
+    action: 'tray' | 'quit',
+  ) => Promise<{ ok: boolean; action?: 'tray' | 'quit' }>;
+  updateTrayLabels?: (labels: {
+    openLabel: string;
+    newTaskLabel: string;
+    quitLabel: string;
+  }) => Promise<{ ok: boolean }>;
+  applyAppIcon?: (payload: {
+    bg: string;
+    fg: string;
+    updateShortcuts?: boolean;
+  }) => Promise<{ ok: boolean; icoPath?: string; updatedShortcuts?: number }>;
+  setZoomFactor?: (factor: number) => Promise<{ ok: boolean; factor?: number }>;
+  getInitialLocale?: () => Promise<{
+    installerLocale: string | null;
+    osLocale: string;
+    preferred: string;
+  }>;
   checkForUpdates?: () => Promise<import('../types').UpdateCheckResult>;
   downloadAndInstallUpdate?: (
     url: string,
