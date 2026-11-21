@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Check,
   ChevronRight,
+  Cloud,
   Download,
   FileText,
   Keyboard,
   Lock,
   Moon,
+  RefreshCw,
   RotateCcw,
   Scale,
   Shield,
@@ -16,9 +18,17 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { api } from '../api/client';
 import { useI18n } from '../i18n/I18nContext';
 import { localizeErrorMessage, type LegalDocId } from '../i18n/translations';
-import type { Category, ThemeId, ThemeMode, Todo, UpdateCheckResult } from '../types';
+import type {
+  Category,
+  OneDriveStatus,
+  ThemeId,
+  ThemeMode,
+  Todo,
+  UpdateCheckResult,
+} from '../types';
 import { COLOR_THEMES } from '../utils/themes';
 import { ColorDot } from './ColorDot';
 import { LegalDocumentView } from './LegalDocumentView';
@@ -107,6 +117,8 @@ export function SettingsModal({
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const [busyTrashIds, setBusyTrashIds] = useState<Set<string>>(() => new Set());
   const [importError, setImportError] = useState<string | null>(null);
+  const [oneDriveStatus, setOneDriveStatus] = useState<OneDriveStatus | null>(null);
+  const [isOneDriveBusy, setIsOneDriveBusy] = useState(false);
   const [pendingImport, setPendingImport] = useState<{
     fileName: string;
     payload: unknown;
@@ -118,10 +130,83 @@ export function SettingsModal({
 
   useEffect(() => {
     isMountedRef.current = true;
+    void api
+      .getOneDriveStatus()
+      .then((st) => {
+        if (isMountedRef.current) setOneDriveStatus(st);
+      })
+      .catch(() => {});
     return () => {
       isMountedRef.current = false;
     };
   }, []);
+
+  const handleOneDriveConnectOrSync = async () => {
+    if (isOneDriveBusy) return;
+    setIsOneDriveBusy(true);
+    setImportError(null);
+    try {
+      const next = oneDriveStatus?.connected
+        ? await api.syncOneDrivePush()
+        : await api.connectOneDrive({ autoSync: true });
+      if (isMountedRef.current) setOneDriveStatus(next);
+    } catch (err) {
+      if (isMountedRef.current) {
+        setImportError(
+          localizeErrorMessage(err, t.operationFailedToast, lang, t),
+        );
+      }
+    } finally {
+      if (isMountedRef.current) setIsOneDriveBusy(false);
+    }
+  };
+
+  const handleOneDriveRestore = async () => {
+    if (isOneDriveBusy) return;
+    setIsOneDriveBusy(true);
+    setImportError(null);
+    try {
+      const { status, bootstrap } = await api.syncOneDrivePull();
+      if (isMountedRef.current) setOneDriveStatus(status);
+      await onImportBackup(bootstrap);
+    } catch (err) {
+      if (isMountedRef.current) {
+        setImportError(
+          localizeErrorMessage(err, t.importRestoreFailedError, lang, t),
+        );
+      }
+    } finally {
+      if (isMountedRef.current) setIsOneDriveBusy(false);
+    }
+  };
+
+  const handleOneDriveToggleAutoSync = async () => {
+    if (isOneDriveBusy || !oneDriveStatus) return;
+    setIsOneDriveBusy(true);
+    try {
+      const nextAuto = !oneDriveStatus.autoSync;
+      await api.updateSettings({ onedriveAutoSync: nextAuto });
+      const refreshed = await api.getOneDriveStatus();
+      if (isMountedRef.current) setOneDriveStatus(refreshed);
+    } catch {
+      // Ignore toggle error
+    } finally {
+      if (isMountedRef.current) setIsOneDriveBusy(false);
+    }
+  };
+
+  const handleOneDriveDisconnect = async () => {
+    if (isOneDriveBusy) return;
+    setIsOneDriveBusy(true);
+    try {
+      const next = await api.disconnectOneDrive();
+      if (isMountedRef.current) setOneDriveStatus(next);
+    } catch {
+      // Ignore disconnect error
+    } finally {
+      if (isMountedRef.current) setIsOneDriveBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (activeLegalDoc && scrollContainerRef.current) {
@@ -564,6 +649,104 @@ export function SettingsModal({
                         <span>{t.downloadBackupButton}</span>
                       </a>
                     </div>
+                  </div>
+
+                  {/* Zero-Cost OneDrive Cloud Sync Card */}
+                  <div
+                    data-testid="onedrive-sync-card"
+                    className="px-4 py-3.5 space-y-3"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Cloud className="h-4 w-4 text-[var(--accent)] shrink-0" />
+                          <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                            {t.onedriveSectionTitle}
+                          </p>
+                        </div>
+                        {oneDriveStatus?.connected && (
+                          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)] shrink-0">
+                            <Check className="h-3 w-3" />
+                            <span>{t.onedriveConnectedBadge}</span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+                        {t.onedriveSectionDesc}
+                      </p>
+                      {oneDriveStatus?.lastSyncedAt && (
+                        <p className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                          {t.onedriveLastSyncedPrefix}:{' '}
+                          {formatDeletedAt(oneDriveStatus.lastSyncedAt, meta.intlLocale)}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={isOneDriveBusy}
+                          onClick={() => void handleOneDriveConnectOrSync()}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-40 whitespace-nowrap"
+                          style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
+                        >
+                          <RefreshCw
+                            className={`h-3.5 w-3.5 ${isOneDriveBusy ? 'animate-spin' : ''}`}
+                          />
+                          <span>
+                            {oneDriveStatus?.connected
+                              ? t.onedriveSyncNowButton
+                              : t.onedriveConnectButton}
+                          </span>
+                        </button>
+
+                        {oneDriveStatus?.hasRemoteBackup && (
+                          <button
+                            type="button"
+                            disabled={isOneDriveBusy}
+                            onClick={() => void handleOneDriveRestore()}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                          >
+                            <Upload className="h-3.5 w-3.5" />
+                            <span>{t.onedriveRestoreButton}</span>
+                          </button>
+                        )}
+
+                        {oneDriveStatus?.connected && (
+                          <button
+                            type="button"
+                            disabled={isOneDriveBusy}
+                            onClick={() => void handleOneDriveDisconnect()}
+                            className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                          >
+                            {t.onedriveDisconnectButton}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {oneDriveStatus?.connected && (
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+                        <span className="text-xs font-medium text-[var(--text-secondary)]">
+                          {t.onedriveAutoSyncTitle}
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={oneDriveStatus.autoSync}
+                          disabled={isOneDriveBusy}
+                          onClick={() => void handleOneDriveToggleAutoSync()}
+                          className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors shrink-0 ${
+                            oneDriveStatus.autoSync
+                              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                              : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {oneDriveStatus.autoSync ? t.enabledBadge : t.disabledBadge}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between gap-4 px-4 py-3">

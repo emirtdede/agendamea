@@ -8,15 +8,26 @@ import React, {
   useState,
 } from 'react';
 import {
+  Calendar as CalendarIcon,
   CheckCheck,
+  Columns3,
+  Grid2x2,
+  Hash,
+  List,
   Menu,
   SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import { api } from './api/client';
 import { ColorDot } from './components/ColorDot';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { QuickAddBar } from './components/QuickAddBar';
 import { Sidebar } from './components/Sidebar';
+import {
+  CalendarPlannerView,
+  EisenhowerMatrixView,
+  KanbanBoardView,
+} from './components/TaskBoardViews';
 import { ToastContainer } from './components/ToastContainer';
 import { TodoDetailPanel } from './components/TodoDetailPanel';
 import { TodoItem } from './components/TodoItem';
@@ -36,6 +47,7 @@ import type {
   ActiveView,
   Category,
   CategoryPatch,
+  LayoutMode,
   Priority,
   SortOption,
   StatusFilter,
@@ -115,7 +127,9 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [activeView, setActiveView] = useState<ActiveView>({ type: 'smart', id: 'all' });
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('list');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('manual');
   const [searchQuery, setSearchQuery] = useState('');
   const deferredSearchQuery = useDeferredValue(searchQuery);
@@ -669,6 +683,7 @@ export default function App() {
       priority: Priority;
       startDate?: string | null;
       dueDate: string | null;
+      dueTime?: string | null;
       categoryId: string | null;
       important: boolean;
     }) => {
@@ -1015,8 +1030,9 @@ export default function App() {
         searchQuery: deferredSearchQuery,
         sortBy,
         todayStr,
+        tagFilter,
       }),
-    [todos, activeView, statusFilter, deferredSearchQuery, sortBy, todayStr],
+    [todos, activeView, statusFilter, deferredSearchQuery, sortBy, todayStr, tagFilter],
   );
 
   const { activeCountInView, completedCountInView } = useMemo(() => {
@@ -1241,6 +1257,11 @@ export default function App() {
   const handleSelectView = useCallback((view: ActiveView) => {
     setActiveView(view);
     setStatusFilter('all');
+    setTagFilter(null);
+  }, []);
+
+  const handleTagClick = useCallback((tag: string) => {
+    setTagFilter((prev) => (prev && prev.toLowerCase() === tag.toLowerCase() ? null : tag));
   }, []);
 
   const handleOpenSettings = useCallback(() => {
@@ -1376,45 +1397,94 @@ export default function App() {
                 />
               )}
 
-              {/* Filter & Sort Toolbar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                {!isCompletedView ? (
+              {/* Filter, Layout View Switcher & Sort Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {!isCompletedView && (
+                    <div
+                      role="tablist"
+                      aria-label={t.filterAll}
+                      className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] p-1"
+                    >
+                      {(
+                        [
+                          { id: 'all', label: t.filterAll },
+                          { id: 'active', label: t.filterActive },
+                          { id: 'completed', label: t.filterCompleted },
+                        ] as const
+                      ).map((tab) => {
+                        const active = statusFilter === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            onClick={() => setStatusFilter(tab.id)}
+                            className={`rounded-md px-2 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                              active
+                                ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-xs border border-[var(--border)]'
+                                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            {tab.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 4-Way Layout Switcher (List | Kanban | Calendar | Matrix) */}
                   <div
                     role="tablist"
-                    aria-label={t.filterAll}
-                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] p-1"
+                    aria-label={t.viewList}
+                    data-testid="layout-mode-switcher"
+                    className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] p-1"
                   >
                     {(
                       [
-                        { id: 'all', label: t.filterAll },
-                        { id: 'active', label: t.filterActive },
-                        { id: 'completed', label: t.filterCompleted },
+                        { id: 'list', label: t.viewList, Icon: List },
+                        { id: 'kanban', label: t.viewKanban, Icon: Columns3 },
+                        { id: 'calendar', label: t.viewCalendar, Icon: CalendarIcon },
+                        { id: 'matrix', label: t.viewMatrix, Icon: Grid2x2 },
                       ] as const
-                    ).map((tab) => {
-                      const active = statusFilter === tab.id;
+                    ).map(({ id, label, Icon }) => {
+                      const active = layoutMode === id;
                       return (
                         <button
-                          key={tab.id}
+                          key={id}
                           type="button"
                           role="tab"
+                          data-testid={`layout-tab-${id}`}
                           aria-selected={active}
-                          onClick={() => setStatusFilter(tab.id)}
-                          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                          onClick={() => setLayoutMode(id)}
+                          className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                             active
                               ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-xs border border-[var(--border)]'
                               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                           }`}
                         >
-                          {tab.label}
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span>{label}</span>
                         </button>
                       );
                     })}
                   </div>
-                ) : (
-                  <div />
-                )}
 
-                <div className="flex items-center gap-3 ml-auto">
+                  {tagFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setTagFilter(null)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-1 text-xs font-medium text-[var(--text-primary)] transition-colors"
+                    >
+                      <Hash className="h-3 w-3 text-[var(--accent)]" />
+                      <span>{tagFilter}</span>
+                      <X className="h-3 w-3 text-[var(--text-muted)]" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 ml-auto">
                   {completedCountInView > 0 && (
                     <button
                       type="button"
@@ -1480,6 +1550,45 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+              ) : layoutMode === 'calendar' ? (
+                <CalendarPlannerView
+                  todos={visibleTodos}
+                  categoryMap={categoryMap}
+                  todayStr={todayStr}
+                  selectedTodoId={selectedTodoId}
+                  onSelectTodo={handleSelectTodo}
+                  onToggleComplete={handleToggleTodoComplete}
+                  onToggleImportant={handleToggleTodoImportant}
+                  onTogglePin={handleToggleTodoPin}
+                  onUpdateTodo={handleUpdateTodo}
+                  onTagClick={handleTagClick}
+                />
+              ) : layoutMode === 'kanban' ? (
+                <KanbanBoardView
+                  todos={visibleTodos}
+                  categoryMap={categoryMap}
+                  todayStr={todayStr}
+                  selectedTodoId={selectedTodoId}
+                  onSelectTodo={handleSelectTodo}
+                  onToggleComplete={handleToggleTodoComplete}
+                  onToggleImportant={handleToggleTodoImportant}
+                  onTogglePin={handleToggleTodoPin}
+                  onUpdateTodo={handleUpdateTodo}
+                  onTagClick={handleTagClick}
+                />
+              ) : layoutMode === 'matrix' ? (
+                <EisenhowerMatrixView
+                  todos={visibleTodos}
+                  categoryMap={categoryMap}
+                  todayStr={todayStr}
+                  selectedTodoId={selectedTodoId}
+                  onSelectTodo={handleSelectTodo}
+                  onToggleComplete={handleToggleTodoComplete}
+                  onToggleImportant={handleToggleTodoImportant}
+                  onTogglePin={handleToggleTodoPin}
+                  onUpdateTodo={handleUpdateTodo}
+                  onTagClick={handleTagClick}
+                />
               ) : visibleTodos.length === 0 ? (
                 /* Clean Empty State */
                 <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-14 text-center">
@@ -1554,6 +1663,7 @@ export default function App() {
                       onDragLeave={handleTodoDragLeave}
                       onDrop={handleTodoDrop}
                       onDragEnd={handleTodoDragEnd}
+                      onTagClick={handleTagClick}
                     />
                   ))}
                 </div>

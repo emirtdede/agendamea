@@ -1,3 +1,5 @@
+import type { LanguageCode } from './languages';
+import { LOCALE_EXTENSIONS } from './localeExtensions';
 import type {
   LegalDocId,
   LegalDocumentContent,
@@ -81,8 +83,13 @@ export interface CompactLocaleSeed {
   ];
 }
 
-export function compileSeedToDictionary(seed: CompactLocaleSeed): UiDictionary {
+export function compileSeedToDictionary(
+  seed: CompactLocaleSeed,
+  lang: LanguageCode = 'en',
+): UiDictionary {
   const { w, p, u, e, c } = seed;
+  const ext = LOCALE_EXTENSIONS[lang] ?? LOCALE_EXTENSIONS.en;
+  const [viewList, viewKanban, viewCalendar, viewMatrix, dueTimeLabel, tagsLabel, cloudSync] = ext;
   const [
     appTitleSuffix, allTasks, today, tomorrow, yesterday, important, completed, active,
     tasks, subtasks, categories, uncategorized, noCategoriesYet, newCategory,
@@ -311,6 +318,31 @@ export function compileSeedToDictionary(seed: CompactLocaleSeed): UiDictionary {
     importRestoreFailedError: operationFailed,
     operationFailedToast: operationFailed,
     loadFailedError: loadFailed,
+
+    viewList,
+    viewKanban,
+    viewCalendar,
+    viewMatrix,
+    kanbanGroupByPriority: `${viewKanban} · ${priority}`,
+    kanbanGroupByStatus: `${viewKanban} · ${active} / ${completed}`,
+    matrixQ1Title: `I · ${important} & ${today}`,
+    matrixQ2Title: `II · ${important} & ${tomorrow}`,
+    matrixQ3Title: `III · ${priorityNormal} & ${today}`,
+    matrixQ4Title: `IV · ${priorityLow} / ${tomorrow}`,
+    dueTimeLabel,
+    tagsLabel,
+    addTagPlaceholder: `${add} (${tagsLabel.toLowerCase()})...`,
+    unscheduledTasksTitle: `${tasks} (${uncategorized.toLowerCase()} · ${date.toLowerCase()})`,
+    onedriveSectionTitle: `OneDrive · ${cloudSync}`,
+    onedriveSectionDesc: `OneDrive · ${cloudSync} — ${backupRestoreDesc}`,
+    onedriveConnectButton: `OneDrive · ${apply}`,
+    onedriveDisconnectButton: `OneDrive · ${close}`,
+    onedriveSyncNowButton: `OneDrive · ${cloudSync}`,
+    onedriveRestoreButton: `OneDrive · ${restore}`,
+    onedriveAutoSyncTitle: `OneDrive · ${cloudSync} (${autoSaved})`,
+    onedriveConnectedBadge: `OneDrive · ${enabled}`,
+    onedriveLastSyncedPrefix: `OneDrive · ${lastChecked}`,
+    onedriveSyncedToast: `OneDrive · ${cloudSync} (${autoSaved})`,
   };
 }
 

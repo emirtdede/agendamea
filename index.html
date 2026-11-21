@@ -50,12 +50,22 @@
         try {
           var root = document.documentElement;
           var savedLang = localStorage.getItem('agendamea-language');
+          if (!savedLang && typeof navigator !== 'undefined') {
+            var navLang = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+            var base = String(navLang).toLowerCase().split('-')[0];
+            if (base && base !== 'tr') {
+              savedLang = base;
+            }
+          }
           if (savedLang) {
             root.lang = savedLang;
             if (savedLang === 'ar' || savedLang === 'fa' || savedLang === 'he' || savedLang === 'ur') {
               root.dir = 'rtl';
             } else {
               root.dir = 'ltr';
+            }
+            if (savedLang !== 'tr' && !localStorage.getItem('agendamea-app-title')) {
+              document.title = 'Agendamea';
             }
           }
           var savedTitle = localStorage.getItem('agendamea-app-title');

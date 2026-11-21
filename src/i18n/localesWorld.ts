@@ -30,7 +30,7 @@ export function getDictionary(lang: LanguageCode): UiDictionary {
   const cached = DICTIONARY_CACHE.get(lang);
   if (cached) return cached;
   const seed = ALL_WORLD_SEEDS[lang];
-  const compiled = compileSeedToDictionary(seed);
+  const compiled = compileSeedToDictionary(seed, lang);
   DICTIONARY_CACHE.set(lang, compiled);
   return compiled;
 }

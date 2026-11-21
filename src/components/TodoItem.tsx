@@ -23,6 +23,7 @@ interface TodoItemProps {
   onDragLeave: (id: string) => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>, id: string) => void;
   onDragEnd: () => void;
+  onTagClick?: (tag: string) => void;
 }
 
 export const TodoItem = React.memo(function TodoItem({
@@ -43,6 +44,7 @@ export const TodoItem = React.memo(function TodoItem({
   onDragLeave,
   onDrop,
   onDragEnd,
+  onTagClick,
 }: TodoItemProps) {
   const { t, meta } = useI18n();
   const dueInfo = formatTodoDateSchedule(
@@ -55,6 +57,7 @@ export const TodoItem = React.memo(function TodoItem({
       tomorrow: t.tomorrow,
       yesterday: t.yesterday,
     },
+    todo.dueTime,
   );
   let completedSubtasks = 0;
   for (let i = 0; i < todo.subtasks.length; i += 1) {
@@ -122,6 +125,40 @@ export const TodoItem = React.memo(function TodoItem({
       content: (
         <span className="font-mono-tabular">
           {completedSubtasks}/{totalSubtasks} {t.subtaskCountUnit}
+        </span>
+      ),
+    });
+  }
+
+  const tags = todo.tags ?? [];
+  if (tags.length > 0) {
+    metadataParts.push({
+      key: 'tags',
+      content: (
+        <span className="inline-flex flex-wrap items-center gap-1">
+          {tags.map((tg) => (
+            <span
+              key={tg}
+              role={onTagClick ? 'button' : undefined}
+              tabIndex={onTagClick ? 0 : undefined}
+              onClick={(e) => {
+                if (!onTagClick) return;
+                e.stopPropagation();
+                onTagClick(tg);
+              }}
+              onKeyDown={(e) => {
+                if (!onTagClick) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onTagClick(tg);
+                }
+              }}
+              className="inline-flex items-center rounded border border-[var(--border)] bg-[var(--surface-subtle)] px-1.5 py-0.2 text-[11px] font-medium text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+            >
+              #{tg}
+            </span>
+          ))}
         </span>
       ),
     });

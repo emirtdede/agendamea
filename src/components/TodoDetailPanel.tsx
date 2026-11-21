@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, Check, Pin, Plus, Star, Trash2, X } from 'lucide-react';
+import { Calendar, Check, Clock, Hash, Pin, Plus, Star, Trash2, X } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
 import type { Category, Priority, Todo, TodoPatch } from '../types';
-import { addDaysToDateString } from '../utils/todoLogic';
+import { addDaysToDateString, sanitizeTags } from '../utils/todoLogic';
 
 interface TodoDetailPanelProps {
   todo: Todo;
@@ -50,6 +50,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
   const [title, setTitle] = useState(todo.title);
   const [notes, setNotes] = useState(todo.notes);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [newTagInput, setNewTagInput] = useState('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [saveHint, setSaveHint] = useState<'idle' | 'saved'>('idle');
 
@@ -119,6 +120,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
       setTitle(todo.title);
       setNotes(todo.notes);
       setNewSubtaskTitle('');
+      setNewTagInput('');
       setSaveHint('idle');
       lastSavedRef.current = { id: todo.id, title: todo.title, notes: todo.notes };
       draftRef.current = { id: todo.id, title: todo.title, notes: todo.notes };
@@ -219,7 +221,25 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
     { value: 'high', label: t.priorityHigh },
   ];
 
-  const hasAnyDate = Boolean(todo.startDate || todo.dueDate);
+  const hasAnyDate = Boolean(todo.startDate || todo.dueDate || todo.dueTime);
+  const currentTags = todo.tags ?? [];
+
+  const handleAddTag = (e: React.FormEvent) => {
+    e.preventDefault();
+    const raw = newTagInput.trim();
+    if (!raw) return;
+    const rawTokens = raw.split(/[,;\s]+/).filter(Boolean);
+    const merged = sanitizeTags([...currentTags, ...rawTokens]);
+    setNewTagInput('');
+    if (merged.length !== currentTags.length) {
+      void onUpdate(todo.id, { tags: merged });
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    const next = currentTags.filter((tg) => tg !== tagToRemove);
+    void onUpdate(todo.id, { tags: next });
+  };
 
   return (
     <aside
@@ -307,9 +327,9 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         {/* Title & Notes (Instant Auto-Save) */}
-        <div className="space-y-3">
+        <div className="space-y-2">
           <input
             type="text"
             value={title}
@@ -335,11 +355,11 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
               scheduleAutoSave(title, val);
             }}
             onBlur={() => flushChangesFor(todo.id, title, notes)}
-            rows={4}
+            rows={2}
             maxLength={10000}
             aria-label={t.notesPlaceholder}
             placeholder={t.notesPlaceholder}
-            className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+            className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
           />
         </div>
 
@@ -422,6 +442,63 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
           </form>
         </section>
 
+        {/* Post-Creation Tags (#tag - Microsoft To Do style) */}
+        <section aria-label={t.tagsLabel} className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+              {t.tagsLabel}
+            </h3>
+            {currentTags.length > 0 && (
+              <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
+                {currentTags.length}/12
+              </span>
+            )}
+          </div>
+
+          {currentTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {currentTags.map((tag) => (
+                <span
+                  key={tag}
+                  data-testid="detail-tag-chip"
+                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)]"
+                >
+                  <Hash className="h-3 w-3 text-[var(--accent)] shrink-0" />
+                  <span>{tag}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    aria-label={`${t.clearDate}: #${tag}`}
+                    className="ml-0.5 rounded p-0.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-red-500 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={handleAddTag} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newTagInput}
+              onChange={(e) => setNewTagInput(e.target.value)}
+              maxLength={40}
+              aria-label={t.addTagPlaceholder}
+              placeholder={t.addTagPlaceholder}
+              className="flex-1 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!newTagInput.trim() || currentTags.length >= 12}
+              aria-label={t.addButton}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-35"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </form>
+        </section>
+
         <div className="h-px bg-[var(--border)]" />
 
         {/* Structured Properties */}
@@ -487,7 +564,9 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
               {hasAnyDate && (
                 <button
                   type="button"
-                  onClick={() => void onUpdate(todo.id, { startDate: null, dueDate: null })}
+                  onClick={() =>
+                    void onUpdate(todo.id, { startDate: null, dueDate: null, dueTime: null })
+                  }
                   className="rounded-md px-2 py-0.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] whitespace-nowrap"
                 >
                   {t.clearDate}
@@ -561,6 +640,45 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
                     className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Optional Due Time Input */}
+            <div className="space-y-1">
+              <label
+                htmlFor="detail-due-time"
+                className="block text-[11px] font-medium text-[var(--text-muted)]"
+              >
+                {t.dueTimeLabel}
+              </label>
+              <div className="relative flex items-center gap-1.5">
+                <div className="relative flex flex-1 items-center">
+                  <Clock className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+                  <input
+                    id="detail-due-time"
+                    type="time"
+                    value={todo.dueTime ?? ''}
+                    onChange={(e) => {
+                      const nextTime = e.target.value || null;
+                      const patch: TodoPatch = { dueTime: nextTime };
+                      if (nextTime && !todo.dueDate && !todo.startDate) {
+                        patch.dueDate = todayStr;
+                      }
+                      void onUpdate(todo.id, patch);
+                    }}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+                  />
+                </div>
+                {todo.dueTime && (
+                  <button
+                    type="button"
+                    onClick={() => void onUpdate(todo.id, { dueTime: null })}
+                    aria-label={t.clearDate}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 

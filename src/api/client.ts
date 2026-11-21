@@ -3,6 +3,7 @@ import type {
   BootstrapPayload,
   Category,
   CategoryPatch,
+  OneDriveStatus,
   Priority,
   Subtask,
   SubtaskPatch,
@@ -128,6 +129,8 @@ export const api = {
     priority?: Priority;
     startDate?: string | null;
     dueDate?: string | null;
+    dueTime?: string | null;
+    tags?: string[];
     categoryId?: string | null;
     subtasks?: Array<{ title: string; completed?: boolean }>;
   }): Promise<Todo> {
@@ -229,5 +232,41 @@ export const api = {
       return window.agendameaWindow.checkForUpdates();
     }
     return request<UpdateCheckResult>('/api/update-check');
+  },
+
+  getOneDriveStatus(): Promise<OneDriveStatus> {
+    return request<OneDriveStatus>('/api/onedrive/status');
+  },
+
+  connectOneDrive(input?: {
+    folderPath?: string;
+    accountEmail?: string;
+    autoSync?: boolean;
+  }): Promise<OneDriveStatus> {
+    return request<OneDriveStatus>('/api/onedrive/connect', {
+      method: 'POST',
+      body: JSON.stringify(input ?? {}),
+    });
+  },
+
+  disconnectOneDrive(): Promise<OneDriveStatus> {
+    return request<OneDriveStatus>('/api/onedrive/disconnect', {
+      method: 'POST',
+    });
+  },
+
+  syncOneDrivePush(): Promise<OneDriveStatus> {
+    return request<OneDriveStatus>('/api/onedrive/sync-push', {
+      method: 'POST',
+    });
+  },
+
+  syncOneDrivePull(): Promise<{ status: OneDriveStatus; bootstrap: BootstrapPayload }> {
+    return request<{ status: OneDriveStatus; bootstrap: BootstrapPayload }>(
+      '/api/onedrive/sync-pull',
+      {
+        method: 'POST',
+      },
+    );
   },
 };

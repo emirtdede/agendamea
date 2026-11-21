@@ -15,7 +15,12 @@ import type {
   TodoPatch,
 } from '../types.ts';
 import { isValidThemeId, normalizeHexColor } from '../utils/themes.ts';
-import { isValidIsoDateString, normalizeDateRange } from '../utils/todoLogic.ts';
+import {
+  isValidIsoDateString,
+  normalizeDateRange,
+  sanitizeDueTime,
+  sanitizeTags,
+} from '../utils/todoLogic.ts';
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -44,6 +49,8 @@ interface TodoRow {
   priority: Priority;
   start_date?: string | null;
   due_date: string | null;
+  due_time?: string | null;
+  tags?: string;
   category_id: string | null;
   sort_order: number;
   created_at: string;
@@ -157,6 +164,8 @@ export class TodoDatabase {
         priority TEXT NOT NULL DEFAULT 'normal',
         start_date TEXT DEFAULT NULL,
         due_date TEXT,
+        due_time TEXT DEFAULT NULL,
+        tags TEXT NOT NULL DEFAULT '[]',
         category_id TEXT,
         sort_order INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
@@ -215,10 +224,16 @@ export class TodoDatabase {
       this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
     }
 
-    // Ensure optional start_date column exists on todos across all schema versions
+    // Ensure optional start_date, due_time & tags columns exist on todos across all schema versions
     const latestTodoCols = this.db.pragma('table_info(todos)') as TableInfoRow[];
     if (!latestTodoCols.some((c) => c.name === 'start_date')) {
       this.db.exec('ALTER TABLE todos ADD COLUMN start_date TEXT DEFAULT NULL');
+    }
+    if (!latestTodoCols.some((c) => c.name === 'due_time')) {
+      this.db.exec('ALTER TABLE todos ADD COLUMN due_time TEXT DEFAULT NULL');
+    }
+    if (!latestTodoCols.some((c) => c.name === 'tags')) {
+      this.db.exec("ALTER TABLE todos ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
     }
   }
 
@@ -234,6 +249,8 @@ export class TodoDatabase {
       stmt.run('themeCustomized', '0');
       stmt.run('language', 'tr');
       stmt.run('autoUpdateCheck', '1');
+      stmt.run('onedriveAutoSync', '0');
+      stmt.run('onedriveCustomPath', '');
     });
     tx();
   }
@@ -271,6 +288,8 @@ export class TodoDatabase {
       priority: row.priority,
       startDate: row.start_date ?? null,
       dueDate: row.due_date,
+      dueTime: sanitizeDueTime(row.due_time),
+      tags: sanitizeTags(row.tags),
       categoryId: row.category_id,
       sortOrder: row.sort_order,
       createdAt: row.created_at,
@@ -310,7 +329,7 @@ export class TodoDatabase {
 
   getSettings(): AppSettings {
     const rows = this.db
-      .prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?, ?, ?)')
+      .prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .all(
         'themeMode',
         'themeId',
@@ -319,6 +338,8 @@ export class TodoDatabase {
         'themeCustomized',
         'language',
         'autoUpdateCheck',
+        'onedriveAutoSync',
+        'onedriveCustomPath',
       ) as SettingRow[];
 
     const map = new Map(rows.map((r) => [r.key, r.value]));
@@ -329,8 +350,10 @@ export class TodoDatabase {
     const rawThemeCustomized = map.get('themeCustomized');
     const rawLanguage = map.get('language');
     const rawAutoUpdate = map.get('autoUpdateCheck');
+    const rawOnedriveAutoSync = map.get('onedriveAutoSync');
+    const rawOnedrivePath = map.get('onedriveCustomPath') ?? '';
 
-    return {
+    const settings: AppSettings = {
       themeMode: rawMode === 'dark' ? 'dark' : 'light',
       themeId: isValidThemeId(rawThemeId) ? rawThemeId : 'obsidian',
       dragLocked: rawDragLocked === '1' || rawDragLocked === 'true',
@@ -339,6 +362,13 @@ export class TodoDatabase {
       language: isValidLanguageCode(rawLanguage) ? (rawLanguage as LanguageCode) : 'tr',
       autoUpdateCheck: rawAutoUpdate === undefined ? true : rawAutoUpdate === '1' || rawAutoUpdate === 'true',
     };
+    if (rawOnedriveAutoSync === '1' || rawOnedriveAutoSync === 'true') {
+      settings.onedriveAutoSync = true;
+    }
+    if (rawOnedrivePath.length > 0) {
+      settings.onedriveCustomPath = rawOnedrivePath;
+    }
+    return settings;
   }
 
   private applySettingsPatchInTx(patch: Partial<AppSettings>): void {
@@ -364,6 +394,12 @@ export class TodoDatabase {
     }
     if (typeof patch.autoUpdateCheck === 'boolean') {
       stmt.run('autoUpdateCheck', patch.autoUpdateCheck ? '1' : '0');
+    }
+    if (typeof patch.onedriveAutoSync === 'boolean') {
+      stmt.run('onedriveAutoSync', patch.onedriveAutoSync ? '1' : '0');
+    }
+    if (typeof patch.onedriveCustomPath === 'string') {
+      stmt.run('onedriveCustomPath', patch.onedriveCustomPath.trim().slice(0, 500));
     }
   }
 
@@ -582,6 +618,8 @@ export class TodoDatabase {
     priority?: Priority;
     startDate?: string | null;
     dueDate?: string | null;
+    dueTime?: string | null;
+    tags?: string[];
     categoryId?: string | null;
     subtasks?: Array<{ title: string; completed?: boolean }>;
   }): Todo {
@@ -604,6 +642,8 @@ export class TodoDatabase {
       sanitizeDueDate(input.startDate),
       sanitizeDueDate(input.dueDate),
     );
+    const dueTime = sanitizeDueTime(input.dueTime);
+    const tagsJson = JSON.stringify(sanitizeTags(input.tags));
     const rawCategoryId =
       typeof input.categoryId === 'string' && input.categoryId.trim() ? input.categoryId.trim() : null;
     const subtasksInput = Array.isArray(input.subtasks)
@@ -641,8 +681,8 @@ export class TodoDatabase {
       this.db
         .prepare(`
           INSERT INTO todos (
-            id, title, notes, completed, important, pinned, priority, start_date, due_date, category_id, sort_order, created_at, updated_at, deleted_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+            id, title, notes, completed, important, pinned, priority, start_date, due_date, due_time, tags, category_id, sort_order, created_at, updated_at, deleted_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
         `)
         .run(
           id,
@@ -654,6 +694,8 @@ export class TodoDatabase {
           priority,
           startDate,
           dueDate,
+          dueTime,
+          tagsJson,
           categoryId,
           sortOrder,
           now,
@@ -735,6 +777,23 @@ export class TodoDatabase {
       startDate = normalizedDates.startDate;
       dueDate = normalizedDates.dueDate;
 
+      let dueTime = sanitizeDueTime(existing.due_time);
+      if (patch.dueTime !== undefined) {
+        if (patch.dueTime === null || patch.dueTime === '') {
+          dueTime = null;
+        } else {
+          const sanitizedTime = sanitizeDueTime(patch.dueTime);
+          if (sanitizedTime !== null) {
+            dueTime = sanitizedTime;
+          }
+        }
+      }
+
+      let tagsJson = existing.tags ?? '[]';
+      if (patch.tags !== undefined) {
+        tagsJson = JSON.stringify(sanitizeTags(patch.tags));
+      }
+
       let categoryId = existing.category_id;
       if (patch.categoryId !== undefined) {
         if (patch.categoryId === null || patch.categoryId === '') {
@@ -754,7 +813,7 @@ export class TodoDatabase {
       this.db
         .prepare(`
           UPDATE todos
-          SET title = ?, notes = ?, completed = ?, important = ?, pinned = ?, priority = ?, start_date = ?, due_date = ?, category_id = ?, updated_at = ?
+          SET title = ?, notes = ?, completed = ?, important = ?, pinned = ?, priority = ?, start_date = ?, due_date = ?, due_time = ?, tags = ?, category_id = ?, updated_at = ?
           WHERE id = ?
         `)
         .run(
@@ -766,6 +825,8 @@ export class TodoDatabase {
           priority,
           startDate,
           dueDate,
+          dueTime,
+          tagsJson,
           categoryId,
           updatedAt,
           id,
@@ -1078,6 +1139,8 @@ export class TodoDatabase {
       priority: Priority;
       startDate: string | null;
       dueDate: string | null;
+      dueTime: string | null;
+      tagsJson: string;
       categoryId: string | null;
       sortOrder: number;
       createdAt: string;
@@ -1157,6 +1220,8 @@ export class TodoDatabase {
         priority: sanitizePriority(item.priority, 'normal'),
         startDate: normDates.startDate,
         dueDate: normDates.dueDate,
+        dueTime: sanitizeDueTime(item.dueTime),
+        tagsJson: JSON.stringify(sanitizeTags(item.tags)),
         categoryId,
         sortOrder:
           typeof item.sortOrder === 'number' && Number.isFinite(item.sortOrder)
@@ -1189,8 +1254,8 @@ export class TodoDatabase {
 
       const todoInsert = this.db.prepare(`
         INSERT INTO todos (
-          id, title, notes, completed, important, pinned, priority, start_date, due_date, category_id, sort_order, created_at, updated_at, deleted_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, title, notes, completed, important, pinned, priority, start_date, due_date, due_time, tags, category_id, sort_order, created_at, updated_at, deleted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const subInsert = this.db.prepare(
         'INSERT INTO subtasks (id, todo_id, title, completed, sort_order) VALUES (?, ?, ?, ?, ?)',
@@ -1207,6 +1272,8 @@ export class TodoDatabase {
           t.priority,
           t.startDate,
           t.dueDate,
+          t.dueTime,
+          t.tagsJson,
           t.categoryId,
           t.sortOrder,
           t.createdAt,

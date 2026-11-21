@@ -30,6 +30,12 @@ export type StatusFilter = 'all' | 'active' | 'completed';
 
 export type SortOption = 'manual' | 'priority' | 'dueDate' | 'newest';
 
+export type LayoutMode = 'list' | 'kanban' | 'calendar' | 'matrix';
+
+export type KanbanGroupBy = 'priority' | 'status';
+
+export type MatrixQuadrant = 'q1' | 'q2' | 'q3' | 'q4';
+
 export interface Category {
   id: string;
   name: string;
@@ -58,6 +64,8 @@ export interface Todo {
   priority: Priority;
   startDate?: string | null; // YYYY-MM-DD or null
   dueDate: string | null; // YYYY-MM-DD or null
+  dueTime?: string | null; // HH:mm or null
+  tags?: string[];
   categoryId: string | null;
   sortOrder: number;
   createdAt: string;
@@ -74,6 +82,8 @@ export interface AppSettings {
   themeCustomized?: boolean;
   language?: LanguageCode;
   autoUpdateCheck?: boolean;
+  onedriveAutoSync?: boolean;
+  onedriveCustomPath?: string;
 }
 
 export interface BootstrapPayload {
@@ -99,7 +109,21 @@ export interface TodoPatch {
   priority?: Priority;
   startDate?: string | null;
   dueDate?: string | null;
+  dueTime?: string | null;
+  tags?: string[];
   categoryId?: string | null;
+}
+
+export interface OneDriveStatus {
+  available: boolean;
+  connected: boolean;
+  mode: 'folder' | 'graph' | 'none';
+  folderPath: string | null;
+  syncFilePath: string | null;
+  accountEmail: string | null;
+  lastSyncedAt: string | null;
+  autoSync: boolean;
+  hasRemoteBackup: boolean;
 }
 
 export interface SubtaskPatch {

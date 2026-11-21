@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, CalendarRange, Check, ChevronDown, Flag, Folder, Plus, X } from 'lucide-react';
+import { Calendar, CalendarRange, Check, ChevronDown, Clock, Flag, Folder, Plus, X } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
 import type { Category, Priority } from '../types';
 import { createClientId } from '../utils/id';
@@ -23,6 +23,7 @@ interface QuickAddBarProps {
     priority: Priority;
     startDate?: string | null;
     dueDate: string | null;
+    dueTime?: string | null;
     categoryId: string | null;
     important: boolean;
   }) => Promise<void>;
@@ -44,6 +45,7 @@ export const QuickAddBar = React.memo(function QuickAddBar({
   const [priority, setPriority] = useState<Priority>('normal');
   const [startDate, setStartDate] = useState<string | null>(null);
   const [dueDateOverride, setDueDateOverride] = useState<string | null | undefined>(undefined);
+  const [dueTime, setDueTime] = useState<string | null>(null);
   const [categoryOverride, setCategoryOverride] = useState<string | null | undefined>(undefined);
   const [isCatMenuOpen, setIsCatMenuOpen] = useState(false);
   const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false);
@@ -62,6 +64,7 @@ export const QuickAddBar = React.memo(function QuickAddBar({
   useEffect(() => {
     setDueDateOverride(undefined);
     setStartDate(null);
+    setDueTime(null);
   }, [defaultDueDate]);
 
   const effectiveCategoryId =
@@ -124,6 +127,7 @@ export const QuickAddBar = React.memo(function QuickAddBar({
         priority,
         startDate: normalizedDates.startDate,
         dueDate: normalizedDates.dueDate,
+        dueTime,
         categoryId: effectiveCategoryId,
         important: defaultImportant,
       });
@@ -131,6 +135,7 @@ export const QuickAddBar = React.memo(function QuickAddBar({
       setPriority('normal');
       setStartDate(null);
       setDueDateOverride(undefined);
+      setDueTime(null);
       setCategoryOverride(undefined);
       setIsDatePopoverOpen(false);
       pendingTodoIdRef.current = null;
@@ -162,12 +167,19 @@ export const QuickAddBar = React.memo(function QuickAddBar({
 
   const scheduleInfo = useMemo(
     () =>
-      formatTodoDateSchedule(startDate, effectiveDueDate, todayStr, meta.intlLocale, {
-        today: t.today,
-        tomorrow: t.tomorrow,
-        yesterday: t.yesterday,
-      }),
-    [startDate, effectiveDueDate, todayStr, meta.intlLocale, t.today, t.tomorrow, t.yesterday],
+      formatTodoDateSchedule(
+        startDate,
+        effectiveDueDate,
+        todayStr,
+        meta.intlLocale,
+        {
+          today: t.today,
+          tomorrow: t.tomorrow,
+          yesterday: t.yesterday,
+        },
+        dueTime,
+      ),
+    [startDate, effectiveDueDate, dueTime, todayStr, meta.intlLocale, t.today, t.tomorrow, t.yesterday],
   );
 
   const dateLabel = scheduleInfo ? scheduleInfo.label : t.dateButton;
@@ -295,6 +307,7 @@ export const QuickAddBar = React.memo(function QuickAddBar({
                     onClick={() => {
                       setStartDate(null);
                       setDueDateOverride(null);
+                      setDueTime(null);
                     }}
                     className="ml-auto rounded-md px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
                   >
@@ -325,6 +338,25 @@ export const QuickAddBar = React.memo(function QuickAddBar({
                     value={effectiveDueDate ?? ''}
                     onChange={(e) => setDueDateOverride(e.target.value || null)}
                     aria-label={t.dueDateLabel}
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 flex items-center gap-1 text-[11px] font-medium text-[var(--text-muted)]">
+                    <Clock className="h-3 w-3 shrink-0" />
+                    <span>{t.dueTimeLabel}</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={dueTime ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value || null;
+                      setDueTime(val);
+                      if (val && !effectiveDueDate && !startDate) {
+                        setDueDateOverride(todayStr);
+                      }
+                    }}
+                    aria-label={t.dueTimeLabel}
                     className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
                   />
                 </div>

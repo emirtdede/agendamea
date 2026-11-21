@@ -203,6 +203,32 @@ export interface UiDictionary {
   importRestoreFailedError: string;
   operationFailedToast: string;
   loadFailedError: string;
+
+  // Views (List, Kanban, Calendar, Matrix), Time, Tags & OneDrive Sync
+  viewList: string;
+  viewKanban: string;
+  viewCalendar: string;
+  viewMatrix: string;
+  kanbanGroupByPriority: string;
+  kanbanGroupByStatus: string;
+  matrixQ1Title: string;
+  matrixQ2Title: string;
+  matrixQ3Title: string;
+  matrixQ4Title: string;
+  dueTimeLabel: string;
+  tagsLabel: string;
+  addTagPlaceholder: string;
+  unscheduledTasksTitle: string;
+  onedriveSectionTitle: string;
+  onedriveSectionDesc: string;
+  onedriveConnectButton: string;
+  onedriveDisconnectButton: string;
+  onedriveSyncNowButton: string;
+  onedriveRestoreButton: string;
+  onedriveAutoSyncTitle: string;
+  onedriveConnectedBadge: string;
+  onedriveLastSyncedPrefix: string;
+  onedriveSyncedToast: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -392,6 +418,31 @@ export const TR_DICTIONARY: UiDictionary = {
   importRestoreFailedError: 'Yedek geri yüklenemedi.',
   operationFailedToast: 'İşlem tamamlanamadı. Lütfen tekrar deneyin.',
   loadFailedError: 'Veriler yüklenemedi.',
+
+  viewList: 'Liste',
+  viewKanban: 'Kanban',
+  viewCalendar: 'Takvim',
+  viewMatrix: 'Matris',
+  kanbanGroupByPriority: 'Önceliğe Göre',
+  kanbanGroupByStatus: 'Duruma Göre',
+  matrixQ1Title: 'I · Önemli ve Acil (Bugün)',
+  matrixQ2Title: 'II · Önemli ve Planlı',
+  matrixQ3Title: 'III · Normal ve Bugün',
+  matrixQ4Title: 'IV · Düşük Öncelik / Daha Sonra',
+  dueTimeLabel: 'Saat',
+  tagsLabel: 'Etiketler',
+  addTagPlaceholder: 'Etiket ekle (#iş, #acil)...',
+  unscheduledTasksTitle: 'Tarihsiz Görevler',
+  onedriveSectionTitle: 'OneDrive Bulut Eşitleme',
+  onedriveSectionDesc: 'Kendi Microsoft OneDrive klasörünüzü kullanarak görevlerinizi sunucusuz ve ücretsiz olarak bulutta yedekleyin ve eşitleyin.',
+  onedriveConnectButton: 'OneDrive Bağla',
+  onedriveDisconnectButton: 'Bağlantıyı Kes',
+  onedriveSyncNowButton: 'Şimdi Eşitle',
+  onedriveRestoreButton: "OneDrive'dan Yükle",
+  onedriveAutoSyncTitle: 'Değişiklikleri OneDrive ile Otomatik Eşitle',
+  onedriveConnectedBadge: 'OneDrive Bağlı',
+  onedriveLastSyncedPrefix: 'Son eşitleme',
+  onedriveSyncedToast: 'OneDrive bulut eşitlemesi tamamlandı.',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -581,6 +632,31 @@ export const EN_DICTIONARY: UiDictionary = {
   importRestoreFailedError: 'Failed to restore backup.',
   operationFailedToast: 'Operation could not be completed. Please try again.',
   loadFailedError: 'Failed to load data.',
+
+  viewList: 'List',
+  viewKanban: 'Kanban',
+  viewCalendar: 'Calendar',
+  viewMatrix: 'Matrix',
+  kanbanGroupByPriority: 'By Priority',
+  kanbanGroupByStatus: 'By Status',
+  matrixQ1Title: 'I · Urgent & Important (Today)',
+  matrixQ2Title: 'II · Important & Scheduled',
+  matrixQ3Title: 'III · Normal & Due Today',
+  matrixQ4Title: 'IV · Low Priority / Later',
+  dueTimeLabel: 'Time',
+  tagsLabel: 'Tags',
+  addTagPlaceholder: 'Add tag (#work, #urgent)...',
+  unscheduledTasksTitle: 'Undated Tasks',
+  onedriveSectionTitle: 'OneDrive Cloud Sync',
+  onedriveSectionDesc: 'Sync and back up your tasks directly to your own Microsoft OneDrive folder with zero server cost.',
+  onedriveConnectButton: 'Connect OneDrive',
+  onedriveDisconnectButton: 'Disconnect',
+  onedriveSyncNowButton: 'Sync Now',
+  onedriveRestoreButton: 'Restore from OneDrive',
+  onedriveAutoSyncTitle: 'Auto-Sync Changes to OneDrive',
+  onedriveConnectedBadge: 'OneDrive Connected',
+  onedriveLastSyncedPrefix: 'Last synced',
+  onedriveSyncedToast: 'OneDrive cloud sync completed.',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {

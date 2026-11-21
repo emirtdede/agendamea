@@ -1,6 +1,7 @@
 import type {
   ActiveView,
   Category,
+  MatrixQuadrant,
   Priority,
   SmartView,
   SortOption,
@@ -15,6 +16,56 @@ const PRIORITY_WEIGHT: Record<Priority, number> = {
 };
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_24H_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const MAX_TAGS_PER_TODO = 12;
+const MAX_TAG_LEN = 28;
+
+export function isValidTimeString(value: string): boolean {
+  return TIME_24H_RE.test(value);
+}
+
+export function sanitizeDueTime(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return isValidTimeString(trimmed) ? trimmed : null;
+}
+
+export function sanitizeTagName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw
+    .trim()
+    .replace(/^#+/, '')
+    .replace(/\s+/g, '-')
+    .slice(0, MAX_TAG_LEN);
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+export function sanitizeTags(value: unknown): string[] {
+  let list: unknown[] = [];
+  if (Array.isArray(value)) {
+    list = value;
+  } else if (typeof value === 'string' && value.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) list = parsed;
+    } catch {
+      list = [];
+    }
+  }
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of list) {
+    if (result.length >= MAX_TAGS_PER_TODO) break;
+    const tag = sanitizeTagName(item);
+    if (!tag) continue;
+    const key = normalizeTurkish(tag);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(tag);
+    }
+  }
+  return result;
+}
 
 const FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
 
@@ -146,21 +197,24 @@ export function formatTodoDateSchedule(
   todayStr: string = getLocalDateString(),
   locale = 'tr-TR',
   labels: RelativeDateLabels = DEFAULT_TR_DATE_LABELS,
+  dueTime?: string | null,
 ): { label: string; isOverdue: boolean; isToday: boolean; isRange: boolean } | null {
   const { startDate: normStart, dueDate: normDue } = normalizeDateRange(startDate, dueDate);
+  const validTime = sanitizeDueTime(dueTime);
+  const timeSuffix = validTime ? ` · ${validTime}` : '';
 
   if (!normStart && !normDue) return null;
 
   if (!normStart && normDue) {
     const dueInfo = formatDueDateLabel(normDue, todayStr, locale, labels);
-    return dueInfo ? { ...dueInfo, isRange: false } : null;
+    return dueInfo ? { ...dueInfo, label: `${dueInfo.label}${timeSuffix}`, isRange: false } : null;
   }
 
   if (normStart && !normDue) {
     const startInfo = formatDueDateLabel(normStart, todayStr, locale, labels);
     if (!startInfo) return null;
     return {
-      label: startInfo.label,
+      label: `${startInfo.label}${timeSuffix}`,
       isOverdue: false,
       isToday: normStart <= todayStr,
       isRange: false,
@@ -170,7 +224,9 @@ export function formatTodoDateSchedule(
   // Both startDate and dueDate present
   if (normStart === normDue) {
     const singleInfo = formatDueDateLabel(normDue, todayStr, locale, labels);
-    return singleInfo ? { ...singleInfo, isRange: false } : null;
+    return singleInfo
+      ? { ...singleInfo, label: `${singleInfo.label}${timeSuffix}`, isRange: false }
+      : null;
   }
 
   const startInfo = formatDueDateLabel(normStart, todayStr, locale, labels);
@@ -178,7 +234,7 @@ export function formatTodoDateSchedule(
   if (!startInfo || !dueInfo) return null;
 
   return {
-    label: `${startInfo.label} - ${dueInfo.label}`,
+    label: `${startInfo.label} - ${dueInfo.label}${timeSuffix}`,
     isOverdue: dueInfo.isOverdue,
     isToday: (normStart! <= todayStr && todayStr <= normDue!) || dueInfo.isToday,
     isRange: true,
@@ -225,6 +281,7 @@ export function filterAndSortTodos(params: {
   searchQuery: string;
   sortBy: SortOption;
   todayStr?: string;
+  tagFilter?: string | null;
 }): Todo[] {
   const {
     todos,
@@ -233,10 +290,14 @@ export function filterAndSortTodos(params: {
     searchQuery,
     sortBy,
     todayStr = getLocalDateString(),
+    tagFilter = null,
   } = params;
 
   const q = normalizeTurkish(searchQuery);
   const qStd = searchQuery.toLowerCase().trim();
+  const qTag = q.startsWith('#') ? q.slice(1) : q;
+  const qTagStd = qStd.startsWith('#') ? qStd.slice(1) : qStd;
+  const normalizedTagFilter = tagFilter ? tagFilter.trim().toLowerCase() : null;
 
   const filtered = todos.filter((todo) => {
     // View scoping
@@ -258,12 +319,21 @@ export function filterAndSortTodos(params: {
       if (statusFilter === 'completed' && !todo.completed) return false;
     }
 
-    // Search query matching title, notes, or subtasks (supports both Turkish İ/ı and international I/i)
+    // Active tag chip filter
+    if (normalizedTagFilter) {
+      const hasTag = (todo.tags ?? []).some((tg) => tg.toLowerCase() === normalizedTagFilter);
+      if (!hasTag) return false;
+    }
+
+    // Search query matching title, notes, subtasks, or tags (supports both Turkish İ/ı and international I/i)
     if (q.length > 0) {
       const inTitle = matchesMultilingualSearch(todo.title, q, qStd);
       const inNotes = matchesMultilingualSearch(todo.notes, q, qStd);
       const inSubtasks = todo.subtasks.some((s) => matchesMultilingualSearch(s.title, q, qStd));
-      if (!inTitle && !inNotes && !inSubtasks) return false;
+      const inTags =
+        qTag.length > 0 &&
+        (todo.tags ?? []).some((tg) => matchesMultilingualSearch(tg, qTag, qTagStd));
+      if (!inTitle && !inNotes && !inSubtasks && !inTags) return false;
     }
 
     return true;
@@ -291,6 +361,13 @@ export function filterAndSortTodos(params: {
       }
       if (dateA && !dateB) return -1;
       if (!dateA && dateB) return 1;
+      const timeA = sanitizeDueTime(a.dueTime);
+      const timeB = sanitizeDueTime(b.dueTime);
+      if (timeA && timeB && timeA !== timeB) {
+        return timeA.localeCompare(timeB);
+      }
+      if (timeA && !timeB) return -1;
+      if (!timeA && timeB) return 1;
     } else if (sortBy === 'newest') {
       const diff = b.createdAt.localeCompare(a.createdAt);
       if (diff !== 0) return diff;
@@ -302,6 +379,30 @@ export function filterAndSortTodos(params: {
     }
     return b.createdAt.localeCompare(a.createdAt);
   });
+}
+
+export function classifyEisenhowerQuadrant(
+  todo: Pick<Todo, 'important' | 'priority' | 'startDate' | 'dueDate'>,
+  todayStr: string = getLocalDateString(),
+): MatrixQuadrant {
+  const isImportant = Boolean(todo.important || todo.priority === 'high');
+  const isUrgent = isTodoScheduledForToday(todo, todayStr);
+  if (isImportant && isUrgent) return 'q1';
+  if (isImportant && !isUrgent) return 'q2';
+  if (!isImportant && isUrgent) return 'q3';
+  return 'q4';
+}
+
+export function isTodoOnCalendarDate(
+  todo: Pick<Todo, 'startDate' | 'dueDate'>,
+  dateStr: string,
+): boolean {
+  const { startDate, dueDate } = normalizeDateRange(todo.startDate, todo.dueDate);
+  if (!startDate && !dueDate) return false;
+  if (startDate && dueDate) {
+    return startDate <= dateStr && dateStr <= dueDate;
+  }
+  return (dueDate ?? startDate) === dateStr;
 }
 
 export function computeViewCounts(

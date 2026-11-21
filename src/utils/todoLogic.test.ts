@@ -7,16 +7,21 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import {
   addDaysToDateString,
+  classifyEisenhowerQuadrant,
   compareSemver,
   computeViewCounts,
   filterAndSortTodos,
   formatDueDateLabel,
   formatTodoDateSchedule,
   getVerticalDropPosition,
+  isTodoOnCalendarDate,
   isTodoScheduledForToday,
   isValidIsoDateString,
+  isValidTimeString,
   moveIdRelative,
   normalizeDateRange,
+  sanitizeDueTime,
+  sanitizeTags,
   sortCategoriesWithPin,
 } from './todoLogic';
 import { isValidLanguageCode, SUPPORTED_LANGUAGES } from '../i18n/languages';
@@ -1196,7 +1201,11 @@ test('QA: Zero language leakage across all 73 languages, UI components, color na
   }
 
   // 8. Zero runtime .replace() hacks in i18n locale seed files and strict Unicode script purity across all 73 languages
-  for (const relFile of ['src/i18n/localesEurope.ts', 'src/i18n/localesAsiaAfrica.ts']) {
+  for (const relFile of [
+    'src/i18n/localesEurope.ts',
+    'src/i18n/localesAsiaAfrica.ts',
+    'src/i18n/localeExtensions.ts',
+  ]) {
     const srcText = fs.readFileSync(path.join(process.cwd(), relFile), 'utf8');
     assert.ok(!srcText.includes('.replace('), `Unexpected .replace() hack in ${relFile}`);
   }
@@ -1278,6 +1287,110 @@ test('QA: Zero language leakage across all 73 languages, UI components, color na
         }
       }
     }
+  }
+});
+
+test('QA: Optional dueTime, post-creation #tags, Kanban/Calendar/Matrix helpers & OneDrive settings persist cleanly', () => {
+  assert.equal(isValidTimeString('09:30'), true);
+  assert.equal(isValidTimeString('23:59'), true);
+  assert.equal(isValidTimeString('24:00'), false);
+  assert.equal(sanitizeDueTime(' 14:45 '), '14:45');
+  assert.equal(sanitizeDueTime('invalid'), null);
+
+  assert.deepEqual(sanitizeTags(['#iş', 'acil', '#İŞ', '  fatura öde  ']), [
+    'iş',
+    'acil',
+    'fatura-öde',
+  ]);
+
+  const timedLabel = formatTodoDateSchedule(
+    null,
+    '2026-11-21',
+    '2026-11-21',
+    'tr-TR',
+    undefined,
+    '14:30',
+  );
+  assert.equal(timedLabel?.label, 'Bugün · 14:30');
+
+  assert.equal(
+    classifyEisenhowerQuadrant(
+      { important: true, priority: 'high', startDate: null, dueDate: '2026-11-21' },
+      '2026-11-21',
+    ),
+    'q1',
+  );
+  assert.equal(
+    classifyEisenhowerQuadrant(
+      { important: true, priority: 'normal', startDate: null, dueDate: '2026-11-25' },
+      '2026-11-21',
+    ),
+    'q2',
+  );
+  assert.equal(
+    classifyEisenhowerQuadrant(
+      { important: false, priority: 'normal', startDate: null, dueDate: '2026-11-21' },
+      '2026-11-21',
+    ),
+    'q3',
+  );
+  assert.equal(
+    classifyEisenhowerQuadrant(
+      { important: false, priority: 'low', startDate: null, dueDate: null },
+      '2026-11-21',
+    ),
+    'q4',
+  );
+
+  assert.equal(
+    isTodoOnCalendarDate({ startDate: '2026-11-20', dueDate: '2026-11-22' }, '2026-11-21'),
+    true,
+  );
+  assert.equal(
+    isTodoOnCalendarDate({ startDate: null, dueDate: null }, '2026-11-21'),
+    false,
+  );
+
+  const db = new TodoDatabase(':memory:');
+  try {
+    const created = db.createTodo({
+      title: 'Sunucu faturasını öde',
+      dueDate: '2026-11-21',
+      dueTime: '15:30',
+      tags: ['#finans', 'bulut'],
+    });
+    assert.equal(created.dueTime, '15:30');
+    assert.deepEqual(created.tags, ['finans', 'bulut']);
+
+    const updated = db.updateTodo(created.id, {
+      dueTime: '16:45',
+      tags: ['finans', 'bulut', '#onedrive'],
+    });
+    assert.equal(updated?.dueTime, '16:45');
+    assert.deepEqual(updated?.tags, ['finans', 'bulut', 'onedrive']);
+
+    const byTag = filterAndSortTodos({
+      todos: db.getTodos(),
+      activeView: { type: 'smart', id: 'all' },
+      statusFilter: 'all',
+      searchQuery: '#onedrive',
+      sortBy: 'dueDate',
+      todayStr: '2026-11-21',
+      tagFilter: 'finans',
+    });
+    assert.equal(byTag.length, 1);
+
+    const snap = db.getBootstrap();
+    const db2 = new TodoDatabase(':memory:');
+    try {
+      const restored = db2.importBackup(snap);
+      assert.equal(restored.todos[0].dueTime, '16:45');
+      assert.deepEqual(restored.todos[0].tags, ['finans', 'bulut', 'onedrive']);
+    } finally {
+      db2.close();
+    }
+  } finally {
+    db.close();
   }
 });
 
