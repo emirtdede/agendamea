@@ -58,7 +58,7 @@ export const LOCALE_EXTENSIONS: Record<LanguageCode, LocaleExtensionTuple> = {
   bs: ['Lista', 'Kanban', 'Kalendar', 'Matrica', 'Vrijeme', 'Oznake', 'Sinhronizacija u oblaku'],
   mk: ['Листа', 'Канбан', 'Календар', 'Матрица', 'Време', 'Ознаки', 'Облачна синхронизација'],
   sq: ['Listë', 'Kanban', 'Kalendar', 'Matricë', 'Ora', 'Etiketa', 'Sinkronizimi në re'],
-  az: ['Siyahı', 'Kanban', 'Təqvim', 'Matris', 'Saat', 'Etiketlər', 'Bulud Sinxronizasiyası'],
+  az: ['Siyahı', 'Kanban', 'Təqvim', 'Matris', 'Vaxt', 'Etiketlər', 'Bulud Sinxronizasiyası'],
   kk: ['Тізім', 'Канбан', 'Күнтізбе', 'Матрица', 'Уақыт', 'Тегтер', 'Бұлттық синхрондау'],
   uz: ['Roʻyxat', 'Kanban', 'Taqvim', 'Matritsa', 'Vaqt', 'Teglar', 'Bulutli sinxronlash'],
   ky: ['Тизме', 'Канбан', 'Жылнаама', 'Матрица', 'Убакыт', 'Тегдер', 'Булут синхрондоштуруу'],

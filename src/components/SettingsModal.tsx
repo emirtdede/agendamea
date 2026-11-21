@@ -5,6 +5,7 @@ import {
   Cloud,
   Download,
   FileText,
+  FolderOpen,
   Keyboard,
   Lock,
   Moon,
@@ -150,6 +151,9 @@ export function SettingsModal({
         ? await api.syncOneDrivePush()
         : await api.connectOneDrive({ autoSync: true });
       if (isMountedRef.current) setOneDriveStatus(next);
+      if (next.restoredBootstrap) {
+        await onImportBackup(next.restoredBootstrap);
+      }
     } catch (err) {
       if (isMountedRef.current) {
         setImportError(
@@ -158,6 +162,14 @@ export function SettingsModal({
       }
     } finally {
       if (isMountedRef.current) setIsOneDriveBusy(false);
+    }
+  };
+
+  const handleOneDriveOpenFolder = async () => {
+    try {
+      await api.openOneDriveFolder(oneDriveStatus?.folderPath);
+    } catch {
+      // Ignore folder open errors
     }
   };
 
@@ -678,6 +690,9 @@ export function SettingsModal({
                         <p className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
                           {t.onedriveLastSyncedPrefix}:{' '}
                           {formatDeletedAt(oneDriveStatus.lastSyncedAt, meta.intlLocale)}
+                          {typeof oneDriveStatus.remoteTodoCount === 'number'
+                            ? ` · ${oneDriveStatus.remoteTodoCount} ${t.localRecordsBadge}`
+                            : ''}
                         </p>
                       )}
                     </div>
@@ -701,17 +716,24 @@ export function SettingsModal({
                           </span>
                         </button>
 
-                        {oneDriveStatus?.hasRemoteBackup && (
-                          <button
-                            type="button"
-                            disabled={isOneDriveBusy}
-                            onClick={() => void handleOneDriveRestore()}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                          >
-                            <Upload className="h-3.5 w-3.5" />
-                            <span>{t.onedriveRestoreButton}</span>
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          disabled={isOneDriveBusy || !oneDriveStatus?.hasRemoteBackup}
+                          onClick={() => void handleOneDriveRestore()}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          <span>{t.onedriveRestoreButton}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => void handleOneDriveOpenFolder()}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+                        >
+                          <FolderOpen className="h-3.5 w-3.5" />
+                          <span>{t.onedriveOpenFolderButton}</span>
+                        </button>
 
                         {oneDriveStatus?.connected && (
                           <button

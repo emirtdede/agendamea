@@ -1070,6 +1070,12 @@ test('QA: Zero language leakage across all 73 languages, UI components, color na
     'windowClose',
     'operationFailedToast',
     'loadFailedError',
+    'onedriveSectionDesc',
+    'onedriveBackupDetectedTitle',
+    'onedriveBackupDetectedDesc',
+    'onedriveStartFreshButton',
+    'onedriveOpenFolderButton',
+    'addTagPlaceholder',
   ];
 
   for (const langMeta of SUPPORTED_LANGUAGES) {
@@ -1391,6 +1397,25 @@ test('QA: Optional dueTime, post-creation #tags, Kanban/Calendar/Matrix helpers 
     }
   } finally {
     db.close();
+  }
+
+  // Self-healing SQLite corruption recovery test: corrupted DB file is backed up as .corrupt-*.bak and reinitialized cleanly
+  const corruptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agendamea-corrupt-'));
+  const corruptDbPath = path.join(corruptDir, 'agendamea.db');
+  fs.writeFileSync(corruptDbPath, 'NOT_A_VALID_SQLITE_HEADER_CORRUPTED_BYTES', 'utf8');
+  const recoveredDb = new TodoDatabase(corruptDbPath);
+  try {
+    assert.equal(recoveredDb.getTodos().length, 0);
+    const createdAfterRecovery = recoveredDb.createTodo({ title: 'Kurtarılan veritabanı görevi' });
+    assert.equal(createdAfterRecovery.title, 'Kurtarılan veritabanı görevi');
+    const dirFiles = fs.readdirSync(corruptDir);
+    assert.ok(
+      dirFiles.some((f) => f.startsWith('agendamea.db.corrupt-') && f.endsWith('.bak')),
+      'Corrupted SQLite file must be preserved as .corrupt-*.bak',
+    );
+  } finally {
+    recoveredDb.close();
+    fs.rmSync(corruptDir, { recursive: true, force: true });
   }
 });
 

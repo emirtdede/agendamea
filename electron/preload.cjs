@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
   },
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   downloadAndInstallUpdate: (url) => ipcRenderer.invoke('updater:download-and-install', url),
+  openOneDriveFolder: (folderPath) => ipcRenderer.invoke('onedrive:open-folder', folderPath),
   onUpdateProgress: (callback) => {
     const listener = (_event, percent) => callback(Number(percent) || 0);
     ipcRenderer.on('updater:progress', listener);

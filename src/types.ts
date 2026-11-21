@@ -124,6 +124,10 @@ export interface OneDriveStatus {
   lastSyncedAt: string | null;
   autoSync: boolean;
   hasRemoteBackup: boolean;
+  remoteTodoCount?: number;
+  remoteCategoryCount?: number;
+  backupFilesCount?: number;
+  restoredBootstrap?: BootstrapPayload;
 }
 
 export interface SubtaskPatch {

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, session, shell } = require('electron');
 const fs = require('node:fs');
 const net = require('node:net');
+const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
@@ -22,6 +23,9 @@ const PREFERRED_PORTS = [38721, 47821, 39721, 41721, 0];
 let mainWindow = null;
 let serverProcess = null;
 let logFd = null;
+let isQuitting = false;
+let activePort = null;
+let backendRestartCount = 0;
 
 app.on('second-instance', () => {
   if (mainWindow) {
@@ -130,7 +134,7 @@ function startBackend(port) {
   }
 
   // Always use writable userDataDir as cwd (avoids ASAR ENOTDIR / Program Files permission errors)
-  serverProcess = spawn(process.execPath, args, {
+  const proc = spawn(process.execPath, args, {
     cwd: userDataDir,
     env: {
       ...process.env,
@@ -143,6 +147,23 @@ function startBackend(port) {
     },
     stdio: ['ignore', 'ignore', stderrTarget, 'ipc'],
     windowsHide: true,
+  });
+  serverProcess = proc;
+  activePort = port;
+
+  // Self-healing watchdog: automatically restart local backend if it crashes unexpectedly
+  proc.on('exit', (code) => {
+    if (serverProcess === proc) {
+      serverProcess = null;
+    }
+    if (!isQuitting && code !== 0 && backendRestartCount < 5 && activePort) {
+      backendRestartCount += 1;
+      setTimeout(() => {
+        if (!isQuitting && !serverProcess) {
+          startBackend(activePort);
+        }
+      }, 600);
+    }
   });
 }
 
@@ -281,6 +302,17 @@ async function createWindow(appUrl) {
     mainWindow?.webContents.send('window:maximized-changed', mainWindow?.isMaximized() ?? false);
   });
 
+  // Self-healing renderer crash recovery: automatically reload UI if Chromium renderer crashes
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    if (!isQuitting && details && details.reason !== 'clean-exit') {
+      setTimeout(() => {
+        if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
+          void mainWindow.loadURL(appUrl);
+        }
+      }, 500);
+    }
+  });
+
   const ready = await waitForServer(appUrl);
   if (ready && mainWindow) {
     await mainWindow.loadURL(appUrl);
@@ -373,6 +405,40 @@ function isAllowedUpdateDownloadUrl(targetUrl) {
 ipcMain.handle('window:close', (event) => {
   const win = resolveSenderWindow(event);
   win?.close();
+});
+
+function detectDefaultOneDriveFolder() {
+  const candidates = [
+    process.env.OneDriveConsumer,
+    process.env.OneDrive,
+    process.env.OneDriveCommercial,
+    path.join(os.homedir(), 'OneDrive'),
+  ].filter((p) => typeof p === 'string' && p.trim().length > 0);
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+        return path.join(candidate, 'Agendamea');
+      }
+    } catch {
+      // Ignore inaccessible path
+    }
+  }
+  return path.join(app.getPath('userData'), 'OneDrive-Agendamea');
+}
+
+ipcMain.handle('onedrive:open-folder', async (_event, customFolderPath) => {
+  try {
+    const targetFolder =
+      typeof customFolderPath === 'string' && customFolderPath.trim().length > 0
+        ? path.resolve(customFolderPath.trim())
+        : detectDefaultOneDriveFolder();
+    fs.mkdirSync(targetFolder, { recursive: true });
+    const errMsg = await shell.openPath(targetFolder);
+    return { ok: !errMsg, path: targetFolder };
+  } catch {
+    return { ok: false };
+  }
 });
 
 ipcMain.handle('updater:check', async () => {
@@ -526,10 +592,12 @@ app
   });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   stopBackend();
 });
 
 app.on('window-all-closed', () => {
+  isQuitting = true;
   stopBackend();
   app.quit();
 });

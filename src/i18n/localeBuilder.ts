@@ -343,6 +343,10 @@ export function compileSeedToDictionary(
     onedriveConnectedBadge: `OneDrive · ${enabled}`,
     onedriveLastSyncedPrefix: `OneDrive · ${lastChecked}`,
     onedriveSyncedToast: `OneDrive · ${cloudSync} (${autoSaved})`,
+    onedriveOpenFolderButton: `OneDrive · ${open}`,
+    onedriveBackupDetectedTitle: `OneDrive · ${cloudSync} (${backupRestore})`,
+    onedriveBackupDetectedDesc: `OneDrive · ${backupRestoreDesc}`,
+    onedriveStartFreshButton: addFirstTask,
   };
 }
 

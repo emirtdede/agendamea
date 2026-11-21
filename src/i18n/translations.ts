@@ -229,6 +229,10 @@ export interface UiDictionary {
   onedriveConnectedBadge: string;
   onedriveLastSyncedPrefix: string;
   onedriveSyncedToast: string;
+  onedriveOpenFolderButton: string;
+  onedriveBackupDetectedTitle: string;
+  onedriveBackupDetectedDesc: string;
+  onedriveStartFreshButton: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -443,6 +447,11 @@ export const TR_DICTIONARY: UiDictionary = {
   onedriveConnectedBadge: 'OneDrive Bağlı',
   onedriveLastSyncedPrefix: 'Son eşitleme',
   onedriveSyncedToast: 'OneDrive bulut eşitlemesi tamamlandı.',
+  onedriveOpenFolderButton: 'Klasörü Aç',
+  onedriveBackupDetectedTitle: 'OneDrive Bulut Yedeği Tespit Edildi',
+  onedriveBackupDetectedDesc:
+    'OneDrive klasörünüzde daha önceden kaydedilmiş bir Agendamea yedeği bulundu. Verilerinizi geri yüklemek mi, yoksa yeni bir başlangıç yapmak mı istersiniz?',
+  onedriveStartFreshButton: 'Yeni Başlangıç Yap',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -657,6 +666,11 @@ export const EN_DICTIONARY: UiDictionary = {
   onedriveConnectedBadge: 'OneDrive Connected',
   onedriveLastSyncedPrefix: 'Last synced',
   onedriveSyncedToast: 'OneDrive cloud sync completed.',
+  onedriveOpenFolderButton: 'Open Folder',
+  onedriveBackupDetectedTitle: 'OneDrive Cloud Backup Detected',
+  onedriveBackupDetectedDesc:
+    'An existing Agendamea backup was found in your OneDrive folder. Would you like to restore your previous tasks or start fresh?',
+  onedriveStartFreshButton: 'Start Fresh',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {

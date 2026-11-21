@@ -13,6 +13,7 @@ interface NativeWindowBridge {
   downloadAndInstallUpdate?: (
     url: string,
   ) => Promise<{ ok: boolean; launchedInstaller?: boolean; launchedExternal?: boolean }>;
+  openOneDriveFolder?: (folderPath?: string | null) => Promise<{ ok: boolean; path?: string }>;
   onUpdateProgress?: (cb: (percent: number) => void) => (() => void) | void;
 }
 

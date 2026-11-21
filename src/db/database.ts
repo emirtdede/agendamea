@@ -134,12 +134,52 @@ export class TodoDatabase {
       }
     }
 
-    this.db = new Database(resolvedPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
-    this.db.pragma('busy_timeout = 5000');
-    this.initSchema();
+    this.db = this.openDatabaseWithRecovery(resolvedPath);
     this.ensureDefaultSettings();
+  }
+
+  private openDatabaseWithRecovery(resolvedPath: string): Database.Database {
+    const configureAndMigrate = (instance: Database.Database): Database.Database => {
+      this.db = instance;
+      instance.pragma('journal_mode = WAL');
+      instance.pragma('synchronous = NORMAL');
+      instance.pragma('foreign_keys = ON');
+      instance.pragma('busy_timeout = 5000');
+      this.initSchema();
+      return instance;
+    };
+
+    try {
+      const instance = new Database(resolvedPath);
+      return configureAndMigrate(instance);
+    } catch (err) {
+      if (resolvedPath === ':memory:') {
+        throw err;
+      }
+      // Self-healing corruption recovery: preserve corrupted file as .bak and initialize clean DB
+      try {
+        if (this.db) {
+          this.db.close();
+        }
+      } catch {
+        // Ignore close error on broken handle
+      }
+      const backupCorruptPath = `${resolvedPath}.corrupt-${Date.now()}.bak`;
+      try {
+        if (fs.existsSync(resolvedPath)) {
+          fs.renameSync(resolvedPath, backupCorruptPath);
+        }
+        for (const suffix of ['-wal', '-shm']) {
+          if (fs.existsSync(`${resolvedPath}${suffix}`)) {
+            fs.rmSync(`${resolvedPath}${suffix}`, { force: true });
+          }
+        }
+      } catch {
+        // Ignore filesystem move errors
+      }
+      const recovered = new Database(resolvedPath);
+      return configureAndMigrate(recovered);
+    }
   }
 
   private initSchema(): void {

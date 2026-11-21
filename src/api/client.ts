@@ -269,4 +269,16 @@ export const api = {
       },
     );
   },
+
+  async openOneDriveFolder(
+    folderPath?: string | null,
+  ): Promise<{ ok: boolean; path?: string }> {
+    if (typeof window !== 'undefined' && window.agendameaWindow?.openOneDriveFolder) {
+      return window.agendameaWindow.openOneDriveFolder(folderPath);
+    }
+    return request<{ ok: boolean; path?: string }>('/api/onedrive/open-folder', {
+      method: 'POST',
+      body: JSON.stringify({ folderPath: folderPath ?? undefined }),
+    });
+  },
 };

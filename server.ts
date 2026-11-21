@@ -83,23 +83,69 @@ async function startServer() {
     return path.join(baseDataDir, 'OneDrive-Agendamea');
   }
 
+  function listOneDriveBackupCandidateFiles(folderPath: string): string[] {
+    try {
+      if (!fs.existsSync(folderPath)) return [];
+      const entries = fs.readdirSync(folderPath);
+      const primary = 'agendamea-onedrive-sync.json';
+      const previous = 'agendamea-onedrive-previous.json';
+      const rolling = entries
+        .filter((f) => /^agendamea-backup-\d{4}-\d{2}-\d{2}\.json$/i.test(f))
+        .sort()
+        .reverse();
+      const ordered: string[] = [];
+      if (entries.includes(primary)) ordered.push(path.join(folderPath, primary));
+      if (entries.includes(previous)) ordered.push(path.join(folderPath, previous));
+      for (const r of rolling) {
+        ordered.push(path.join(folderPath, r));
+      }
+      return ordered;
+    } catch {
+      return [];
+    }
+  }
+
+  function readValidOneDriveBackup(folderPath: string): {
+    filePath: string;
+    mtimeIso: string;
+    todoCount: number;
+    categoryCount: number;
+    payload: Record<string, unknown>;
+  } | null {
+    const candidates = listOneDriveBackupCandidateFiles(folderPath);
+    for (const filePath of candidates) {
+      try {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        if (!raw || !raw.trim()) continue;
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+        const todosArr = Array.isArray(parsed.todos) ? parsed.todos : null;
+        const catsArr = Array.isArray(parsed.categories) ? parsed.categories : null;
+        if (!todosArr && !catsArr) continue;
+        const stat = fs.statSync(filePath);
+        return {
+          filePath,
+          mtimeIso: stat.mtime.toISOString(),
+          todoCount: todosArr ? todosArr.length : 0,
+          categoryCount: catsArr ? catsArr.length : 0,
+          payload: parsed,
+        };
+      } catch {
+        // Automatically skip corrupted / half-synced file and fall back to previous snapshot
+      }
+    }
+    return null;
+  }
+
   function resolveOneDriveStatus(): OneDriveStatus {
     const settings = db.getSettings();
     const customPath = (settings.onedriveCustomPath ?? '').trim();
     const connected = customPath.length > 0;
     const folderPath = connected ? customPath : detectDefaultOneDriveRoot();
     const syncFilePath = path.join(folderPath, 'agendamea-onedrive-sync.json');
-    let hasRemoteBackup = false;
-    let lastSyncedAt: string | null = null;
-    try {
-      if (fs.existsSync(syncFilePath)) {
-        hasRemoteBackup = true;
-        const stat = fs.statSync(syncFilePath);
-        lastSyncedAt = stat.mtime.toISOString();
-      }
-    } catch {
-      // Ignore stat errors
-    }
+    const candidates = listOneDriveBackupCandidateFiles(folderPath);
+    const validBackup = readValidOneDriveBackup(folderPath);
+
     return {
       available: true,
       connected,
@@ -107,29 +153,108 @@ async function startServer() {
       folderPath,
       syncFilePath,
       accountEmail: null,
-      lastSyncedAt,
+      lastSyncedAt: validBackup ? validBackup.mtimeIso : null,
       autoSync: Boolean(settings.onedriveAutoSync),
-      hasRemoteBackup,
+      hasRemoteBackup: Boolean(validBackup),
+      remoteTodoCount: validBackup ? validBackup.todoCount : 0,
+      remoteCategoryCount: validBackup ? validBackup.categoryCount : 0,
+      backupFilesCount: candidates.length,
     };
   }
 
-  function writeOneDriveSyncSnapshot(targetFolder?: string): OneDriveStatus {
+  function atomicWriteJsonFile(targetPath: string, jsonText: string): void {
+    const tmpPath = `${targetPath}.tmp-${process.pid}`;
+    fs.writeFileSync(tmpPath, jsonText, 'utf8');
+    try {
+      fs.renameSync(tmpPath, targetPath);
+    } catch {
+      // Fallback if Windows OneDrive sync client briefly locks targetPath during rename
+      fs.copyFileSync(tmpPath, targetPath);
+      try {
+        fs.rmSync(tmpPath, { force: true });
+      } catch {
+        // Ignore cleanup failure
+      }
+    }
+  }
+
+  function writeOneDriveSyncSnapshot(targetFolder?: string, allowEmptyOverwrite = false): OneDriveStatus {
     const status = resolveOneDriveStatus();
-    const folder = targetFolder ? path.resolve(targetFolder) : status.folderPath ?? detectDefaultOneDriveRoot();
+    const folder = targetFolder
+      ? path.resolve(targetFolder)
+      : status.folderPath ?? detectDefaultOneDriveRoot();
     fs.mkdirSync(folder, { recursive: true });
     const syncFile = path.join(folder, 'agendamea-onedrive-sync.json');
+    const prevFile = path.join(folder, 'agendamea-onedrive-previous.json');
+    const dailyFile = path.join(folder, `agendamea-backup-${getLocalDateString()}.json`);
+
     const snapshot = db.getBootstrap();
+    const isLocalEmpty =
+      snapshot.todos.length === 0 &&
+      snapshot.categories.length === 0 &&
+      snapshot.trashedTodos.length === 0 &&
+      snapshot.trashedCategories.length === 0;
+
+    // Never silently clobber a non-empty OneDrive backup with a completely empty DB during background auto-sync
+    const existingValid = readValidOneDriveBackup(folder);
+    if (
+      isLocalEmpty &&
+      !allowEmptyOverwrite &&
+      existingValid &&
+      (existingValid.todoCount > 0 || existingValid.categoryCount > 0)
+    ) {
+      return resolveOneDriveStatus();
+    }
+
+    // Preserve previous valid sync file before writing new snapshot
+    if (fs.existsSync(syncFile) && existingValid && existingValid.filePath === syncFile) {
+      try {
+        fs.copyFileSync(syncFile, prevFile);
+      } catch {
+        // Ignore copy error
+      }
+    }
+
     const payload = {
       exportedAt: new Date().toISOString(),
       app: 'Agendamea',
       provider: 'OneDrive',
       ...snapshot,
     };
-    fs.writeFileSync(syncFile, JSON.stringify(payload, null, 2), 'utf8');
+    const jsonText = JSON.stringify(payload, null, 2);
+    atomicWriteJsonFile(syncFile, jsonText);
+
+    if (!isLocalEmpty) {
+      try {
+        atomicWriteJsonFile(dailyFile, jsonText);
+        // Keep last 15 rolling daily snapshots
+        const entries = fs
+          .readdirSync(folder)
+          .filter((f) => /^agendamea-backup-\d{4}-\d{2}-\d{2}\.json$/i.test(f))
+          .sort()
+          .reverse();
+        for (const oldFile of entries.slice(15)) {
+          try {
+            fs.rmSync(path.join(folder, oldFile), { force: true });
+          } catch {
+            // Ignore old snapshot removal failure
+          }
+        }
+      } catch {
+        // Rolling snapshot failure must not break primary sync
+      }
+    }
+
     return resolveOneDriveStatus();
   }
 
-  function triggerOneDriveAutoSync(): void {
+  let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function flushOneDriveAutoSync(): void {
+    if (autoSyncTimer) {
+      clearTimeout(autoSyncTimer);
+      autoSyncTimer = null;
+    }
     try {
       const settings = db.getSettings();
       if (settings.onedriveAutoSync && (settings.onedriveCustomPath ?? '').trim().length > 0) {
@@ -138,6 +263,16 @@ async function startServer() {
     } catch {
       // Background auto-sync must never fail primary user mutation
     }
+  }
+
+  function triggerOneDriveAutoSync(): void {
+    if (autoSyncTimer) {
+      clearTimeout(autoSyncTimer);
+    }
+    autoSyncTimer = setTimeout(() => {
+      autoSyncTimer = null;
+      flushOneDriveAutoSync();
+    }, 200);
   }
   // Bind loopback on Windows desktop by default; 0.0.0.0 in Linux containers unless HOST is set
   const HOST = process.env.HOST || (process.platform === 'win32' ? '127.0.0.1' : '0.0.0.0');
@@ -209,6 +344,18 @@ async function startServer() {
     ) {
       res.status(400).json({ error: 'Geçersiz istek gövdesi.' });
       return;
+    }
+
+    if (
+      isMutation &&
+      !req.path.startsWith('/onedrive/') &&
+      !req.path.startsWith('/window/')
+    ) {
+      res.on('finish', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          triggerOneDriveAutoSync();
+        }
+      });
     }
     next();
   });
@@ -715,7 +862,30 @@ async function startServer() {
         onedriveCustomPath: requestedPath,
         onedriveAutoSync: autoSync,
       });
-      const status = writeOneDriveSyncSnapshot(requestedPath);
+
+      // Format/fresh-install safeguard: if local DB is empty and OneDrive already has a valid backup, restore it instead of overwriting!
+      const localSnap = db.getBootstrap();
+      const isLocalEmpty =
+        localSnap.todos.length === 0 &&
+        localSnap.categories.length === 0 &&
+        localSnap.trashedTodos.length === 0 &&
+        localSnap.trashedCategories.length === 0;
+      const existingRemote = readValidOneDriveBackup(requestedPath);
+
+      if (
+        isLocalEmpty &&
+        existingRemote &&
+        (existingRemote.todoCount > 0 || existingRemote.categoryCount > 0)
+      ) {
+        const restoredBootstrap = db.importBackup(existingRemote.payload);
+        res.json({
+          ...resolveOneDriveStatus(),
+          restoredBootstrap,
+        });
+        return;
+      }
+
+      const status = writeOneDriveSyncSnapshot(requestedPath, true);
       res.json(status);
     } catch (err) {
       sendRouteError(res, 'POST /api/onedrive/connect', err, 'OneDrive bağlantısı kurulamadı.');
@@ -738,9 +908,9 @@ async function startServer() {
     try {
       const current = resolveOneDriveStatus();
       if (!current.connected && current.folderPath) {
-        db.updateSettings({ onedriveCustomPath: current.folderPath });
+        db.updateSettings({ onedriveCustomPath: current.folderPath, onedriveAutoSync: true });
       }
-      const status = writeOneDriveSyncSnapshot();
+      const status = writeOneDriveSyncSnapshot(undefined, true);
       res.json(status);
     } catch (err) {
       sendRouteError(res, 'POST /api/onedrive/sync-push', err, 'OneDrive eşitlemesi başarısız oldu.');
@@ -750,18 +920,42 @@ async function startServer() {
   app.post('/api/onedrive/sync-pull', (_req, res) => {
     try {
       const current = resolveOneDriveStatus();
-      if (!current.syncFilePath || !fs.existsSync(current.syncFilePath)) {
+      const folder = current.folderPath ?? detectDefaultOneDriveRoot();
+      const validBackup = readValidOneDriveBackup(folder);
+      if (!validBackup) {
         throw new ValidationError('OneDrive yedek dosyası bulunamadı.');
       }
-      const raw = fs.readFileSync(current.syncFilePath, 'utf8');
-      const parsed = JSON.parse(raw);
-      const bootstrap = db.importBackup(parsed);
+      if (!current.connected) {
+        db.updateSettings({
+          onedriveCustomPath: folder,
+          onedriveAutoSync: true,
+        });
+      }
+      const bootstrap = db.importBackup(validBackup.payload);
       res.json({
         status: resolveOneDriveStatus(),
         bootstrap,
       });
     } catch (err) {
       sendRouteError(res, 'POST /api/onedrive/sync-pull', err, 'OneDrive verisi geri yüklenemedi.');
+    }
+  });
+
+  app.post('/api/onedrive/open-folder', (req, res) => {
+    try {
+      if (!isLoopbackAddress(req.socket.remoteAddress)) {
+        res.status(403).json({ error: 'Yalnızca yerel erişime izin verilir.' });
+        return;
+      }
+      const current = resolveOneDriveStatus();
+      const folder = current.folderPath ?? detectDefaultOneDriveRoot();
+      fs.mkdirSync(folder, { recursive: true });
+      if (process.platform === 'win32') {
+        execFile('explorer.exe', [folder], { timeout: 5000 }, () => {});
+      }
+      res.json({ ok: true, path: folder });
+    } catch (err) {
+      sendRouteError(res, 'POST /api/onedrive/open-folder', err, 'OneDrive klasörü açılamadı.');
     }
   });
 
@@ -915,6 +1109,7 @@ async function startServer() {
   const shutdown = () => {
     if (shuttingDown) return;
     shuttingDown = true;
+    flushOneDriveAutoSync();
 
     const forceExit = setTimeout(() => {
       try {
