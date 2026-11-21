@@ -73,18 +73,30 @@ function saveWindowPrefs(userDataDir, closeBehavior) {
   }
 }
 
+let consumedInstallerLocale = undefined;
+
 function readInstallerSelectedLocale(userDataDir) {
+  if (consumedInstallerLocale !== undefined) {
+    return consumedInstallerLocale;
+  }
   try {
     const langFile = path.join(userDataDir, 'installer-language.txt');
     if (fs.existsSync(langFile)) {
       const raw = fs.readFileSync(langFile, 'utf8').replace(/^\uFEFF/, '').trim();
+      try {
+        fs.unlinkSync(langFile);
+      } catch {
+        // Ignore cleanup failure
+      }
       if (raw && /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,4})?$/.test(raw)) {
+        consumedInstallerLocale = raw;
         return raw;
       }
     }
   } catch {
     // Ignore file read errors
   }
+  consumedInstallerLocale = null;
   return null;
 }
 

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -14,7 +15,9 @@ import {
   Keyboard,
   List,
   Moon,
+  Palette,
   RotateCcw,
+  Search,
   Shield,
   Sparkles,
   Sun,
@@ -23,14 +26,17 @@ import {
 import { useI18n } from '../i18n/I18nContext';
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '../i18n/languages';
 import type { ThemeId, ThemeMode } from '../types';
-import { COLOR_THEMES } from '../utils/themes';
+import { COLOR_THEMES, getContrastingForeground } from '../utils/themes';
 import { BrandMark } from './BrandMark';
+import { ColorSpectrumPicker } from './ColorSpectrumPicker';
 
 interface WelcomeModalProps {
   themeMode: ThemeMode;
   themeId: ThemeId;
+  customThemeColor: string;
   onChangeMode: (mode: ThemeMode) => void;
   onChangeTheme: (id: ThemeId) => void;
+  onChangeCustomThemeColor: (hex: string) => void;
   onComplete: (openSettingsAfter?: boolean) => void;
 }
 
@@ -39,32 +45,73 @@ const FEATURED_THEME_IDS: readonly ThemeId[] = [
   'obsidian',
   'blue',
   'emerald',
-  'purple',
   'orange',
-  'red',
 ];
 
 export function WelcomeModal({
   themeMode,
   themeId,
+  customThemeColor,
   onChangeMode,
   onChangeTheme,
+  onChangeCustomThemeColor,
   onComplete,
 }: WelcomeModalProps) {
   const { lang, onChangeLanguage, t, meta, getThemeDisplayName } = useI18n();
   const [step, setStep] = useState(0);
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+  const [langSearch, setLangSearch] = useState('');
+  const [isCustomPickerOpen, setIsCustomPickerOpen] = useState(themeId === 'custom');
+  const langDropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredLanguages = useMemo(() => {
+    const q = langSearch.trim().toLowerCase();
+    if (!q) return SUPPORTED_LANGUAGES;
+    return SUPPORTED_LANGUAGES.filter(
+      (item) =>
+        item.nativeName.toLowerCase().includes(q) ||
+        item.englishName.toLowerCase().includes(q) ||
+        item.code.toLowerCase().includes(q),
+    );
+  }, [langSearch]);
+
+  const langTriggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!isLangDropdownOpen) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        langDropdownRef.current &&
+        !langDropdownRef.current.contains(target) &&
+        langTriggerRef.current &&
+        !langTriggerRef.current.contains(target)
+      ) {
+        setIsLangDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isLangDropdownOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      const isSelect = target?.tagName === 'SELECT';
+      const isInput =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.tagName === 'SELECT';
 
       if (e.key === 'Escape') {
         e.preventDefault();
+        if (isLangDropdownOpen) {
+          setIsLangDropdownOpen(false);
+          return;
+        }
         onComplete(false);
         return;
       }
-      if (isSelect) return;
+      if (isInput || isLangDropdownOpen) return;
 
       const forwardKey = meta.dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
       const backKey = meta.dir === 'rtl' ? 'ArrowRight' : 'ArrowLeft';
@@ -80,7 +127,7 @@ export function WelcomeModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onComplete, meta.dir]);
+  }, [onComplete, meta.dir, isLangDropdownOpen]);
 
   const featuredThemes = FEATURED_THEME_IDS.map((id) =>
     COLOR_THEMES.find((item) => item.id === id),
@@ -164,10 +211,10 @@ export function WelcomeModal({
           {/* Consistent Visual Stage Container */}
           <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4 sm:min-h-[272px] flex flex-col justify-center">
             {step === 0 && (
-              <div className="space-y-4">
-                <div className="flex flex-col items-center text-center pt-1">
+              <div className="space-y-3.5">
+                <div className="flex flex-col items-center text-center pt-0.5">
                   <div
-                    className="mb-3 rounded-2xl p-1.5"
+                    className="mb-2.5 rounded-2xl p-1.5"
                     style={{ backgroundColor: 'var(--accent-soft)' }}
                   >
                     <BrandMark className="h-11 w-11 rounded-xl" />
@@ -179,7 +226,7 @@ export function WelcomeModal({
                     </span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
                       <Sparkles className="h-3 w-3 text-[var(--accent)] shrink-0" />
-                      <span>28 {t.themesCountUnit}</span>
+                      <span>28+ {t.themesCountUnit}</span>
                     </span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
                       <Globe className="h-3 w-3 text-[var(--accent)] shrink-0" />
@@ -189,10 +236,11 @@ export function WelcomeModal({
                 </div>
 
                 {/* Live Theme & Language Quick Personalization */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                  <div className="flex flex-col justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                  {/* Appearance Mode + Curated Colors + Custom HEX Button */}
+                  <div className="flex flex-col justify-between gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-medium text-[var(--text-muted)] truncate">
+                      <span className="text-[11px] font-medium text-[var(--text-muted)] whitespace-nowrap">
                         {t.appearanceModeTitle}
                       </span>
                       <div className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--canvas)] p-0.5 shrink-0">
@@ -205,6 +253,11 @@ export function WelcomeModal({
                               ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                           }`}
+                          style={
+                            themeMode === 'light'
+                              ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
+                              : undefined
+                          }
                         >
                           <Sun className="h-3 w-3" />
                           <span>{t.lightMode}</span>
@@ -218,6 +271,11 @@ export function WelcomeModal({
                               ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                           }`}
+                          style={
+                            themeMode === 'dark'
+                              ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
+                              : undefined
+                          }
                         >
                           <Moon className="h-3 w-3" />
                           <span>{t.darkMode}</span>
@@ -225,67 +283,212 @@ export function WelcomeModal({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between gap-1.5 pt-0.5">
-                      {featuredThemes.map((item) => {
-                        const selected = item.id === themeId;
-                        const colorHex =
-                          themeMode === 'dark' ? item.dark.accent : item.light.accent;
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        {featuredThemes.map((item) => {
+                          const selected = item.id === themeId;
+                          const colorHex =
+                            themeMode === 'dark' ? item.dark.accent : item.light.accent;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              title={getThemeDisplayName(item.id, item.name)}
+                              aria-label={getThemeDisplayName(item.id, item.name)}
+                              aria-pressed={selected}
+                              onClick={() => {
+                                onChangeTheme(item.id);
+                                setIsCustomPickerOpen(false);
+                              }}
+                              className={`flex h-6 w-6 items-center justify-center rounded-full border transition-transform ${
+                                selected
+                                  ? 'scale-110 border-[var(--text-primary)] ring-2 ring-[var(--accent-ring)]'
+                                  : 'border-[var(--border-strong)] hover:scale-105'
+                              }`}
+                              style={{ backgroundColor: colorHex }}
+                            >
+                              {selected && (
+                                <Check
+                                  className="h-3 w-3"
+                                  style={{
+                                    color:
+                                      themeMode === 'dark'
+                                        ? item.dark.accentFg
+                                        : item.light.accentFg,
+                                  }}
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Explicit Custom Color / HEX Theme Trigger Button */}
+                      <button
+                        type="button"
+                        data-testid="welcome-custom-theme-btn"
+                        aria-expanded={isCustomPickerOpen}
+                        title={t.customThemeHexTitle}
+                        onClick={() => {
+                          setIsLangDropdownOpen(false);
+                          if (themeId !== 'custom') {
+                            onChangeTheme('custom');
+                            setIsCustomPickerOpen(true);
+                          } else {
+                            setIsCustomPickerOpen((prev) => !prev);
+                          }
+                        }}
+                        className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                          themeId === 'custom'
+                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                            : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {themeId === 'custom' ? (
+                          <span
+                            aria-hidden="true"
+                            className="h-2.5 w-2.5 rounded-full border border-black/20 shrink-0"
+                            style={{ backgroundColor: customThemeColor }}
+                          />
+                        ) : (
+                          <Palette className="h-3 w-3 shrink-0 text-[var(--accent)]" />
+                        )}
+                        <span className="font-mono-tabular">
+                          {themeId === 'custom' ? customThemeColor.toUpperCase() : 'HEX'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Custom Scrollable Language Picker Trigger */}
+                  <div className="flex flex-col justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
+                    <span className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
+                      <Globe className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{t.languageSectionTitle}</span>
+                    </span>
+                    <button
+                      ref={langTriggerRef}
+                      type="button"
+                      data-testid="welcome-language-select"
+                      aria-haspopup="listbox"
+                      aria-expanded={isLangDropdownOpen}
+                      onClick={() => {
+                        setIsCustomPickerOpen(false);
+                        setIsLangDropdownOpen((prev) => !prev);
+                        setLangSearch('');
+                      }}
+                      className="flex h-8 w-full items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-strong)] focus:border-[var(--accent)] transition-colors"
+                    >
+                      <span className="truncate">
+                        {meta.nativeName}
+                      </span>
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        <span className="font-mono-tabular text-[10px] text-[var(--text-muted)] uppercase">
+                          {meta.code}
+                        </span>
+                        <ChevronDown
+                          className={`h-3.5 w-3.5 text-[var(--text-muted)] transition-transform ${
+                            isLangDropdownOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Inline Scrollable Language List (Strictly Max 5 Rows Visible, Zero Clipping) */}
+                {isLangDropdownOpen && (
+                  <div
+                    ref={langDropdownRef}
+                    data-testid="welcome-language-dropdown"
+                    className="overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--surface)]"
+                  >
+                    <div className="border-b border-[var(--border)] p-1.5">
+                      <div className="relative flex items-center">
+                        <Search className="pointer-events-none absolute left-2 h-3 w-3 text-[var(--text-muted)]" />
+                        <input
+                          type="text"
+                          autoFocus
+                          value={langSearch}
+                          onChange={(e) => setLangSearch(e.target.value)}
+                          placeholder={t.languageSearchPlaceholder}
+                          aria-label={t.languageSearchPlaceholder}
+                          className="h-7 w-full rounded-md border border-[var(--border)] bg-[var(--canvas)] pl-7 pr-2 text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Strictly max 5 rows visible (5 * 28px + 8px padding = 148px) with smooth vertical scroll */}
+                    <div
+                      role="listbox"
+                      aria-label={t.languageSectionTitle}
+                      data-testid="welcome-language-listbox"
+                      className="max-h-[148px] overflow-y-auto p-1"
+                    >
+                      {filteredLanguages.map((item) => {
+                        const selected = item.code === lang;
                         return (
                           <button
-                            key={item.id}
+                            key={item.code}
                             type="button"
-                            title={getThemeDisplayName(item.id, item.name)}
-                            aria-label={getThemeDisplayName(item.id, item.name)}
-                            aria-pressed={selected}
-                            onClick={() => onChangeTheme(item.id)}
-                            className={`flex h-6 w-6 items-center justify-center rounded-full border transition-transform ${
+                            role="option"
+                            aria-selected={selected}
+                            onClick={() => {
+                              onChangeLanguage(item.code as LanguageCode);
+                              setIsLangDropdownOpen(false);
+                              setLangSearch('');
+                            }}
+                            className={`flex h-7 w-full items-center justify-between gap-2 rounded-md px-2.5 text-left text-xs transition-colors ${
                               selected
-                                ? 'scale-110 border-[var(--text-primary)] ring-2 ring-[var(--accent-ring)]'
-                                : 'border-[var(--border-strong)] hover:scale-105'
+                                ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
+                                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                             }`}
-                            style={{ backgroundColor: colorHex }}
                           >
+                            <span className="truncate">
+                              <span className="text-[var(--text-primary)]">
+                                {item.nativeName}
+                              </span>{' '}
+                              <span className="text-[10px] text-[var(--text-muted)]">
+                                ({item.englishName})
+                              </span>
+                            </span>
                             {selected && (
-                              <Check
-                                className="h-3 w-3"
-                                style={{
-                                  color:
-                                    themeMode === 'dark'
-                                      ? item.dark.accentFg
-                                      : item.light.accentFg,
-                                }}
-                              />
+                              <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                             )}
                           </button>
                         );
                       })}
                     </div>
                   </div>
+                )}
 
-                  <div className="flex flex-col justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
-                    <label
-                      htmlFor="welcome-language-select"
-                      className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]"
-                    >
-                      <Globe className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{t.languageSectionTitle}</span>
-                    </label>
-                    <select
-                      id="welcome-language-select"
-                      data-testid="welcome-language-select"
-                      value={lang}
-                      onChange={(e) => onChangeLanguage(e.target.value as LanguageCode)}
-                      style={{ colorScheme: themeMode }}
-                      className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:border-[var(--accent)] transition-colors"
-                    >
-                      {SUPPORTED_LANGUAGES.map((item) => (
-                        <option key={item.code} value={item.code}>
-                          {item.nativeName} ({item.englishName})
-                        </option>
-                      ))}
-                    </select>
+                {/* Expandable In-App Full-Spectrum Custom Color Picker */}
+                {isCustomPickerOpen && (
+                  <div
+                    data-testid="welcome-custom-theme-panel"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                  >
+                    <ColorSpectrumPicker
+                      value={customThemeColor}
+                      onChange={onChangeCustomThemeColor}
+                      hexInputLabel={t.customThemeHexTitle}
+                      hexInputTestId="welcome-custom-theme-hex"
+                      compact
+                      previewNode={
+                        <span
+                          aria-hidden="true"
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border-strong)]"
+                          style={{
+                            backgroundColor: customThemeColor,
+                            color: getContrastingForeground(customThemeColor),
+                          }}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </span>
+                      }
+                    />
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -585,14 +788,14 @@ export function WelcomeModal({
             })}
           </div>
 
-          {/* Action Buttons (Always Single Line) */}
+          {/* Action Buttons (Always Single Line, High Contrast & Unselectable) */}
           <div className="flex items-center gap-2 shrink-0 flex-nowrap">
             {!isFirst && (
               <button
                 type="button"
                 data-testid="welcome-step-back"
                 onClick={() => setStep((prev) => Math.max(0, prev - 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex select-none items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
               >
                 <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180 shrink-0" />
                 <span>{t.welcomeBackButton}</span>
@@ -604,22 +807,25 @@ export function WelcomeModal({
                 type="button"
                 data-testid="welcome-step-start"
                 onClick={() => onComplete(false)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-transparent px-4 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
+                className="inline-flex select-none items-center gap-1.5 rounded-lg border border-transparent px-4 py-1.5 font-display text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
                 style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
-                <span>{t.welcomeStartButton}</span>
-                <Check className="h-3.5 w-3.5 shrink-0" />
+                <span style={{ color: 'var(--accent-fg)' }}>{t.welcomeStartButton}</span>
+                <Check className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--accent-fg)' }} />
               </button>
             ) : (
               <button
                 type="button"
                 data-testid="welcome-step-next"
                 onClick={() => setStep((prev) => Math.min(TOTAL_STEPS - 1, prev + 1))}
-                className="inline-flex items-center gap-1 rounded-lg border border-transparent px-4 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
+                className="inline-flex select-none items-center gap-1 rounded-lg border border-transparent px-4 py-1.5 font-display text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
                 style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
-                <span>{t.welcomeNextButton}</span>
-                <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180 shrink-0" />
+                <span style={{ color: 'var(--accent-fg)' }}>{t.welcomeNextButton}</span>
+                <ChevronRight
+                  className="h-3.5 w-3.5 rtl:rotate-180 shrink-0"
+                  style={{ color: 'var(--accent-fg)' }}
+                />
               </button>
             )}
           </div>

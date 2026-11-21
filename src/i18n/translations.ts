@@ -557,12 +557,12 @@ export const TR_DICTIONARY: UiDictionary = {
   closeBehaviorTray: 'Sistem Tepsisi',
   closeBehaviorQuit: 'Tamamen Kapat',
   closeModalTitle: 'Agendamea Kapatılsın mı?',
-  closeModalDesc: 'Uygulamayı arka planda sistem tepsisine küçültebilir veya tamamen kapatabilirsiniz.',
+  closeModalDesc: 'Pencereyi kapattığınızda nasıl devam etmek istersiniz?',
   closeActionTrayTitle: 'Sistem Tepsisine Küçült',
-  closeActionTrayDesc: 'Arka planda sessizce açık kalır; tepsi simgesine tıklayarak anında açabilirsiniz.',
+  closeActionTrayDesc: 'Arka planda sessizce çalışır; tepsiden tek tıkla açılır.',
   closeActionQuitTitle: 'Tamamen Kapat',
   closeActionQuitDesc: 'Pencereyi ve arka plan sürecini tamamen sonlandırır.',
-  closeRememberChoiceLabel: 'Tercihimi hatırla (Ayarlar üzerinden her zaman değiştirilebilir)',
+  closeRememberChoiceLabel: 'Tercihimi hatırla (Ayarlardan değiştirilebilir)',
   trayOpenApp: "Agendamea'yı Aç",
 };
 
@@ -834,12 +834,12 @@ export const EN_DICTIONARY: UiDictionary = {
   closeBehaviorTray: 'System Tray',
   closeBehaviorQuit: 'Quit Completely',
   closeModalTitle: 'Close Agendamea?',
-  closeModalDesc: 'You can minimize the app to the system tray for instant access or quit completely.',
+  closeModalDesc: 'Choose what happens when you close the window.',
   closeActionTrayTitle: 'Minimize to System Tray',
-  closeActionTrayDesc: 'Stays ready silently in the background; click the tray icon to reopen instantly.',
+  closeActionTrayDesc: 'Stays quietly in the background; click tray icon to open.',
   closeActionQuitTitle: 'Quit Completely',
   closeActionQuitDesc: 'Exits the window and background process completely.',
-  closeRememberChoiceLabel: 'Remember my choice (changeable anytime in Settings)',
+  closeRememberChoiceLabel: 'Remember my choice (changeable in Settings)',
   trayOpenApp: 'Open Agendamea',
 };
 

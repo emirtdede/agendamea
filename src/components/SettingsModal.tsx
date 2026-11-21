@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowDownToLine,
   Check,
+  ChevronDown,
   ChevronRight,
   Cloud,
   Contrast,
@@ -12,6 +13,7 @@ import {
   Lock,
   Minus,
   Moon,
+  Palette,
   Plus,
   Power,
   RefreshCw,
@@ -42,12 +44,12 @@ import type {
 } from '../types';
 import {
   COLOR_THEMES,
-  normalizeHexColor,
   resolveAppIconColors,
   ZOOM_PRESETS,
 } from '../utils/themes';
 import { BrandMark } from './BrandMark';
 import { ColorDot } from './ColorDot';
+import { ColorSpectrumPicker } from './ColorSpectrumPicker';
 import { LegalDocumentView } from './LegalDocumentView';
 import { UpdateAndLanguageSection } from './UpdateSettingsSection';
 import { VelliumLogo } from './VelliumLogo';
@@ -166,16 +168,7 @@ export function SettingsModal({
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const [busyTrashIds, setBusyTrashIds] = useState<Set<string>>(() => new Set());
   const [importError, setImportError] = useState<string | null>(null);
-  const [customThemeDraft, setCustomThemeDraft] = useState(customThemeColor);
-  const [customIconDraft, setCustomIconDraft] = useState(customIconColor);
-
-  useEffect(() => {
-    setCustomThemeDraft(customThemeColor);
-  }, [customThemeColor]);
-
-  useEffect(() => {
-    setCustomIconDraft(customIconColor);
-  }, [customIconColor]);
+  const [isAppIconOpen, setIsAppIconOpen] = useState(false);
 
   const [oneDriveStatus, setOneDriveStatus] = useState<OneDriveStatus | null>(null);
   const [isOneDriveBusy, setIsOneDriveBusy] = useState(false);
@@ -651,9 +644,9 @@ export function SettingsModal({
                       ) : (
                         <span
                           aria-hidden="true"
-                          className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-dashed border-[var(--text-muted)] text-[var(--text-muted)]"
+                          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--accent)]"
                         >
-                          <Plus className="h-2.5 w-2.5" />
+                          <Palette className="h-3.5 w-3.5" />
                         </span>
                       )}
                       <span className="truncate whitespace-nowrap">
@@ -666,227 +659,261 @@ export function SettingsModal({
                   </button>
                 </div>
 
-                {/* Inline Custom HEX Theme Editor */}
+                {/* Inline In-App Full-Spectrum Custom HEX Theme Editor */}
                 {themeId === 'custom' && (
                   <div
                     data-testid="custom-theme-editor"
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--canvas)] px-3.5 py-2.5"
+                    className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-[var(--text-primary)]">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-[var(--text-primary)]">
                         {t.customThemeHexTitle}
                       </p>
                       <p className="text-[11px] text-[var(--text-muted)]">
                         {t.customThemeHexHint}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <input
-                        type="color"
-                        aria-label={t.customThemeHexTitle}
-                        value={customThemeColor}
-                        onChange={(e) => {
-                          setCustomThemeDraft(e.target.value);
-                          onChangeCustomThemeColor(e.target.value);
-                        }}
-                        className="h-8 w-9 cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] p-0.5"
-                      />
-                      <input
-                        type="text"
-                        data-testid="custom-theme-hex-input"
-                        aria-label={t.customColorHexLabel}
-                        value={customThemeDraft}
-                        maxLength={7}
-                        placeholder="#2563eb"
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setCustomThemeDraft(val);
-                          const norm = normalizeHexColor(val);
-                          if (norm) onChangeCustomThemeColor(norm);
-                        }}
-                        className="h-8 w-24 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 font-mono-tabular text-xs font-medium uppercase text-[var(--text-primary)] focus:border-[var(--accent)]"
-                      />
-                    </div>
+                    <ColorSpectrumPicker
+                      value={customThemeColor}
+                      onChange={onChangeCustomThemeColor}
+                      hexInputLabel={t.customColorHexLabel}
+                      hexInputTestId="custom-theme-hex-input"
+                    />
                   </div>
                 )}
               </section>
 
               <div className="h-px bg-[var(--border)]" />
 
-              {/* Dynamic System-Wide App Icon Selector */}
-              <section aria-label={t.appIconSectionTitle} className="space-y-3">
-                <div>
-                  <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                    {t.appIconSectionTitle}
-                  </h3>
-                  <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
-                    {t.appIconSectionDesc}
-                  </p>
-                </div>
+              {/* Collapsible Single-Button Dynamic System-Wide App Icon Selector */}
+              <section aria-label={t.appIconSectionTitle} className="space-y-2.5">
+                {(() => {
+                  const activeIconColors = resolveAppIconColors(
+                    appIconId,
+                    themeId,
+                    themeMode,
+                    customThemeColor,
+                    customIconColor,
+                  );
+                  const activeIconLabel =
+                    appIconId === 'match-theme'
+                      ? t.appIconMatchTheme
+                      : appIconId === 'obsidian-light'
+                        ? t.appIconLightMono
+                        : appIconId === 'custom'
+                          ? `${t.appIconCustom} (${customIconColor.toUpperCase()})`
+                          : (() => {
+                              const matched = COLOR_THEMES.find((item) => item.id === appIconId);
+                              return matched
+                                ? getThemeDisplayName(matched.id, matched.name)
+                                : t.appIconMatchTheme;
+                            })();
 
-                {/* Primary Icon Modes */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(
-                    [
-                      { id: 'match-theme' as AppIconId, label: t.appIconMatchTheme },
-                      { id: 'obsidian' as AppIconId, label: t.appIconDarkMono },
-                      { id: 'obsidian-light' as AppIconId, label: t.appIconLightMono },
-                      { id: 'custom' as AppIconId, label: t.appIconCustom },
-                    ] as const
-                  ).map((opt) => {
-                    const selected = appIconId === opt.id;
-                    const previewColors = resolveAppIconColors(
-                      opt.id,
-                      themeId,
-                      themeMode,
-                      customThemeColor,
-                      customIconColor,
-                    );
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        data-testid={`app-icon-${opt.id}`}
-                        aria-pressed={selected}
-                        onClick={() => onChangeAppIcon(opt.id)}
-                        className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2.5 text-center transition-colors ${
-                          selected
-                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                            : opt.id === 'custom'
-                              ? 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]'
-                              : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                        }`}
-                      >
-                        {opt.id === 'custom' && !selected ? (
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-[var(--border-strong)] text-[var(--text-muted)]">
-                            <Plus className="h-3.5 w-3.5" />
-                          </span>
-                        ) : (
-                          <BrandMark
-                            className="h-7 w-7"
-                            bgColor={previewColors.bg}
-                            fgColor={previewColors.fg}
-                            borderColor={previewColors.border}
-                          />
-                        )}
-                        <span className="w-full truncate text-[11px] font-medium">
-                          {opt.id === 'custom' && selected
-                            ? customIconColor.toUpperCase()
-                            : opt.label}
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+                          {t.appIconSectionTitle}
+                        </h3>
+                        <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
+                          {activeIconColors.bg.toUpperCase()}
                         </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                      </div>
 
-                {/* Theme-Matched Color Icon Swatches */}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {COLOR_THEMES.filter((item) => item.id !== 'obsidian').map((item) => {
-                    const selected = appIconId === item.id;
-                    const previewColors = resolveAppIconColors(
-                      item.id,
-                      themeId,
-                      themeMode,
-                      customThemeColor,
-                      customIconColor,
-                    );
-                    const label = getThemeDisplayName(item.id, item.name);
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        data-testid={`app-icon-${item.id}`}
-                        title={label}
-                        aria-label={label}
-                        aria-pressed={selected}
-                        onClick={() => onChangeAppIcon(item.id)}
-                        className={`rounded-lg p-1 transition-all ${
-                          selected
-                            ? 'ring-2 ring-[var(--accent)] bg-[var(--accent-soft)]'
-                            : 'hover:bg-[var(--surface-hover)]'
-                        }`}
-                      >
-                        <BrandMark
-                          className="h-6 w-6 rounded-md"
-                          bgColor={previewColors.bg}
-                          fgColor={previewColors.fg}
-                          borderColor={previewColors.border}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
+                      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]">
+                        <button
+                          type="button"
+                          data-testid="app-icon-toggle-btn"
+                          onClick={() => setIsAppIconOpen((prev) => !prev)}
+                          aria-expanded={isAppIconOpen}
+                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-hover)]/60 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <BrandMark
+                              className="h-8 w-8 shrink-0"
+                              bgColor={activeIconColors.bg}
+                              fgColor={activeIconColors.fg}
+                              borderColor={activeIconColors.border}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                                {activeIconLabel}
+                              </p>
+                              <p className="text-xs text-[var(--text-muted)] truncate">
+                                {t.appIconSectionDesc}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shrink-0">
+                            <span className="font-mono-tabular text-[11px]">
+                              {COLOR_THEMES.length + 1}
+                            </span>
+                            <ChevronDown
+                              className={`h-3.5 w-3.5 transition-transform ${
+                                isAppIconOpen ? 'rotate-180' : ''
+                              }`}
+                            />
+                          </span>
+                        </button>
 
-                {/* Inline Custom Icon HEX Color Picker */}
-                {appIconId === 'custom' && (
-                  <div
-                    data-testid="custom-icon-editor"
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--canvas)] px-3.5 py-2.5"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <BrandMark
-                        className="h-7 w-7"
-                        bgColor={
-                          resolveAppIconColors(
-                            'custom',
-                            themeId,
-                            themeMode,
-                            customThemeColor,
-                            customIconColor,
-                          ).bg
-                        }
-                        fgColor={
-                          resolveAppIconColors(
-                            'custom',
-                            themeId,
-                            themeMode,
-                            customThemeColor,
-                            customIconColor,
-                          ).fg
-                        }
-                        borderColor={
-                          resolveAppIconColors(
-                            'custom',
-                            themeId,
-                            themeMode,
-                            customThemeColor,
-                            customIconColor,
-                          ).border
-                        }
-                      />
-                      <span className="text-xs font-medium text-[var(--text-primary)] truncate">
-                        {t.appIconCustom} (HEX)
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <input
-                        type="color"
-                        aria-label={t.appIconCustom}
-                        value={customIconColor}
-                        onChange={(e) => {
-                          setCustomIconDraft(e.target.value);
-                          onChangeCustomIconColor(e.target.value);
-                        }}
-                        className="h-8 w-9 cursor-pointer rounded-md border border-[var(--border)] bg-[var(--surface)] p-0.5"
-                      />
-                      <input
-                        type="text"
-                        data-testid="custom-icon-hex-input"
-                        aria-label={t.customColorHexLabel}
-                        value={customIconDraft}
-                        maxLength={7}
-                        placeholder="#2563eb"
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setCustomIconDraft(val);
-                          const norm = normalizeHexColor(val);
-                          if (norm) onChangeCustomIconColor(norm);
-                        }}
-                        className="h-8 w-24 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 font-mono-tabular text-xs font-medium uppercase text-[var(--text-primary)] focus:border-[var(--accent)]"
-                      />
-                    </div>
-                  </div>
-                )}
+                        {isAppIconOpen && (
+                          <div
+                            data-testid="app-icon-panel"
+                            className="border-t border-[var(--border)] bg-[var(--surface-subtle)]/50 p-3 space-y-3"
+                          >
+                            {/* Quick Sync & Monochrome Modes */}
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {(
+                                [
+                                  { id: 'match-theme' as AppIconId, label: t.appIconMatchTheme },
+                                  { id: 'obsidian-light' as AppIconId, label: t.appIconLightMono },
+                                ] as const
+                              ).map((opt) => {
+                                const selected = appIconId === opt.id;
+                                const previewColors = resolveAppIconColors(
+                                  opt.id,
+                                  themeId,
+                                  themeMode,
+                                  customThemeColor,
+                                  customIconColor,
+                                );
+                                return (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    data-testid={`app-icon-${opt.id}`}
+                                    aria-pressed={selected}
+                                    onClick={() => onChangeAppIcon(opt.id)}
+                                    className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                                      selected
+                                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                                    }`}
+                                  >
+                                    <span className="flex items-center gap-2 min-w-0">
+                                      <BrandMark
+                                        className="h-5 w-5 rounded-md shrink-0"
+                                        bgColor={previewColors.bg}
+                                        fgColor={previewColors.fg}
+                                        borderColor={previewColors.border}
+                                      />
+                                      <span className="truncate">{opt.label}</span>
+                                    </span>
+                                    {selected && (
+                                      <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* All 14 Built-In Theme Icons (1-to-1 with Color Themes) + Custom HEX Icon */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                              {COLOR_THEMES.map((item) => {
+                                const selected = appIconId === item.id;
+                                const previewColors = resolveAppIconColors(
+                                  item.id,
+                                  themeId,
+                                  themeMode,
+                                  customThemeColor,
+                                  customIconColor,
+                                );
+                                const label = getThemeDisplayName(item.id, item.name);
+                                return (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    data-testid={`app-icon-${item.id}`}
+                                    aria-pressed={selected}
+                                    onClick={() => onChangeAppIcon(item.id)}
+                                    className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                                      selected
+                                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                                    }`}
+                                  >
+                                    <span className="flex items-center gap-2 min-w-0">
+                                      <BrandMark
+                                        className="h-5 w-5 rounded-md shrink-0"
+                                        bgColor={previewColors.bg}
+                                        fgColor={previewColors.fg}
+                                        borderColor={previewColors.border}
+                                      />
+                                      <span className="truncate">{label}</span>
+                                    </span>
+                                    {selected && (
+                                      <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+
+                              {/* Custom HEX Color App Icon Button */}
+                              <button
+                                type="button"
+                                data-testid="app-icon-custom"
+                                aria-pressed={appIconId === 'custom'}
+                                onClick={() => onChangeAppIcon('custom')}
+                                className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                                  appIconId === 'custom'
+                                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                                    : 'border-dashed border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                                }`}
+                              >
+                                <span className="flex items-center gap-2 min-w-0">
+                                  {appIconId === 'custom' ? (
+                                    <BrandMark
+                                      className="h-5 w-5 rounded-md shrink-0"
+                                      bgColor={activeIconColors.bg}
+                                      fgColor={activeIconColors.fg}
+                                      borderColor={activeIconColors.border}
+                                    />
+                                  ) : (
+                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--border-strong)] text-[var(--accent)]">
+                                      <Palette className="h-3 w-3" />
+                                    </span>
+                                  )}
+                                  <span className="truncate">
+                                    {appIconId === 'custom'
+                                      ? customIconColor.toUpperCase()
+                                      : t.appIconCustom}
+                                  </span>
+                                </span>
+                                {appIconId === 'custom' && (
+                                  <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Full-Spectrum Custom Icon Color Picker */}
+                            {appIconId === 'custom' && (
+                              <div
+                                data-testid="custom-icon-editor"
+                                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                              >
+                                <ColorSpectrumPicker
+                                  value={customIconColor}
+                                  onChange={onChangeCustomIconColor}
+                                  hexInputLabel={`${t.appIconCustom} (HEX)`}
+                                  hexInputTestId="custom-icon-hex-input"
+                                  compact
+                                  previewNode={
+                                    <BrandMark
+                                      className="h-7 w-7 shrink-0"
+                                      bgColor={activeIconColors.bg}
+                                      fgColor={activeIconColors.fg}
+                                      borderColor={activeIconColors.border}
+                                    />
+                                  }
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
               </section>
 
               <div className="h-px bg-[var(--border)]" />

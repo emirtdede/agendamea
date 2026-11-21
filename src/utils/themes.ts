@@ -679,7 +679,7 @@ function hslToHex(h: number, s: number, l: number): string {
   else if (hue < 180) [r, g, b] = [0, c, x];
   else if (hue < 240) [r, g, b] = [0, x, c];
   else if (hue < 300) [r, g, b] = [x, 0, c];
-  else [r, g, b] = [c, 0, x];
+  else[r, g, b] = [c, 0, x];
   return rgbToHex((r + m) * 255, (g + m) * 255, (b + m) * 255);
 }
 

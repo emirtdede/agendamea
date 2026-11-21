@@ -83,6 +83,13 @@
   button,
   a {
     outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--accent-fg);
   }
 
   button:focus-visible,

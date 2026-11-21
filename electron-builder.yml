@@ -95,6 +95,7 @@ nsis:
     - zh_CN
     - zh_TW
     - ar_SA
+    - he_IL
     - nl_NL
     - pl_PL
     - uk_UA
@@ -105,9 +106,13 @@ nsis:
     - da_DK
     - nb_NO
     - fi_FI
+    - sq_AL
+    - hy_AM
+    - id_ID
     - vi_VN
     - th_TH
+    - eu_ES
   unicode: true
   deleteAppDataOnUninstall: false
   runAfterFinish: true
-  displayLanguageSelector: false
+  displayLanguageSelector: true

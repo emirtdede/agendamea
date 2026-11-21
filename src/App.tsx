@@ -380,20 +380,29 @@ export default function App() {
         } catch {
           // Ignore storage read errors
         }
-        if (!hasCustomLang) {
-          let resolvedInitial: LanguageCode = initialLang.code;
+        let nativeLocale: { installerLocale: string | null; osLocale: string; preferred: string } | null = null;
+        try {
+          nativeLocale = (await window.agendameaWindow?.getInitialLocale?.()) ?? null;
+        } catch {
+          // Fall back to navigator language
+        }
+
+        if (nativeLocale?.installerLocale) {
+          // Setup wizard explicitly wrote a freshly chosen language: apply immediately (works on both fresh install & reinstall)
+          const setupLang = resolveSystemLanguage([nativeLocale.installerLocale], 'en');
+          setLanguage(setupLang);
           try {
-            const nativeLocale = await window.agendameaWindow?.getInitialLocale?.();
-            if (nativeLocale) {
-              const candidates = [nativeLocale.installerLocale, nativeLocale.osLocale].filter(
-                (v): v is string => typeof v === 'string' && v.trim().length > 0,
-              );
-              if (candidates.length > 0) {
-                resolvedInitial = resolveSystemLanguage(candidates, 'en');
-              }
-            }
+            localStorage.setItem('agendamea-language-customized', 'true');
           } catch {
-            // Fall back to navigator language
+            // Ignore storage write errors
+          }
+          if (data.settings.language !== setupLang) {
+            void api.updateSettings({ language: setupLang }).catch(() => {});
+          }
+        } else if (!hasCustomLang) {
+          let resolvedInitial: LanguageCode = initialLang.code;
+          if (nativeLocale?.osLocale) {
+            resolvedInitial = resolveSystemLanguage([nativeLocale.osLocale], 'en');
           }
           if (data.settings.language === 'tr' && resolvedInitial !== 'tr') {
             setLanguage(resolvedInitial);
@@ -2282,8 +2291,10 @@ export default function App() {
           <WelcomeModal
             themeMode={themeMode}
             themeId={themeId}
+            customThemeColor={customThemeColor}
             onChangeMode={handleModeChange}
             onChangeTheme={handleThemeChange}
+            onChangeCustomThemeColor={handleCustomThemeColorChange}
             onComplete={handleCompleteWelcome}
           />
         )}

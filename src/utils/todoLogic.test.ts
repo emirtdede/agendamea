@@ -1574,17 +1574,19 @@ test('QA: Custom HEX theme tokens, dynamic App Icon generator (.ico), accessibil
     db.close();
   }
 
-  // 5. NSIS installer.nsh includes all 73 languages with Windows detection & English fallback
+  // 5. NSIS installer.nsh & electron-builder.yml enable native .onInit language switching for Setup & Uninstaller
   const nshText = fs.readFileSync(path.join(process.cwd(), 'electron-resources', 'installer.nsh'), 'utf8');
-  assert.ok(nshText.includes('GetUserDefaultUILanguage'));
-  assert.ok(nshText.includes('StrCpy $SelectedAppLang "en"'));
-  assert.ok(nshText.includes('installer-language.txt'));
-  for (const lang of SUPPORTED_LANGUAGES) {
-    assert.ok(
-      nshText.includes(`[${lang.code}]`),
-      `NSIS Setup language picker missing language [${lang.code}]`,
-    );
-  }
+  const ebYml = fs.readFileSync(path.join(process.cwd(), 'electron-builder.yml'), 'utf8');
+  assert.ok(ebYml.includes('displayLanguageSelector: true'), 'Setup must show native language selector before wizard opens');
+  assert.ok(nshText.includes('GetUserDefaultUILanguage'), 'Setup must auto-detect Windows display language');
+  assert.ok(nshText.includes('StrCpy $LANGUAGE 1033'), 'Setup must fall back to English (1033) for unsupported OS languages');
+  assert.ok(nshText.includes('!macro preInit'), 'Windows language detection must run in preInit before MUI_LANGDLL_DISPLAY');
+  assert.ok(nshText.includes('!macro customUnInit'), 'Uninstaller must restore Setup language in customUnInit before UI opens');
+  assert.ok(nshText.includes('MUI_LANGDLL_ALLLANGUAGES'), 'Unicode language selector must show all bundled languages');
+  assert.ok(nshText.includes('InstallerLanguage'), 'Setup and Uninstaller must share chosen language via registry');
+  assert.ok(nshText.includes('installer-language.txt'), 'Setup must pass chosen language to Agendamea on first launch');
+  assert.ok(nshText.includes('LangString UN_DATA_TITLE 1055'), 'Uninstaller custom page must be localized via LangString');
+  assert.ok(nshText.includes('LangString UN_DATA_TITLE 1031'), 'Uninstaller custom page must include non-TR/EN LangStrings');
 });
 
 

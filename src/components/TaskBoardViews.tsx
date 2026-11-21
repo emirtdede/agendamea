@@ -456,7 +456,7 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
         id: 'q2' as const,
         badge: 'II',
         title: t.matrixQ2Title,
-        accentColor: '#d97706',
+        accentColor: '#b45309',
         items: grouped.q2,
       },
       {
