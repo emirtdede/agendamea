@@ -481,15 +481,18 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
           <form onSubmit={handleAddTag} className="flex items-center gap-2">
             <input
               type="text"
+              data-testid="detail-tag-input"
               value={newTagInput}
               onChange={(e) => setNewTagInput(e.target.value)}
+              disabled={currentTags.length >= 12}
               maxLength={40}
               aria-label={t.addTagPlaceholder}
               placeholder={t.addTagPlaceholder}
-              className="flex-1 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+              className="flex-1 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none disabled:opacity-45"
             />
             <button
               type="submit"
+              data-testid="detail-tag-add-button"
               disabled={!newTagInput.trim() || currentTags.length >= 12}
               aria-label={t.addButton}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-35"

@@ -728,10 +728,18 @@ export function localizeErrorMessage(
   if (!(err instanceof Error) || !err.message) {
     return fallback;
   }
+  const msg = err.message.trim().toLowerCase();
+  // Catch raw browser/V8 English technical errors across all languages (including Turkish)
+  if (
+    /^(failed to fetch|networkerror|load failed|unexpected token|unexpected end of json|http \d{3})/i.test(
+      msg,
+    )
+  ) {
+    return fallback;
+  }
   if (lang === 'tr') {
     return err.message;
   }
-  const msg = err.message.toLowerCase();
   if (msg.includes('5 mb')) {
     return dict.importSizeExceededError;
   }

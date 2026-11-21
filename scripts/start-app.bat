@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul
-title Agendamea — Yapilacaklar Uygulamasi
+title Agendamea - Yapilacaklar Uygulamasi
 cd /d "%~dp0.."
 
 echo.

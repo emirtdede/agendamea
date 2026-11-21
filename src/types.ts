@@ -146,6 +146,7 @@ export interface UpdateCheckResult {
   releaseUrl: string;
   setupUrl: string | null;
   portableUrl: string | null;
+  msixUrl?: string | null;
   checkedAt: string;
   error?: string;
 }

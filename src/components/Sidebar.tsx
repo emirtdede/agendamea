@@ -645,6 +645,22 @@ export const Sidebar = React.memo(function Sidebar({
                   <button
                     type="button"
                     onClick={() => handleSelectAndClose({ type: 'category', id: cat.id })}
+                    onKeyDown={(e) => {
+                      if (!canDragCat || !e.altKey) return;
+                      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+                      e.preventDefault();
+                      const idx = categories.findIndex((c) => c.id === cat.id);
+                      const neighborIdx = e.key === 'ArrowUp' ? idx - 1 : idx + 1;
+                      const neighbor = categories[neighborIdx];
+                      if (!neighbor || neighbor.pinned !== cat.pinned) return;
+                      const orderedIds = moveIdRelative(
+                        categories.map((c) => c.id),
+                        cat.id,
+                        neighbor.id,
+                        e.key === 'ArrowUp' ? 'before' : 'after',
+                      );
+                      onReorderCategories(orderedIds);
+                    }}
                     aria-current={isActive ? 'page' : undefined}
                     className={`flex flex-1 items-center gap-2.5 min-w-0 px-3 py-2 text-left text-[14px] font-medium ${
                       isActive

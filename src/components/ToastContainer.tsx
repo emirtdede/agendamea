@@ -8,6 +8,8 @@ interface ToastContainerProps {
   infoToast: InfoToastState | null;
   onUndo: () => void;
   onClearUndo: () => void;
+  onPauseUndo?: () => void;
+  onResumeUndo?: () => void;
   onClearInfo: () => void;
 }
 
@@ -16,6 +18,8 @@ export const ToastContainer = React.memo(function ToastContainer({
   infoToast,
   onUndo,
   onClearUndo,
+  onPauseUndo,
+  onResumeUndo,
   onClearInfo,
 }: ToastContainerProps) {
   const { t } = useI18n();
@@ -45,6 +49,11 @@ export const ToastContainer = React.memo(function ToastContainer({
       <div
         role="status"
         aria-live="polite"
+        data-testid="undo-toast"
+        onMouseEnter={onPauseUndo}
+        onMouseLeave={onResumeUndo}
+        onFocus={onPauseUndo}
+        onBlur={onResumeUndo}
         className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-sm shadow-lg"
       >
         <span className="text-[var(--text-primary)] whitespace-nowrap">
@@ -52,6 +61,7 @@ export const ToastContainer = React.memo(function ToastContainer({
         </span>
         <button
           type="button"
+          data-testid="undo-toast-button"
           onClick={onUndo}
           className="inline-flex items-center gap-1.5 font-medium text-[var(--accent)] hover:underline whitespace-nowrap"
         >

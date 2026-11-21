@@ -385,7 +385,7 @@ test('Performance: 1,000 todos + 50 categories + 500 subtasks stay fast under lo
     const todoIds: string[] = [];
     for (let i = 0; i < 1000; i++) {
       const t = db.createTodo({
-        title: `Görev ${i} — İstanbul planlaması`,
+        title: `Görev ${i} - İstanbul planlaması`,
         notes: i % 3 === 0 ? 'Önemli not içeriği' : '',
         priority: i % 5 === 0 ? 'high' : i % 4 === 0 ? 'low' : 'normal',
         important: i % 7 === 0,
@@ -644,7 +644,7 @@ test('QA: Backend sanitizes invalid color/dueDate, ignores trashed IDs for idemp
   }
 });
 
-test('QA: Audit hardening — ValidationError on bad imports, duplicate-ID subtask safety, trashed subtask guard, dueDate preservation & AGENDAMEA_DATA_DIR', () => {
+test('QA: Audit hardening - ValidationError on bad imports, duplicate-ID subtask safety, trashed subtask guard, dueDate preservation & AGENDAMEA_DATA_DIR', () => {
   const db = new TodoDatabase(':memory:');
   try {
     // 1. Invalid dueDate in updateTodo preserves existing valid dueDate instead of wiping it
@@ -737,7 +737,7 @@ test('QA: Audit hardening — ValidationError on bad imports, duplicate-ID subta
   }
 });
 
-test('QA: Third-pass audit hardening — drop helper, non-destructive categoryId, import caps & schema v3 partial indexes', () => {
+test('QA: Third-pass audit hardening - drop helper, non-destructive categoryId, import caps & schema v3 partial indexes', () => {
   // 1. getVerticalDropPosition splits midpoint cleanly
   const rect = { top: 100, height: 40 } as DOMRect;
   assert.equal(getVerticalDropPosition(110, rect), 'before');
@@ -792,7 +792,7 @@ test('QA: Third-pass audit hardening — drop helper, non-destructive categoryId
   }
 });
 
-test('QA: Fourth-pass audit hardening — blank PATCH rejection, reorder caps & subtask import cap', () => {
+test('QA: Fourth-pass audit hardening - blank PATCH rejection, reorder caps & subtask import cap', () => {
   const db = new TodoDatabase(':memory:');
   try {
     const cat = db.createCategory({ name: 'Çalışma', color: '#2563eb' });
@@ -1418,6 +1418,79 @@ test('QA: Optional dueTime, post-creation #tags, Kanban/Calendar/Matrix helpers 
     fs.rmSync(corruptDir, { recursive: true, force: true });
   }
 });
+
+test('QA: Permanent ban on em-dash and en-dash characters across all 73 locales, legal docs, and source files', () => {
+  const forbiddenDashRegex = /[\u2013\u2014]/;
+
+  // 1. Verify all 73 dictionaries and legal documents contain zero em-dash or en-dash characters
+  for (const langMeta of SUPPORTED_LANGUAGES) {
+    const dict = getDictionary(langMeta.code);
+    for (const [k, val] of Object.entries(dict)) {
+      assert.equal(
+        forbiddenDashRegex.test(val),
+        false,
+        `Forbidden long dash (em-dash/en-dash) found in [${langMeta.code}] dictionary key "${k}": "${val}"`,
+      );
+    }
+    const docs = getLegalDocuments(langMeta.code);
+    for (const docId of ['privacy', 'terms', 'gdpr', 'opensource', 'accessibility'] as const) {
+      const doc = docs[docId];
+      assert.equal(forbiddenDashRegex.test(doc.title), false);
+      assert.equal(forbiddenDashRegex.test(doc.subtitle), false);
+      for (const sec of doc.sections) {
+        assert.equal(
+          forbiddenDashRegex.test(sec.heading),
+          false,
+          `Forbidden long dash in [${langMeta.code}] legal heading: "${sec.heading}"`,
+        );
+        for (const p of sec.paragraphs) {
+          assert.equal(
+            forbiddenDashRegex.test(p),
+            false,
+            `Forbidden long dash in [${langMeta.code}] legal paragraph: "${p}"`,
+          );
+        }
+      }
+    }
+  }
+
+  // 2. Verify all source, HTML, Electron, and server files in the repository contain zero em-dash or en-dash characters
+  const projectRoot = path.resolve(import.meta.dirname, '..', '..');
+  const skipDirs = new Set([
+    'node_modules',
+    '.git',
+    'dist',
+    'dist-server',
+    'release',
+    'release-build',
+    'release-verify',
+    'testsprite_tests',
+  ]);
+  const inspectFile = (filePath: string) => {
+    const content = fs.readFileSync(filePath, 'utf8');
+    assert.equal(
+      forbiddenDashRegex.test(content),
+      false,
+      `Forbidden long dash (\\u2013 or \\u2014) found in file: ${path.relative(projectRoot, filePath)}`,
+    );
+  };
+  const walkDir = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (skipDirs.has(entry.name)) continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walkDir(fullPath);
+      } else if (
+        /\.(ts|tsx|js|cjs|mjs|html|css|json|md|bat|ps1|yml|yaml|nsh|txt)$/i.test(entry.name) &&
+        entry.name !== 'package-lock.json'
+      ) {
+        inspectFile(fullPath);
+      }
+    }
+  };
+  walkDir(projectRoot);
+});
+
 
 
 

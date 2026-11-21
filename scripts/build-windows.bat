@@ -1,12 +1,12 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul
-title Agendamea — Windows 11 Kurulum Derleyici (Vellium)
+title Agendamea - Windows 11 Kurulum Derleyici (Vellium)
 cd /d "%~dp0.."
 
 echo.
 echo  =========================================================
-echo   Agendamea v1.0.0 — Windows 11 Kurulum (.exe) Derleyici
+echo   Agendamea v1.0.0 - Windows 11 Kurulum (.exe) Derleyici
 echo   Yayinci: Vellium (vellium.dev)
 echo  =========================================================
 echo.

@@ -43,10 +43,27 @@ export function useToast() {
       undoTimerRef.current = window.setTimeout(() => {
         undoTimerRef.current = null;
         setUndoToast(null);
-      }, 5500);
+      }, 12000);
     },
     [],
   );
+
+  const pauseUndoToast = useCallback(() => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+  }, []);
+
+  const resumeUndoToast = useCallback(() => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+    }
+    undoTimerRef.current = window.setTimeout(() => {
+      undoTimerRef.current = null;
+      setUndoToast(null);
+    }, 6000);
+  }, []);
 
   const showInfoToast = useCallback(
     (message: string, tone: 'info' | 'error' = 'info') => {
@@ -78,6 +95,8 @@ export function useToast() {
     infoToast,
     showUndoToast,
     clearUndoToast,
+    pauseUndoToast,
+    resumeUndoToast,
     showInfoToast,
     clearInfoToast,
   };

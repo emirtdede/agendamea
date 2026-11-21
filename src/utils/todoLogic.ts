@@ -252,17 +252,6 @@ export function isTodoScheduledForToday(todo: Pick<Todo, 'startDate' | 'dueDate'
   return false;
 }
 
-export function getPriorityLabel(priority: Priority): string {
-  switch (priority) {
-    case 'high':
-      return 'Yüksek';
-    case 'low':
-      return 'Düşük';
-    default:
-      return 'Normal';
-  }
-}
-
 export function normalizeTurkish(text: string): string {
   return text.toLocaleLowerCase('tr-TR').trim();
 }

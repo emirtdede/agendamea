@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import http from 'node:http';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -179,10 +180,12 @@ async function startServer() {
   }
 
   function writeOneDriveSyncSnapshot(targetFolder?: string, allowEmptyOverwrite = false): OneDriveStatus {
-    const status = resolveOneDriveStatus();
+    const configuredPath = (db.getSettings().onedriveCustomPath ?? '').trim();
     const folder = targetFolder
       ? path.resolve(targetFolder)
-      : status.folderPath ?? detectDefaultOneDriveRoot();
+      : configuredPath.length > 0
+        ? configuredPath
+        : detectDefaultOneDriveRoot();
     fs.mkdirSync(folder, { recursive: true });
     const syncFile = path.join(folder, 'agendamea-onedrive-sync.json');
     const prevFile = path.join(folder, 'agendamea-onedrive-previous.json');
@@ -711,6 +714,7 @@ async function startServer() {
           releaseUrl: GITHUB_RELEASES_HTML,
           setupUrl: null,
           portableUrl: null,
+          msixUrl: null,
           checkedAt,
         });
         return;
@@ -727,10 +731,13 @@ async function startServer() {
       const updateAvailable = compareSemver(latestVersion, APP_VERSION) > 0;
       const assets = Array.isArray(data.assets) ? data.assets : [];
       const setupAsset = assets.find(
-        (a) => typeof a?.name === 'string' && /^Agendamea-Setup-.*\.exe$/i.test(a.name),
+        (a) => typeof a?.name === 'string' && /setup.*\.exe$/i.test(a.name),
       );
       const portableAsset = assets.find(
-        (a) => typeof a?.name === 'string' && /^Agendamea-Portable-.*\.exe$/i.test(a.name),
+        (a) => typeof a?.name === 'string' && /portable.*\.exe$/i.test(a.name),
+      );
+      const msixAsset = assets.find(
+        (a) => typeof a?.name === 'string' && /\.(msix|appx)$/i.test(a.name),
       );
       res.json({
         ok: true,
@@ -750,6 +757,10 @@ async function startServer() {
           typeof portableAsset?.browser_download_url === 'string'
             ? portableAsset.browser_download_url
             : null,
+        msixUrl:
+          typeof msixAsset?.browser_download_url === 'string'
+            ? msixAsset.browser_download_url
+            : null,
         checkedAt,
       });
     } catch {
@@ -764,6 +775,7 @@ async function startServer() {
         releaseUrl: GITHUB_RELEASES_HTML,
         setupUrl: null,
         portableUrl: null,
+        msixUrl: null,
         checkedAt,
       });
     } finally {
@@ -885,6 +897,12 @@ async function startServer() {
         return;
       }
 
+      if (isLocalEmpty && !existingRemote) {
+        fs.mkdirSync(requestedPath, { recursive: true });
+        res.json(resolveOneDriveStatus());
+        return;
+      }
+
       const status = writeOneDriveSyncSnapshot(requestedPath, true);
       res.json(status);
     } catch (err) {
@@ -998,6 +1016,67 @@ async function startServer() {
   let viteServer: { close: () => Promise<void> } | null = null;
 
   if (isProd) {
+    const gzipAssetCache = new Map<string, { buf: Buffer; contentType: string; immutable: boolean }>();
+    const GZIP_MIME_MAP: Record<string, string> = {
+      '.js': 'application/javascript; charset=utf-8',
+      '.mjs': 'application/javascript; charset=utf-8',
+      '.css': 'text/css; charset=utf-8',
+      '.html': 'text/html; charset=utf-8',
+      '.svg': 'image/svg+xml',
+      '.json': 'application/json; charset=utf-8',
+      '.webmanifest': 'application/manifest+json; charset=utf-8',
+    };
+
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api/')) {
+        next();
+        return;
+      }
+      const acceptEnc = String(req.headers['accept-encoding'] ?? '');
+      if (!acceptEnc.includes('gzip')) {
+        next();
+        return;
+      }
+      const relPath = req.path === '/' ? 'index.html' : req.path.replace(/^\/+/, '');
+      const ext = path.extname(relPath).toLowerCase();
+      const contentType = GZIP_MIME_MAP[ext];
+      if (!contentType) {
+        next();
+        return;
+      }
+      const resolvedPath = path.resolve(distDir, relPath);
+      if (!resolvedPath.startsWith(distDir + path.sep) && resolvedPath !== distDir) {
+        next();
+        return;
+      }
+      let cached = gzipAssetCache.get(resolvedPath);
+      if (!cached) {
+        if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+          next();
+          return;
+        }
+        const raw = fs.readFileSync(resolvedPath);
+        if (raw.length < 1024) {
+          next();
+          return;
+        }
+        cached = {
+          buf: zlib.gzipSync(raw, { level: 6 }),
+          contentType,
+          immutable: resolvedPath.includes(`${path.sep}assets${path.sep}`),
+        };
+        gzipAssetCache.set(resolvedPath, cached);
+      }
+      res.setHeader('Content-Type', cached.contentType);
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Vary', 'Accept-Encoding');
+      res.setHeader(
+        'Cache-Control',
+        cached.immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+      );
+      res.send(cached.buf);
+    });
+
     app.use(
       express.static(distDir, {
         setHeaders(res, filePath) {

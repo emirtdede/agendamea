@@ -31,6 +31,7 @@ interface SharedBoardViewProps {
   categoryMap: Map<string, Category>;
   todayStr: string;
   selectedTodoId: string | null;
+  dragLocked?: boolean;
   onSelectTodo: (id: string) => void;
   onToggleComplete: (id: string, completed: boolean) => void;
   onToggleImportant: (id: string, important: boolean) => void;
@@ -44,6 +45,7 @@ interface CompactBoardCardProps {
   category?: Category;
   todayStr: string;
   isSelected: boolean;
+  dragLocked?: boolean;
   onSelect: (id: string) => void;
   onToggleComplete: (id: string, next: boolean) => void;
   onToggleImportant: (id: string, next: boolean) => void;
@@ -57,6 +59,7 @@ const CompactBoardCard = React.memo(function CompactBoardCard({
   category,
   todayStr,
   isSelected,
+  dragLocked = false,
   onSelect,
   onToggleComplete,
   onToggleImportant,
@@ -86,8 +89,14 @@ const CompactBoardCard = React.memo(function CompactBoardCard({
     <div
       data-testid="board-todo-card"
       data-todo-id={todo.id}
-      draggable
-      onDragStart={(e) => onDragStart(e, todo.id)}
+      draggable={!dragLocked}
+      onDragStart={(e) => {
+        if (dragLocked) {
+          e.preventDefault();
+          return;
+        }
+        onDragStart(e, todo.id);
+      }}
       className={`group relative flex flex-col gap-2 rounded-xl border p-3 transition-all duration-150 ${
         isSelected
           ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
@@ -217,6 +226,7 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
   categoryMap,
   todayStr,
   selectedTodoId,
+  dragLocked = false,
   onSelectTodo,
   onToggleComplete,
   onToggleImportant,
@@ -229,6 +239,10 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
 
   const handleCardDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
+    if (dragLocked) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/agendamea-kanban-todo', id);
     e.dataTransfer.setData('text/plain', id);
@@ -276,6 +290,7 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
   const handleColumnDrop = (e: React.DragEvent<HTMLDivElement>, colId: string) => {
     e.preventDefault();
     setDragOverColumn(null);
+    if (dragLocked) return;
     const todoId =
       e.dataTransfer.getData('text/agendamea-kanban-todo') ||
       e.dataTransfer.getData('text/plain');
@@ -338,6 +353,7 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
               key={col.id}
               data-testid={`kanban-col-${col.id}`}
               onDragOver={(e) => {
+                if (dragLocked) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
                 if (dragOverColumn !== col.id) setDragOverColumn(col.id);
@@ -381,6 +397,7 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
                       category={todo.categoryId ? categoryMap.get(todo.categoryId) : undefined}
                       todayStr={todayStr}
                       isSelected={selectedTodoId === todo.id}
+                      dragLocked={dragLocked}
                       onSelect={onSelectTodo}
                       onToggleComplete={onToggleComplete}
                       onToggleImportant={onToggleImportant}
@@ -404,6 +421,7 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
   categoryMap,
   todayStr,
   selectedTodoId,
+  dragLocked = false,
   onSelectTodo,
   onToggleComplete,
   onToggleImportant,
@@ -459,6 +477,10 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
   }, [todos, todayStr, t]);
 
   const handleCardDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
+    if (dragLocked) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/agendamea-matrix-todo', id);
     e.dataTransfer.setData('text/plain', id);
@@ -470,6 +492,7 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
   ) => {
     e.preventDefault();
     setDragOverQuadrant(null);
+    if (dragLocked) return;
     const todoId =
       e.dataTransfer.getData('text/agendamea-matrix-todo') ||
       e.dataTransfer.getData('text/plain');
@@ -495,6 +518,7 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
             key={q.id}
             data-testid={`matrix-quadrant-${q.id}`}
             onDragOver={(e) => {
+              if (dragLocked) return;
               e.preventDefault();
               e.dataTransfer.dropEffect = 'move';
               if (dragOverQuadrant !== q.id) setDragOverQuadrant(q.id);
@@ -540,6 +564,7 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
                     category={todo.categoryId ? categoryMap.get(todo.categoryId) : undefined}
                     todayStr={todayStr}
                     isSelected={selectedTodoId === todo.id}
+                    dragLocked={dragLocked}
                     onSelect={onSelectTodo}
                     onToggleComplete={onToggleComplete}
                     onToggleImportant={onToggleImportant}
@@ -600,6 +625,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
   categoryMap,
   todayStr,
   selectedTodoId,
+  dragLocked = false,
   onSelectTodo,
   onToggleComplete,
   onUpdateTodo,
@@ -660,7 +686,29 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
     return { scheduledTodos: scheduled, unscheduledTodos: unscheduled };
   }, [todos]);
 
+  const todosByDateMap = useMemo(() => {
+    const map = new Map<string, Todo[]>();
+    for (const cell of gridCells) {
+      const matching = scheduledTodos.filter((item) =>
+        isTodoOnCalendarDate(item, cell.dateStr),
+      );
+      matching.sort((a, b) => {
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        const timeA = a.dueTime || '99:99';
+        const timeB = b.dueTime || '99:99';
+        if (timeA !== timeB) return timeA.localeCompare(timeB);
+        return a.sortOrder - b.sortOrder;
+      });
+      map.set(cell.dateStr, matching);
+    }
+    return map;
+  }, [gridCells, scheduledTodos]);
+
   const handleTaskDragStart = (e: React.DragEvent<HTMLElement>, id: string) => {
+    if (dragLocked) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/agendamea-cal-todo', id);
     e.dataTransfer.setData('text/plain', id);
@@ -669,6 +717,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
   const handleDayDrop = (e: React.DragEvent<HTMLDivElement>, dateStr: string) => {
     e.preventDefault();
     setDragOverDate(null);
+    if (dragLocked) return;
     const todoId =
       e.dataTransfer.getData('text/agendamea-cal-todo') ||
       e.dataTransfer.getData('text/plain');
@@ -766,7 +815,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
               return (
                 <div
                   key={todo.id}
-                  draggable
+                  draggable={!dragLocked}
                   onDragStart={(e) => handleTaskDragStart(e, todo.id)}
                   onClick={() => onSelectTodo(todo.id)}
                   className={`inline-flex max-w-[240px] cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
@@ -801,9 +850,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
 
         <div className="grid grid-cols-7">
           {gridCells.map((cell) => {
-            const dayTodos = scheduledTodos.filter((item) =>
-              isTodoOnCalendarDate(item, cell.dateStr),
-            );
+            const dayTodos = todosByDateMap.get(cell.dateStr) ?? [];
             const isOver = dragOverDate === cell.dateStr;
 
             return (
@@ -811,6 +858,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
                 key={cell.dateStr}
                 data-testid={`calendar-day-${cell.dateStr}`}
                 onDragOver={(e) => {
+                  if (dragLocked) return;
                   e.preventDefault();
                   e.dataTransfer.dropEffect = 'move';
                   if (dragOverDate !== cell.dateStr) setDragOverDate(cell.dateStr);
@@ -849,7 +897,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
                     return (
                       <div
                         key={todo.id}
-                        draggable
+                        draggable={!dragLocked}
                         onDragStart={(e) => handleTaskDragStart(e, todo.id)}
                         onClick={() => onSelectTodo(todo.id)}
                         className={`group flex cursor-pointer items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] transition-colors ${

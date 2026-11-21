@@ -1,8 +1,0 @@
-{
-  "name": "Agendamea -  Minimalist Görev Yöneticisi",
-  "description": "Günlük görevlerinizi zahmetsizce planlayın. İnternetsiz çalışan, her değişikliği anında kaydeden, kişisel renk temalarına sahip sade ve hızlı görev yöneticisi.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}

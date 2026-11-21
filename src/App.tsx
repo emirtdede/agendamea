@@ -48,6 +48,7 @@ import { getDictionary } from './i18n/localesWorld';
 import { localizeErrorMessage } from './i18n/translations';
 import type {
   ActiveView,
+  BootstrapPayload,
   Category,
   CategoryPatch,
   LayoutMode,
@@ -156,6 +157,8 @@ export default function App() {
     infoToast,
     showUndoToast,
     clearUndoToast,
+    pauseUndoToast,
+    resumeUndoToast,
     showInfoToast,
     clearInfoToast,
   } = useToast();
@@ -292,6 +295,7 @@ export default function App() {
             .getOneDriveStatus()
             .then((st) => {
               if (
+                todosRef.current.length === 0 &&
                 st.hasRemoteBackup &&
                 ((st.remoteTodoCount ?? 0) > 0 || (st.remoteCategoryCount ?? 0) > 0)
               ) {
@@ -387,14 +391,15 @@ export default function App() {
   const handleDownloadAndInstallUpdate = useCallback(async () => {
     const res = updateState.result;
     if (!res) return;
-    const downloadUrl = res.setupUrl || res.portableUrl || res.releaseUrl;
-    if (window.agendameaWindow?.downloadAndInstallUpdate && res.setupUrl) {
+    const installerUrl = res.setupUrl || res.msixUrl || null;
+    const downloadUrl = installerUrl || res.portableUrl || res.releaseUrl;
+    if (window.agendameaWindow?.downloadAndInstallUpdate && installerUrl) {
       setUpdateState((prev) => ({
         ...prev,
         status: 'downloading',
         downloadPercent: 5,
       }));
-      await window.agendameaWindow.downloadAndInstallUpdate(res.setupUrl);
+      await window.agendameaWindow.downloadAndInstallUpdate(installerUrl);
       setUpdateState((prev) => ({
         ...prev,
         status: 'available',
@@ -459,6 +464,7 @@ export default function App() {
     isMobileSidebarOpen,
     selectedTodoId,
     searchQuery,
+    tagFilter,
     focusSidebarSearch,
   });
   keyStateRef.current = {
@@ -466,6 +472,7 @@ export default function App() {
     isMobileSidebarOpen,
     selectedTodoId,
     searchQuery,
+    tagFilter,
     focusSidebarSearch,
   };
 
@@ -497,6 +504,8 @@ export default function App() {
           setSelectedTodoId(null);
         } else if (state.searchQuery) {
           setSearchQuery('');
+        } else if (state.tagFilter) {
+          setTagFilter(null);
         }
         return;
       }
@@ -725,6 +734,7 @@ export default function App() {
     }) => {
       try {
         const created = await api.createTodo(payload);
+        setOneDrivePrompt(null);
         setTodos((prev) => [created, ...prev.filter((tItem) => tItem.id !== created.id)]);
       } catch (err) {
         showInfoToast(formatUiError(err), 'error');
@@ -933,9 +943,8 @@ export default function App() {
     }
   }, [clearUndoToast, showInfoToast, loadData, formatUiError]);
 
-  const handleImportBackup = useCallback(
-    async (payload: unknown) => {
-      const restored = await api.importBackup(payload);
+  const handleApplyRestoredBootstrap = useCallback(
+    (restored: BootstrapPayload) => {
       clearUndoToast();
       todoUpdateSeqRef.current.clear();
       categoryUpdateSeqRef.current.clear();
@@ -965,10 +974,22 @@ export default function App() {
       );
       setSidebarCollapsed(nextCollapsed);
       setSelectedTodoId(null);
+      setTagFilter(null);
+      setSearchQuery('');
+      setStatusFilter('all');
+      setOneDrivePrompt(null);
       setActiveView({ type: 'smart', id: 'all' });
       showInfoToast(tRef.current.backupRestoredToast);
     },
     [clearUndoToast, showInfoToast],
+  );
+
+  const handleImportBackup = useCallback(
+    async (payload: unknown) => {
+      const restored = await api.importBackup(payload);
+      handleApplyRestoredBootstrap(restored);
+    },
+    [handleApplyRestoredBootstrap],
   );
 
   const handleAddSubtask = useCallback(
@@ -1123,7 +1144,8 @@ export default function App() {
   );
 
   const isCompletedView = activeView.type === 'smart' && activeView.id === 'completed';
-  const canDragTodos = !dragLocked && !deferredSearchQuery.trim() && visibleTodos.length > 1;
+  const canDragTodos =
+    !dragLocked && !deferredSearchQuery.trim() && !tagFilter && visibleTodos.length > 1;
 
   const visibleTodosRef = useRef(visibleTodos);
   visibleTodosRef.current = visibleTodos;
@@ -1336,13 +1358,13 @@ export default function App() {
       } catch {
         // Ignore storage error
       }
-      await handleImportBackup(bootstrap);
+      handleApplyRestoredBootstrap(bootstrap);
     } catch (err) {
       showInfoToast(formatUiError(err), 'error');
     } finally {
       setIsRestoringOneDrivePrompt(false);
     }
-  }, [isRestoringOneDrivePrompt, handleImportBackup, showInfoToast, formatUiError]);
+  }, [isRestoringOneDrivePrompt, handleApplyRestoredBootstrap, showInfoToast, formatUiError]);
 
   const handleDismissOneDriveBanner = useCallback(() => {
     setOneDrivePrompt(null);
@@ -1604,7 +1626,7 @@ export default function App() {
                           </h2>
                           {typeof oneDrivePrompt.remoteTodoCount === 'number' && (
                             <span className="rounded-md border border-[var(--border)] bg-[var(--surface-subtle)] px-2 py-0.5 font-mono-tabular text-[11px] text-[var(--text-secondary)]">
-                              {oneDrivePrompt.remoteTodoCount} {t.localRecordsBadge}
+                              {oneDrivePrompt.remoteTodoCount} {t.tasksTitle.toLowerCase()}
                             </span>
                           )}
                         </div>
@@ -1701,6 +1723,7 @@ export default function App() {
                   categoryMap={categoryMap}
                   todayStr={todayStr}
                   selectedTodoId={selectedTodoId}
+                  dragLocked={dragLocked}
                   onSelectTodo={handleSelectTodo}
                   onToggleComplete={handleToggleTodoComplete}
                   onToggleImportant={handleToggleTodoImportant}
@@ -1714,6 +1737,7 @@ export default function App() {
                   categoryMap={categoryMap}
                   todayStr={todayStr}
                   selectedTodoId={selectedTodoId}
+                  dragLocked={dragLocked}
                   onSelectTodo={handleSelectTodo}
                   onToggleComplete={handleToggleTodoComplete}
                   onToggleImportant={handleToggleTodoImportant}
@@ -1727,6 +1751,7 @@ export default function App() {
                   categoryMap={categoryMap}
                   todayStr={todayStr}
                   selectedTodoId={selectedTodoId}
+                  dragLocked={dragLocked}
                   onSelectTodo={handleSelectTodo}
                   onToggleComplete={handleToggleTodoComplete}
                   onToggleImportant={handleToggleTodoImportant}
@@ -1744,23 +1769,26 @@ export default function App() {
                     <CheckCheck className="h-5 w-5" />
                   </div>
                   <h2 className="font-display text-base font-semibold text-[var(--text-primary)]">
-                    {searchQuery.trim()
+                    {searchQuery.trim() || tagFilter
                       ? t.emptySearchTitle
                       : isCompletedView
                         ? t.emptyCompletedTitle
                         : t.emptyListTitle}
                   </h2>
                   <p className="mt-1 max-w-sm text-sm text-[var(--text-muted)]">
-                    {searchQuery.trim()
+                    {searchQuery.trim() || tagFilter
                       ? t.emptySearchDesc
                       : isCompletedView
                         ? t.emptyCompletedDesc
                         : t.emptyListDesc}
                   </p>
-                  {searchQuery.trim() ? (
+                  {searchQuery.trim() || tagFilter ? (
                     <button
                       type="button"
-                      onClick={() => setSearchQuery('')}
+                      onClick={() => {
+                        setSearchQuery('');
+                        setTagFilter(null);
+                      }}
                       className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-4 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
                     >
                       {t.clearSearch}
@@ -1845,6 +1873,8 @@ export default function App() {
           infoToast={infoToast}
           onUndo={handleUndoClick}
           onClearUndo={clearUndoToast}
+          onPauseUndo={pauseUndoToast}
+          onResumeUndo={resumeUndoToast}
           onClearInfo={clearInfoToast}
         />
 
@@ -1868,6 +1898,7 @@ export default function App() {
               completedTodoCount={counts.smart.completed}
               onClearAllCompleted={handleClearAllCompleted}
               onImportBackup={handleImportBackup}
+              onApplyRestoredBootstrap={handleApplyRestoredBootstrap}
               trashedCategories={trashedCategories}
               trashedTodos={trashedTodos}
               onRestoreTodo={handleRestoreTodo}

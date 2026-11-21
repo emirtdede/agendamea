@@ -23,6 +23,7 @@ import { api } from '../api/client';
 import { useI18n } from '../i18n/I18nContext';
 import { localizeErrorMessage, type LegalDocId } from '../i18n/translations';
 import type {
+  BootstrapPayload,
   Category,
   OneDriveStatus,
   ThemeId,
@@ -57,6 +58,7 @@ interface SettingsModalProps {
   completedTodoCount: number;
   onClearAllCompleted: () => Promise<void>;
   onImportBackup: (payload: unknown) => Promise<void>;
+  onApplyRestoredBootstrap?: (restored: BootstrapPayload) => void;
   trashedCategories: Category[];
   trashedTodos: Todo[];
   onRestoreTodo: (id: string) => Promise<void>;
@@ -101,6 +103,7 @@ export function SettingsModal({
   completedTodoCount,
   onClearAllCompleted,
   onImportBackup,
+  onApplyRestoredBootstrap,
   trashedCategories,
   trashedTodos,
   onRestoreTodo,
@@ -120,6 +123,8 @@ export function SettingsModal({
   const [importError, setImportError] = useState<string | null>(null);
   const [oneDriveStatus, setOneDriveStatus] = useState<OneDriveStatus | null>(null);
   const [isOneDriveBusy, setIsOneDriveBusy] = useState(false);
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [backupDownloaded, setBackupDownloaded] = useState(false);
   const [pendingImport, setPendingImport] = useState<{
     fileName: string;
     payload: unknown;
@@ -152,7 +157,11 @@ export function SettingsModal({
         : await api.connectOneDrive({ autoSync: true });
       if (isMountedRef.current) setOneDriveStatus(next);
       if (next.restoredBootstrap) {
-        await onImportBackup(next.restoredBootstrap);
+        if (onApplyRestoredBootstrap) {
+          onApplyRestoredBootstrap(next.restoredBootstrap);
+        } else {
+          await onImportBackup(next.restoredBootstrap);
+        }
       }
     } catch (err) {
       if (isMountedRef.current) {
@@ -162,6 +171,42 @@ export function SettingsModal({
       }
     } finally {
       if (isMountedRef.current) setIsOneDriveBusy(false);
+    }
+  };
+
+  const handleDownloadBackup = async () => {
+    if (isExportingBackup) return;
+    setIsExportingBackup(true);
+    setImportError(null);
+    try {
+      const res = await fetch(`/api/export?lang=${encodeURIComponent(lang)}`);
+      if (!res.ok) {
+        throw new Error(t.operationFailedToast);
+      }
+      const blob = await res.blob();
+      const disp = res.headers.get('content-disposition') ?? '';
+      const match = /filename="([^"]+)"/i.exec(disp);
+      const fileName = match?.[1] || `agendamea-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      if (isMountedRef.current) {
+        setBackupDownloaded(true);
+        window.setTimeout(() => {
+          if (isMountedRef.current) setBackupDownloaded(false);
+        }, 4000);
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
+      }
+    } finally {
+      if (isMountedRef.current) setIsExportingBackup(false);
     }
   };
 
@@ -180,7 +225,11 @@ export function SettingsModal({
     try {
       const { status, bootstrap } = await api.syncOneDrivePull();
       if (isMountedRef.current) setOneDriveStatus(status);
-      await onImportBackup(bootstrap);
+      if (onApplyRestoredBootstrap) {
+        onApplyRestoredBootstrap(bootstrap);
+      } else {
+        await onImportBackup(bootstrap);
+      }
     } catch (err) {
       if (isMountedRef.current) {
         setImportError(
@@ -652,14 +701,22 @@ export function SettingsModal({
                         <Upload className="h-3.5 w-3.5" />
                         <span>{isImporting ? t.restoringButton : t.restoreButton}</span>
                       </button>
-                      <a
-                        href={`/api/export?lang=${encodeURIComponent(lang)}`}
-                        download
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+                      <button
+                        type="button"
+                        disabled={isExportingBackup}
+                        data-testid="download-backup-link"
+                        onClick={() => void handleDownloadBackup()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
                       >
-                        <Download className="h-3.5 w-3.5" />
-                        <span>{t.downloadBackupButton}</span>
-                      </a>
+                        {backupDownloaded ? (
+                          <Check className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" />
+                        )}
+                        <span>
+                          {backupDownloaded ? t.autoSavedBadge : t.downloadBackupButton}
+                        </span>
+                      </button>
                     </div>
                   </div>
 
@@ -677,10 +734,20 @@ export function SettingsModal({
                           </p>
                         </div>
                         {oneDriveStatus?.connected && (
-                          <span className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)] shrink-0">
-                            <Check className="h-3 w-3" />
-                            <span>{t.onedriveConnectedBadge}</span>
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)] whitespace-nowrap">
+                              <Check className="h-3 w-3 shrink-0" />
+                              <span>{t.onedriveConnectedBadge}</span>
+                            </span>
+                            <button
+                              type="button"
+                              disabled={isOneDriveBusy}
+                              onClick={() => void handleOneDriveDisconnect()}
+                              className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                            >
+                              {t.onedriveDisconnectButton}
+                            </button>
+                          </div>
                         )}
                       </div>
                       <p className="text-xs leading-relaxed text-[var(--text-muted)]">
@@ -690,62 +757,50 @@ export function SettingsModal({
                         <p className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
                           {t.onedriveLastSyncedPrefix}:{' '}
                           {formatDeletedAt(oneDriveStatus.lastSyncedAt, meta.intlLocale)}
-                          {typeof oneDriveStatus.remoteTodoCount === 'number'
-                            ? ` · ${oneDriveStatus.remoteTodoCount} ${t.localRecordsBadge}`
+                          {oneDriveStatus.hasRemoteBackup &&
+                          typeof oneDriveStatus.remoteTodoCount === 'number'
+                            ? ` · ${oneDriveStatus.remoteTodoCount} ${t.tasksTitle.toLowerCase()}`
                             : ''}
                         </p>
                       )}
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <button
-                          type="button"
-                          disabled={isOneDriveBusy}
-                          onClick={() => void handleOneDriveConnectOrSync()}
-                          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-40 whitespace-nowrap"
-                          style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
-                        >
-                          <RefreshCw
-                            className={`h-3.5 w-3.5 ${isOneDriveBusy ? 'animate-spin' : ''}`}
-                          />
-                          <span>
-                            {oneDriveStatus?.connected
-                              ? t.onedriveSyncNowButton
-                              : t.onedriveConnectButton}
-                          </span>
-                        </button>
+                    <div className="flex flex-nowrap items-center gap-1.5 pt-0.5 overflow-x-auto">
+                      <button
+                        type="button"
+                        disabled={isOneDriveBusy}
+                        onClick={() => void handleOneDriveConnectOrSync()}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-40 whitespace-nowrap shrink-0"
+                        style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
+                      >
+                        <RefreshCw
+                          className={`h-3.5 w-3.5 shrink-0 ${isOneDriveBusy ? 'animate-spin' : ''}`}
+                        />
+                        <span>
+                          {oneDriveStatus?.connected
+                            ? t.onedriveSyncNowButton
+                            : t.onedriveConnectButton}
+                        </span>
+                      </button>
 
-                        <button
-                          type="button"
-                          disabled={isOneDriveBusy || !oneDriveStatus?.hasRemoteBackup}
-                          onClick={() => void handleOneDriveRestore()}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                          <span>{t.onedriveRestoreButton}</span>
-                        </button>
+                      <button
+                        type="button"
+                        disabled={isOneDriveBusy || !oneDriveStatus?.hasRemoteBackup}
+                        onClick={() => void handleOneDriveRestore()}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+                      >
+                        <Upload className="h-3.5 w-3.5 shrink-0" />
+                        <span>{t.onedriveRestoreButton}</span>
+                      </button>
 
-                        <button
-                          type="button"
-                          onClick={() => void handleOneDriveOpenFolder()}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
-                        >
-                          <FolderOpen className="h-3.5 w-3.5" />
-                          <span>{t.onedriveOpenFolderButton}</span>
-                        </button>
-
-                        {oneDriveStatus?.connected && (
-                          <button
-                            type="button"
-                            disabled={isOneDriveBusy}
-                            onClick={() => void handleOneDriveDisconnect()}
-                            className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                          >
-                            {t.onedriveDisconnectButton}
-                          </button>
-                        )}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleOneDriveOpenFolder()}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
+                      >
+                        <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                        <span>{t.onedriveOpenFolderButton}</span>
+                      </button>
                     </div>
 
                     {oneDriveStatus?.connected && (

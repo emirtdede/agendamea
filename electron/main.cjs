@@ -84,14 +84,28 @@ function resolveRuntimeRoot() {
 }
 
 function resolveWindowIcon(runtimeRoot) {
+  const defaultRoot = path.join(__dirname, '..');
+  const unpackedRoot = defaultRoot.includes('app.asar')
+    ? defaultRoot.replace('app.asar', 'app.asar.unpacked')
+    : runtimeRoot;
+  const resourcesRoot = process.resourcesPath || path.dirname(unpackedRoot);
+
   const candidates = [
+    path.join(unpackedRoot, 'electron-resources', 'icon.ico'),
+    path.join(unpackedRoot, 'dist', 'icons', 'agendamea.ico'),
+    path.join(unpackedRoot, 'public', 'icons', 'agendamea.ico'),
+    path.join(resourcesRoot, 'app.asar.unpacked', 'electron-resources', 'icon.ico'),
+    path.join(resourcesRoot, 'app.asar.unpacked', 'dist', 'icons', 'agendamea.ico'),
+    path.join(resourcesRoot, 'icon.ico'),
     path.join(runtimeRoot, 'electron-resources', 'icon.ico'),
     path.join(runtimeRoot, 'dist', 'icons', 'agendamea.ico'),
     path.join(runtimeRoot, 'public', 'icons', 'agendamea.ico'),
-    path.join(__dirname, '..', 'electron-resources', 'icon.ico'),
-    path.join(__dirname, '..', 'public', 'icons', 'agendamea.ico'),
   ];
-  return candidates.find((p) => fs.existsSync(p));
+  return candidates.find(
+    (p) =>
+      (!p.includes('app.asar') || p.includes('app.asar.unpacked')) &&
+      fs.existsSync(p),
+  );
 }
 
 function isAllowedExternalUrl(targetUrl) {
@@ -228,6 +242,7 @@ async function waitForServer(url, timeoutMs = 15000) {
 async function createWindow(appUrl) {
   const runtimeRoot = resolveRuntimeRoot();
   const allowedOrigin = new URL(appUrl).origin;
+  const resolvedIcon = resolveWindowIcon(runtimeRoot);
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -242,7 +257,7 @@ async function createWindow(appUrl) {
     closable: true,
     autoHideMenuBar: true,
     title: 'Agendamea',
-    icon: resolveWindowIcon(runtimeRoot),
+    icon: resolvedIcon,
     backgroundColor: '#fafafa',
     show: false,
     webPreferences: {
@@ -252,6 +267,14 @@ async function createWindow(appUrl) {
       sandbox: true,
     },
   });
+
+  if (resolvedIcon && typeof mainWindow.setIcon === 'function') {
+    try {
+      mainWindow.setIcon(resolvedIcon);
+    } catch {
+      // Ignore platform setIcon fallback
+    }
+  }
 
   // Remove default Electron menu so Alt+Arrow shortcuts never trigger a phantom menu bar on Windows 11
   mainWindow.setMenu(null);
@@ -325,12 +348,33 @@ async function createWindow(appUrl) {
     const htmlLang = isTrLocale ? 'tr' : 'en';
     const errHeading = isTrLocale ? 'Agendamea başlatılamadı' : 'Unable to start Agendamea';
     const errBody = isTrLocale
-      ? 'Yerel sunucu başlatılamadı. Lütfen uygulamayı yeniden açın.'
-      : 'The local service could not be started. Please reopen the application.';
+      ? 'Yerel sunucu başlatılamadı. Lütfen yeniden deneyin veya uygulamayı kapatıp tekrar açın.'
+      : 'The local service could not be started. Please retry or reopen the application.';
+    const retryLabel = isTrLocale ? 'Tekrar Dene' : 'Retry';
+    const closeLabel = isTrLocale ? 'Kapat' : 'Close';
+    const fallbackHtml = [
+      `<!doctype html><html lang="${htmlLang}"><head><meta charset="utf-8"><title>Agendamea</title></head>`,
+      '<body style="font-family:Segoe UI,system-ui,sans-serif;display:flex;flex-direction:column;height:100vh;margin:0;background:#09090b;color:#fafafa;user-select:none;">',
+      '<div style="-webkit-app-region:drag;height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid #27272a;">',
+      '<div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;">',
+      '<svg width="18" height="18" viewBox="0 0 64 64" fill="none"><rect width="64" height="64" rx="16" fill="#18181b"/><path d="M18 33L27.5 42.5L46 22" stroke="#fafafa" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      '<span>Agendamea</span></div>',
+      `<button type="button" aria-label="${closeLabel}" onclick="if(window.agendameaWindow&&window.agendameaWindow.close){window.agendameaWindow.close()}else{window.close()}" style="-webkit-app-region:no-drag;background:transparent;border:none;color:#a1a1aa;font-size:18px;line-height:1;width:32px;height:28px;border-radius:6px;cursor:pointer;">&times;</button>`,
+      '</div>',
+      '<div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px;">',
+      '<div style="max-width:380px;text-align:center;background:#18181b;border:1px solid #27272a;border-radius:16px;padding:28px 24px;">',
+      '<div style="margin:0 auto 14px;width:44px;height:44px;border-radius:12px;background:#27272a;display:flex;align-items:center;justify-content:center;">',
+      '<svg width="24" height="24" viewBox="0 0 64 64" fill="none"><path d="M18 33L27.5 42.5L46 22" stroke="#fafafa" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      '</div>',
+      `<h2 style="margin:0 0 8px;font-size:17px;font-weight:700;">${errHeading}</h2>`,
+      `<p style="margin:0 0 20px;font-size:13px;line-height:1.5;color:#a1a1aa;">${errBody}</p>`,
+      '<div style="display:flex;gap:8px;justify-content:center;">',
+      `<button type="button" onclick="window.location.href='${appUrl}'" style="background:#fafafa;color:#09090b;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;">${retryLabel}</button>`,
+      `<button type="button" onclick="if(window.agendameaWindow&&window.agendameaWindow.close){window.agendameaWindow.close()}else{window.close()}" style="background:#27272a;color:#fafafa;border:1px solid #3f3f46;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:500;cursor:pointer;">${closeLabel}</button>`,
+      '</div></div></div></body></html>',
+    ].join('');
     await mainWindow.loadURL(
-      `data:text/html;charset=utf-8,${encodeURIComponent(
-        `<!doctype html><html lang="${htmlLang}"><body style="font-family:Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#fafafa;color:#111"><div style="text-align:center"><h2>${errHeading}</h2><p>${errBody}</p></div></body></html>`,
-      )}`,
+      `data:text/html;charset=utf-8,${encodeURIComponent(fallbackHtml)}`,
     );
     mainWindow.show();
   }
@@ -392,7 +436,7 @@ function isAllowedUpdateDownloadUrl(targetUrl) {
     if (
       parsed.hostname === 'github.com' &&
       lowerPath.startsWith('/emirtdede/agendamea/releases/download/') &&
-      lowerPath.endsWith('.exe')
+      (lowerPath.endsWith('.exe') || lowerPath.endsWith('.msix') || lowerPath.endsWith('.appx'))
     ) {
       return true;
     }
@@ -429,10 +473,19 @@ function detectDefaultOneDriveFolder() {
 
 ipcMain.handle('onedrive:open-folder', async (_event, customFolderPath) => {
   try {
-    const targetFolder =
-      typeof customFolderPath === 'string' && customFolderPath.trim().length > 0
-        ? path.resolve(customFolderPath.trim())
-        : detectDefaultOneDriveFolder();
+    const defaultFolder = detectDefaultOneDriveFolder();
+    let targetFolder = defaultFolder;
+    if (typeof customFolderPath === 'string' && customFolderPath.trim().length > 0) {
+      const candidate = path.resolve(customFolderPath.trim());
+      const baseName = path.basename(candidate).toLowerCase();
+      if (
+        candidate === defaultFolder ||
+        baseName.includes('agendamea') ||
+        fs.existsSync(path.join(candidate, 'agendamea-onedrive-sync.json'))
+      ) {
+        targetFolder = candidate;
+      }
+    }
     fs.mkdirSync(targetFolder, { recursive: true });
     const errMsg = await shell.openPath(targetFolder);
     return { ok: !errMsg, path: targetFolder };
@@ -464,6 +517,7 @@ ipcMain.handle('updater:check', async () => {
         releaseUrl: GITHUB_RELEASES_HTML,
         setupUrl: null,
         portableUrl: null,
+        msixUrl: null,
         checkedAt,
       };
     }
@@ -472,10 +526,13 @@ ipcMain.handle('updater:check', async () => {
     const updateAvailable = compareSemver(latestVersion, currentVersion) > 0;
     const assets = Array.isArray(data?.assets) ? data.assets : [];
     const setupAsset = assets.find(
-      (a) => typeof a?.name === 'string' && /^Agendamea-Setup-.*\.exe$/i.test(a.name),
+      (a) => typeof a?.name === 'string' && /setup.*\.exe$/i.test(a.name),
     );
     const portableAsset = assets.find(
-      (a) => typeof a?.name === 'string' && /^Agendamea-Portable-.*\.exe$/i.test(a.name),
+      (a) => typeof a?.name === 'string' && /portable.*\.exe$/i.test(a.name),
+    );
+    const msixAsset = assets.find(
+      (a) => typeof a?.name === 'string' && /\.(msix|appx)$/i.test(a.name),
     );
     return {
       ok: true,
@@ -496,6 +553,10 @@ ipcMain.handle('updater:check', async () => {
         typeof portableAsset?.browser_download_url === 'string'
           ? portableAsset.browser_download_url
           : null,
+      msixUrl:
+        typeof msixAsset?.browser_download_url === 'string'
+          ? msixAsset.browser_download_url
+          : null,
       checkedAt,
     };
   } catch {
@@ -510,6 +571,7 @@ ipcMain.handle('updater:check', async () => {
       releaseUrl: GITHUB_RELEASES_HTML,
       setupUrl: null,
       portableUrl: null,
+      msixUrl: null,
       checkedAt,
     };
   }
@@ -525,7 +587,13 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
     return { ok: true, launchedExternal: true };
   }
 
-  const tempFilePath = path.join(app.getPath('temp'), 'Agendamea-Setup-Update.exe');
+  const lowerUrl = downloadUrl.toLowerCase();
+  const ext = lowerUrl.endsWith('.msix')
+    ? '.msix'
+    : lowerUrl.endsWith('.appx')
+      ? '.appx'
+      : '.exe';
+  const tempFilePath = path.join(app.getPath('temp'), `Agendamea-Update${ext}`);
   try {
     const res = await fetch(downloadUrl, {
       headers: { 'User-Agent': `Agendamea/${app.getVersion() || '1.0.0'} (Vellium)` },
@@ -557,11 +625,15 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
       fileStream.end((err) => (err ? reject(err) : resolve()));
     });
 
-    const child = spawn(tempFilePath, [], {
-      detached: true,
-      stdio: 'ignore',
-    });
-    child.unref();
+    if (ext === '.msix' || ext === '.appx') {
+      await shell.openPath(tempFilePath);
+    } else {
+      const child = spawn(tempFilePath, [], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+    }
     stopBackend();
     app.quit();
     return { ok: true, launchedInstaller: true };

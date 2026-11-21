@@ -1,4 +1,4 @@
-# Agendamea — Windows Masaustu ve Baslat Menusu Kisayol Olusturucu
+﻿# Agendamea - Windows Masaustu ve Baslat Menusu Kisayol Olusturucu
 $ErrorActionPreference = "Stop"
 
 $ProjectDir = Split-Path -Parent $PSScriptRoot
@@ -24,7 +24,7 @@ foreach ($lnk in $ShortcutLocations) {
   $Shortcut.TargetPath = $TargetBat
   $Shortcut.WorkingDirectory = $ProjectDir
   $Shortcut.IconLocation = "$IconPath,0"
-  $Shortcut.Description = "Agendamea — Hizli ve Minimalist Yapilacaklar"
+  $Shortcut.Description = "Agendamea - Hizli ve Minimalist Yapilacaklar"
   $Shortcut.WindowStyle = 7
   $Shortcut.Save()
   Write-Host "Kisayol olusturuldu: $lnk"

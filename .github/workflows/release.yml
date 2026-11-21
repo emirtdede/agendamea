@@ -32,15 +32,15 @@ jobs:
       - name: TypeScript type-check
         run: npm run lint
 
-      - name: Build Windows x64 NSIS Installer
-        run: npm run dist:win -- --publish never
+      - name: Build Windows x64 Setup, Portable & Store Packages
+        run: npm run build && npx electron-builder --win nsis portable appx --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Generate SHA256 Checksums
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path release -File | Where-Object { $_.Extension -in '.exe', '.blockmap' }
+          $files = Get-ChildItem -Path release -File | Where-Object { $_.Extension -in '.exe', '.appx', '.msix', '.blockmap' }
           $lines = foreach ($f in $files) {
             $hash = (Get-FileHash -Path $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($f.Name)"
@@ -54,4 +54,6 @@ jobs:
           files: |
             release/Agendamea-Setup-*.exe
             release/Agendamea-Portable-*.exe
+            release/Agendamea-Store-*.appx
+            release/*.blockmap
             release/SHA256SUMS.txt

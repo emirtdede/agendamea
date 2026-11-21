@@ -334,7 +334,7 @@ export function compileSeedToDictionary(
     addTagPlaceholder: `${add} (${tagsLabel.toLowerCase()})...`,
     unscheduledTasksTitle: `${tasks} (${uncategorized.toLowerCase()} · ${date.toLowerCase()})`,
     onedriveSectionTitle: `OneDrive · ${cloudSync}`,
-    onedriveSectionDesc: `OneDrive · ${cloudSync} — ${backupRestoreDesc}`,
+    onedriveSectionDesc: `OneDrive · ${cloudSync} - ${backupRestoreDesc}`,
     onedriveConnectButton: `OneDrive · ${apply}`,
     onedriveDisconnectButton: `OneDrive · ${close}`,
     onedriveSyncNowButton: `OneDrive · ${cloudSync}`,
