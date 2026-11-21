@@ -15,8 +15,9 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
-// Fixed preferred local port keeps localStorage (anti-FOUC theme cache) stable across restarts
-const PREFERRED_PORT = 47821;
+// Fixed preferred local port list keeps localStorage (anti-FOUC theme cache) stable across restarts
+// while safely bypassing Windows Hyper-V / WinNAT excluded port ranges (EACCES) and busy ports (EADDRINUSE)
+const PREFERRED_PORTS = [38721, 47821, 39721, 41721, 0];
 
 let mainWindow = null;
 let serverProcess = null;
@@ -29,13 +30,19 @@ app.on('second-instance', () => {
   }
 });
 
-function getAvailablePort(preferred = PREFERRED_PORT) {
+function getAvailablePort(candidates = PREFERRED_PORTS) {
+  const list = Array.isArray(candidates) ? candidates : [candidates, 0];
+  const [preferred, ...rest] = list.length > 0 ? list : [0];
   return new Promise((resolve, reject) => {
     const srv = net.createServer();
     srv.unref();
     srv.once('error', (err) => {
-      if (err && err.code === 'EADDRINUSE' && preferred !== 0) {
-        resolve(getAvailablePort(0));
+      if (
+        err &&
+        (err.code === 'EADDRINUSE' || err.code === 'EACCES') &&
+        preferred !== 0
+      ) {
+        resolve(getAvailablePort(rest.length > 0 ? rest : [0]));
       } else {
         reject(err);
       }
@@ -250,6 +257,8 @@ async function createWindow(appUrl) {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+    mainWindow?.show();
+    mainWindow?.focus();
   });
 
   mainWindow.on('closed', () => {
@@ -275,6 +284,10 @@ async function createWindow(appUrl) {
   const ready = await waitForServer(appUrl);
   if (ready && mainWindow) {
     await mainWindow.loadURL(appUrl);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   } else if (mainWindow) {
     const isTrLocale = String(app.getLocale() || 'tr').toLowerCase().startsWith('tr');
     const htmlLang = isTrLocale ? 'tr' : 'en';
