@@ -524,7 +524,7 @@ export const TR_DICTIONARY: UiDictionary = {
   welcomeOpenSettingsButton: 'OneDrive Ayarları',
   welcomeStep1Title: "Agendamea'ya Hoş Geldiniz",
   welcomeStep1Desc:
-    'İnternetsiz çalışan, her değişikliği anında cihazınıza kaydeden sade ve hızlı günlük planlayıcınız. Başlamadan önce görünümünüzü ve dilinizi seçebilirsiniz.',
+    'İnternetsiz çalışan, her değişikliği anında cihazınıza kaydeden sade ve hızlı günlük planlayıcınız. Şimdi kısa bir turla temel özellikleri keşfedelim.',
   welcomeStep2Title: 'Gününüzü 4 Farklı Görünümde Planlayın',
   welcomeStep2Desc:
     'Tek tıkla Düz Liste, Kanban Panosu, Takvim Planlayıcı ve Eisenhower Matrisi arasında geçiş yapın; görevlerinizi sürükleyip bırakarak düzenleyin.',
@@ -810,7 +810,7 @@ export const EN_DICTIONARY: UiDictionary = {
   welcomeOpenSettingsButton: 'OneDrive Settings',
   welcomeStep1Title: 'Welcome to Agendamea',
   welcomeStep1Desc:
-    'Your fast, offline-first daily planner that saves every change instantly on your device. Choose your preferred appearance and language before you begin.',
+    'Your fast, offline-first daily planner that saves every change instantly on your device. Take a quick tour of the core features below.',
   welcomeStep2Title: 'Plan Your Day Across 4 Views',
   welcomeStep2Desc:
     'Switch effortlessly between List, Kanban Board, Calendar Planner, and Eisenhower Matrix with smooth drag-and-drop organization.',

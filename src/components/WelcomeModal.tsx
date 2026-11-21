@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Calendar,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -45,12 +44,14 @@ interface WelcomeModalProps {
   onComplete: (openSettingsAfter?: boolean) => void;
 }
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 6;
 const FEATURED_THEME_IDS: readonly ThemeId[] = [
   'obsidian',
   'blue',
   'emerald',
+  'purple',
   'orange',
+  'pink',
 ];
 
 export function WelcomeModal({
@@ -64,10 +65,8 @@ export function WelcomeModal({
 }: WelcomeModalProps) {
   const { lang, onChangeLanguage, t, meta, getThemeDisplayName } = useI18n();
   const [step, setStep] = useState(0);
-  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [langSearch, setLangSearch] = useState('');
   const [isCustomPickerOpen, setIsCustomPickerOpen] = useState(themeId === 'custom');
-  const langDropdownRef = useRef<HTMLDivElement>(null);
 
   const filteredLanguages = useMemo(() => {
     const q = langSearch.trim().toLowerCase();
@@ -80,25 +79,6 @@ export function WelcomeModal({
     );
   }, [langSearch]);
 
-  const langTriggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!isLangDropdownOpen) return;
-    const handlePointerDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (
-        langDropdownRef.current &&
-        !langDropdownRef.current.contains(target) &&
-        langTriggerRef.current &&
-        !langTriggerRef.current.contains(target)
-      ) {
-        setIsLangDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [isLangDropdownOpen]);
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -109,14 +89,10 @@ export function WelcomeModal({
 
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (isLangDropdownOpen) {
-          setIsLangDropdownOpen(false);
-          return;
-        }
         onComplete(false);
         return;
       }
-      if (isInput || isLangDropdownOpen) return;
+      if (isInput) return;
 
       const forwardKey = meta.dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
       const backKey = meta.dir === 'rtl' ? 'ArrowRight' : 'ArrowLeft';
@@ -132,13 +108,21 @@ export function WelcomeModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onComplete, meta.dir, isLangDropdownOpen]);
+  }, [onComplete, meta.dir]);
 
   const featuredThemes = FEATURED_THEME_IDS.map((id) =>
     COLOR_THEMES.find((item) => item.id === id),
   ).filter((item): item is (typeof COLOR_THEMES)[number] => Boolean(item));
 
   const slideCopy = [
+    {
+      title: t.languageSectionTitle,
+      desc: t.languageSearchPlaceholder,
+    },
+    {
+      title: t.colorThemeTitle,
+      desc: t.customThemeHexHint,
+    },
     {
       title: t.welcomeStep1Title,
       desc: t.welcomeStep1Desc,
@@ -173,7 +157,7 @@ export function WelcomeModal({
         }
       }}
     >
-      <div className="relative flex w-full max-w-[548px] max-h-[calc(100vh-24px)] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+      <div className="relative flex w-full max-w-[540px] max-h-[calc(100vh-24px)] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
         {/* Top Bar */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-3.5 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -213,278 +197,233 @@ export function WelcomeModal({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
-          {/* Consistent Visual Stage Container */}
-          <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4 sm:min-h-[272px] flex flex-col justify-center">
+          {/* Slide Title & Description at top for immediate clarity */}
+          <div className="mb-4 space-y-1">
+            <h2
+              id="welcome-modal-title"
+              className="font-display text-lg font-semibold tracking-tight text-[var(--text-primary)]"
+            >
+              {slideCopy.title}
+            </h2>
+            <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+              {slideCopy.desc}
+            </p>
+          </div>
+
+          {/* Step-Focused Stage Container (One Single Task Per Step) */}
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4 sm:min-h-[248px] flex flex-col justify-center">
+            {/* STEP 1: LANGUAGE SELECTION ONLY */}
             {step === 0 && (
-              <div className="space-y-3.5">
-                <div className="flex flex-col items-center text-center pt-0.5">
-                  <div
-                    className="mb-2.5 rounded-2xl p-1.5"
-                    style={{ backgroundColor: 'var(--accent-soft)' }}
-                  >
-                    <BrandMark className="h-11 w-11 rounded-xl" />
-                  </div>
-                  <div className="flex flex-wrap items-center justify-center gap-1.5">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
-                      <Database className="h-3 w-3 text-[var(--accent)] shrink-0" />
-                      <span>SQLite WAL</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
-                      <Sparkles className="h-3 w-3 text-[var(--accent)] shrink-0" />
-                      <span>28+ {t.themesCountUnit}</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
-                      <Globe className="h-3 w-3 text-[var(--accent)] shrink-0" />
-                      <span>73 · {meta.nativeName}</span>
+              <div className="space-y-3" data-testid="welcome-language-dropdown">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Globe className="h-4 w-4 text-[var(--accent)] shrink-0" />
+                    <span
+                      data-testid="welcome-language-select"
+                      className="text-xs font-semibold text-[var(--text-primary)] truncate"
+                    >
+                      {meta.nativeName} ({meta.englishName})
                     </span>
                   </div>
+                  <span className="rounded-md bg-[var(--accent-soft)] px-2 py-0.5 font-mono-tabular text-[10px] font-semibold uppercase text-[var(--accent)] shrink-0">
+                    {meta.code}
+                  </span>
                 </div>
 
-                {/* Live Theme & Language Quick Personalization */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
-                  {/* Appearance Mode + Curated Colors + Custom HEX Button */}
-                  <div className="flex flex-col justify-between gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-medium text-[var(--text-muted)] whitespace-nowrap">
-                        {t.appearanceModeTitle}
-                      </span>
-                      <div className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--canvas)] p-0.5 shrink-0">
-                        <button
-                          type="button"
-                          data-testid="welcome-mode-light"
-                          onClick={() => onChangeMode('light')}
-                          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors whitespace-nowrap ${
-                            themeMode === 'light'
-                              ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                          }`}
-                          style={
-                            themeMode === 'light'
-                              ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
-                              : undefined
-                          }
-                        >
-                          <Sun className="h-3 w-3" />
-                          <span>{t.lightMode}</span>
-                        </button>
-                        <button
-                          type="button"
-                          data-testid="welcome-mode-dark"
-                          onClick={() => onChangeMode('dark')}
-                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors whitespace-nowrap ${
-                            themeMode === 'dark'
-                              ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                          }`}
-                          style={
-                            themeMode === 'dark'
-                              ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
-                              : undefined
-                          }
-                        >
-                          <Moon className="h-3 w-3" />
-                          <span>{t.darkMode}</span>
-                        </button>
-                        <button
-                          type="button"
-                          data-testid="welcome-mode-system"
-                          onClick={() => onChangeMode('system')}
-                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors whitespace-nowrap ${
-                            themeMode === 'system'
-                              ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                          }`}
-                          style={
-                            themeMode === 'system'
-                              ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
-                              : undefined
-                          }
-                        >
-                          <Monitor className="h-3 w-3" />
-                          <span>{t.systemMode}</span>
-                        </button>
-                      </div>
-                    </div>
+                <div className="relative flex items-center">
+                  <Search className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-[var(--text-muted)]" />
+                  <input
+                    type="text"
+                    value={langSearch}
+                    onChange={(e) => setLangSearch(e.target.value)}
+                    placeholder={t.languageSearchPlaceholder}
+                    aria-label={t.languageSearchPlaceholder}
+                    className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] pl-8 pr-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
+                  />
+                </div>
 
-                    <div className="flex items-center justify-between gap-1.5">
-                      <div className="flex items-center gap-1.5">
-                        {featuredThemes.map((item) => {
-                          const selected = item.id === themeId;
-                          const effectiveMode = resolveEffectiveThemeMode(themeMode);
-                          const colorHex =
-                            effectiveMode === 'dark' ? item.dark.accent : item.light.accent;
-                          return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              title={getThemeDisplayName(item.id, item.name)}
-                              aria-label={getThemeDisplayName(item.id, item.name)}
-                              aria-pressed={selected}
-                              onClick={() => {
-                                onChangeTheme(item.id);
-                                setIsCustomPickerOpen(false);
-                              }}
-                              className={`flex h-6 w-6 items-center justify-center rounded-full border transition-transform ${
-                                selected
-                                  ? 'scale-110 border-[var(--text-primary)] ring-2 ring-[var(--accent-ring)]'
-                                  : 'border-[var(--border-strong)] hover:scale-105'
-                              }`}
-                              style={{ backgroundColor: colorHex }}
-                            >
-                              {selected && (
-                                <Check
-                                  className="h-3 w-3"
-                                  style={{
-                                    color:
-                                      effectiveMode === 'dark'
-                                        ? item.dark.accentFg
-                                        : item.light.accentFg,
-                                  }}
-                                />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Explicit Custom Color / HEX Theme Trigger Button */}
+                {/* Strictly max 5 rows visible (5 * 32px + 8px padding = 168px) with smooth vertical scroll */}
+                <div
+                  role="listbox"
+                  aria-label={t.languageSectionTitle}
+                  data-testid="welcome-language-listbox"
+                  className="max-h-[168px] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+                >
+                  {filteredLanguages.map((item) => {
+                    const selected = item.code === lang;
+                    return (
                       <button
+                        key={item.code}
                         type="button"
-                        data-testid="welcome-custom-theme-btn"
-                        aria-expanded={isCustomPickerOpen}
-                        title={t.customThemeHexTitle}
+                        role="option"
+                        aria-selected={selected}
                         onClick={() => {
-                          setIsLangDropdownOpen(false);
-                          if (themeId !== 'custom') {
-                            onChangeTheme('custom');
-                            setIsCustomPickerOpen(true);
-                          } else {
-                            setIsCustomPickerOpen((prev) => !prev);
-                          }
+                          onChangeLanguage(item.code as LanguageCode);
                         }}
-                        className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10px] font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                          themeId === 'custom'
-                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                            : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]'
+                        className={`flex h-8 w-full items-center justify-between gap-2 rounded-md px-2.5 text-left text-xs transition-colors ${
+                          selected
+                            ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
+                            : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                         }`}
                       >
-                        {themeId === 'custom' ? (
-                          <span
-                            aria-hidden="true"
-                            className="h-2.5 w-2.5 rounded-full border border-black/20 shrink-0"
-                            style={{ backgroundColor: customThemeColor }}
-                          />
-                        ) : (
-                          <Palette className="h-3 w-3 shrink-0 text-[var(--accent)]" />
+                        <span className="truncate">
+                          <span className="text-[var(--text-primary)]">{item.nativeName}</span>{' '}
+                          <span className="text-[11px] text-[var(--text-muted)]">
+                            ({item.englishName})
+                          </span>
+                        </span>
+                        {selected && (
+                          <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                         )}
-                        <span className="font-mono-tabular">
-                          {themeId === 'custom' ? customThemeColor.toUpperCase() : 'HEX'}
-                        </span>
                       </button>
-                    </div>
-                  </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-                  {/* Custom Scrollable Language Picker Trigger */}
-                  <div className="flex flex-col justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5">
-                    <span className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-muted)]">
-                      <Globe className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{t.languageSectionTitle}</span>
-                    </span>
+            {/* STEP 2: APPEARANCE & THEME SELECTION ONLY */}
+            {step === 1 && (
+              <div className="space-y-3.5">
+                {/* Appearance Mode: Light / Dark / System */}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5">
+                  <span className="text-xs font-medium text-[var(--text-primary)]">
+                    {t.appearanceModeTitle}
+                  </span>
+                  <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5">
                     <button
-                      ref={langTriggerRef}
                       type="button"
-                      data-testid="welcome-language-select"
-                      aria-haspopup="listbox"
-                      aria-expanded={isLangDropdownOpen}
-                      onClick={() => {
-                        setIsCustomPickerOpen(false);
-                        setIsLangDropdownOpen((prev) => !prev);
-                        setLangSearch('');
-                      }}
-                      className="flex h-8 w-full items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-strong)] focus:border-[var(--accent)] transition-colors"
+                      data-testid="welcome-mode-light"
+                      onClick={() => onChangeMode('light')}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                        themeMode === 'light'
+                          ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                      style={
+                        themeMode === 'light'
+                          ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
+                          : undefined
+                      }
                     >
-                      <span className="truncate">
-                        {meta.nativeName}
-                      </span>
-                      <span className="flex items-center gap-1.5 shrink-0">
-                        <span className="font-mono-tabular text-[10px] text-[var(--text-muted)] uppercase">
-                          {meta.code}
-                        </span>
-                        <ChevronDown
-                          className={`h-3.5 w-3.5 text-[var(--text-muted)] transition-transform ${
-                            isLangDropdownOpen ? 'rotate-180' : ''
-                          }`}
-                        />
-                      </span>
+                      <Sun className="h-3.5 w-3.5" />
+                      <span>{t.lightMode}</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="welcome-mode-dark"
+                      onClick={() => onChangeMode('dark')}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                        themeMode === 'dark'
+                          ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                      style={
+                        themeMode === 'dark'
+                          ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
+                          : undefined
+                      }
+                    >
+                      <Moon className="h-3.5 w-3.5" />
+                      <span>{t.darkMode}</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="welcome-mode-system"
+                      onClick={() => onChangeMode('system')}
+                      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                        themeMode === 'system'
+                          ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
+                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                      style={
+                        themeMode === 'system'
+                          ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
+                          : undefined
+                      }
+                    >
+                      <Monitor className="h-3.5 w-3.5" />
+                      <span>{t.systemMode}</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Inline Scrollable Language List (Strictly Max 5 Rows Visible, Zero Clipping) */}
-                {isLangDropdownOpen && (
-                  <div
-                    ref={langDropdownRef}
-                    data-testid="welcome-language-dropdown"
-                    className="overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--surface)]"
-                  >
-                    <div className="border-b border-[var(--border)] p-1.5">
-                      <div className="relative flex items-center">
-                        <Search className="pointer-events-none absolute left-2 h-3 w-3 text-[var(--text-muted)]" />
-                        <input
-                          type="text"
-                          autoFocus
-                          value={langSearch}
-                          onChange={(e) => setLangSearch(e.target.value)}
-                          placeholder={t.languageSearchPlaceholder}
-                          aria-label={t.languageSearchPlaceholder}
-                          className="h-7 w-full rounded-md border border-[var(--border)] bg-[var(--canvas)] pl-7 pr-2 text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Strictly max 5 rows visible (5 * 28px + 8px padding = 148px) with smooth vertical scroll */}
-                    <div
-                      role="listbox"
-                      aria-label={t.languageSectionTitle}
-                      data-testid="welcome-language-listbox"
-                      className="max-h-[148px] overflow-y-auto p-1"
-                    >
-                      {filteredLanguages.map((item) => {
-                        const selected = item.code === lang;
-                        return (
-                          <button
-                            key={item.code}
-                            type="button"
-                            role="option"
-                            aria-selected={selected}
-                            onClick={() => {
-                              onChangeLanguage(item.code as LanguageCode);
-                              setIsLangDropdownOpen(false);
-                              setLangSearch('');
-                            }}
-                            className={`flex h-7 w-full items-center justify-between gap-2 rounded-md px-2.5 text-left text-xs transition-colors ${
-                              selected
-                                ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
-                                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                            }`}
-                          >
-                            <span className="truncate">
-                              <span className="text-[var(--text-primary)]">
-                                {item.nativeName}
-                              </span>{' '}
-                              <span className="text-[10px] text-[var(--text-muted)]">
-                                ({item.englishName})
-                              </span>
-                            </span>
-                            {selected && (
-                              <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
+                {/* Preset Theme Swatches + Custom Color (HEX) Button */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {featuredThemes.map((item) => {
+                      const selected = item.id === themeId;
+                      const effectiveMode = resolveEffectiveThemeMode(themeMode);
+                      const colorHex =
+                        effectiveMode === 'dark' ? item.dark.accent : item.light.accent;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          title={getThemeDisplayName(item.id, item.name)}
+                          aria-label={getThemeDisplayName(item.id, item.name)}
+                          aria-pressed={selected}
+                          onClick={() => {
+                            onChangeTheme(item.id);
+                            setIsCustomPickerOpen(false);
+                          }}
+                          className={`flex h-7 w-7 items-center justify-center rounded-full border transition-transform ${
+                            selected
+                              ? 'scale-110 border-[var(--text-primary)] ring-2 ring-[var(--accent-ring)]'
+                              : 'border-[var(--border-strong)] hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: colorHex }}
+                        >
+                          {selected && (
+                            <Check
+                              className="h-3.5 w-3.5"
+                              style={{
+                                color:
+                                  effectiveMode === 'dark'
+                                    ? item.dark.accentFg
+                                    : item.light.accentFg,
+                              }}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
+
+                  <button
+                    type="button"
+                    data-testid="welcome-custom-theme-btn"
+                    aria-expanded={isCustomPickerOpen}
+                    title={t.customThemeHexTitle}
+                    onClick={() => {
+                      if (themeId !== 'custom') {
+                        onChangeTheme('custom');
+                        setIsCustomPickerOpen(true);
+                      } else {
+                        setIsCustomPickerOpen((prev) => !prev);
+                      }
+                    }}
+                    className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                      themeId === 'custom'
+                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                        : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {themeId === 'custom' ? (
+                      <span
+                        aria-hidden="true"
+                        className="h-3 w-3 rounded-full border border-black/20 shrink-0"
+                        style={{ backgroundColor: customThemeColor }}
+                      />
+                    ) : (
+                      <Palette className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                    )}
+                    <span>{t.customThemeButton}</span>
+                    <span className="font-mono-tabular text-[10px] opacity-80">
+                      {themeId === 'custom' ? customThemeColor.toUpperCase() : 'HEX'}
+                    </span>
+                  </button>
+                </div>
 
                 {/* Expandable In-App Full-Spectrum Custom Color Picker */}
                 {isCustomPickerOpen && (
@@ -516,7 +455,40 @@ export function WelcomeModal({
               </div>
             )}
 
-            {step === 1 && (
+            {/* STEP 3: CALM, FOCUSED WELCOME HERO */}
+            {step === 2 && (
+              <div className="flex flex-col items-center justify-center py-4 text-center space-y-4">
+                <div
+                  className="rounded-2xl p-2.5 shadow-sm"
+                  style={{ backgroundColor: 'var(--accent-soft)' }}
+                >
+                  <BrandMark className="h-14 w-14 rounded-xl" />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-display text-base font-semibold text-[var(--text-primary)]">
+                    Agendamea · {t.appTitleSuffix}
+                  </p>
+                  <p className="text-xs text-[var(--text-muted)]">{t.instantSaveBadge}</p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
+                    <Database className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                    <span>SQLite WAL</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
+                    <Sparkles className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                    <span>28+ {t.themesCountUnit}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
+                    <Globe className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                    <span>73 · {meta.nativeName}</span>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 4: 4 PLANNING VIEWS */}
+            {step === 3 && (
               <div className="grid grid-cols-2 gap-2.5">
                 {/* List Card */}
                 <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -644,7 +616,8 @@ export function WelcomeModal({
               </div>
             )}
 
-            {step === 2 && (
+            {/* STEP 5: SMART DETAILS & KEYBOARD SHORTCUTS */}
+            {step === 4 && (
               <div className="space-y-3">
                 {/* Realistic Task Card Anatomy Preview */}
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3.5">
@@ -718,7 +691,8 @@ export function WelcomeModal({
               </div>
             )}
 
-            {step === 3 && (
+            {/* STEP 6: PRIVACY & CLOUD BACKUP */}
+            {step === 5 && (
               <div className="space-y-2.5">
                 {[
                   {
@@ -773,19 +747,6 @@ export function WelcomeModal({
                 ))}
               </div>
             )}
-          </div>
-
-          {/* Slide Title & Description */}
-          <div className="space-y-1.5">
-            <h2
-              id="welcome-modal-title"
-              className="font-display text-lg font-semibold tracking-tight text-[var(--text-primary)]"
-            >
-              {slideCopy.title}
-            </h2>
-            <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
-              {slideCopy.desc}
-            </p>
           </div>
         </div>
 
