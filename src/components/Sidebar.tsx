@@ -810,6 +810,7 @@ export const Sidebar = React.memo(function Sidebar({
         {compact ? (
           <button
             type="button"
+            data-testid="open-settings-button"
             onClick={() => {
               onCloseMobile();
               onOpenSettings();
@@ -823,6 +824,7 @@ export const Sidebar = React.memo(function Sidebar({
         ) : (
           <button
             type="button"
+            data-testid="open-settings-button"
             onClick={() => {
               onCloseMobile();
               onOpenSettings();

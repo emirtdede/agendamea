@@ -34,6 +34,7 @@ import {
 import { ToastContainer } from './components/ToastContainer';
 import { TodoDetailPanel } from './components/TodoDetailPanel';
 import { TodoItem } from './components/TodoItem';
+import { WelcomeModal } from './components/WelcomeModal';
 import { WindowControls } from './components/WindowControls';
 import { useDelayedFocus } from './hooks/useDelayedFocus';
 import { useToast } from './hooks/useToast';
@@ -113,6 +114,8 @@ export default function App() {
     readInitialSidebarCollapsed(),
   );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
+  const welcomeCheckedRef = useRef(false);
 
   const [updateState, setUpdateState] = useState<{
     status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'error';
@@ -283,6 +286,29 @@ export default function App() {
         data.categories.length === 0 &&
         data.trashedTodos.length === 0 &&
         data.trashedCategories.length === 0;
+
+      if (!welcomeCheckedRef.current) {
+        welcomeCheckedRef.current = true;
+        let localOnboardingDone = false;
+        try {
+          localOnboardingDone = localStorage.getItem('agendamea-onboarding-completed') === 'true';
+        } catch {
+          // Ignore storage read errors
+        }
+        if (!data.settings.onboardingCompleted && !localOnboardingDone) {
+          if (isLocalCompletelyEmpty) {
+            setIsWelcomeOpen(true);
+          } else {
+            try {
+              localStorage.setItem('agendamea-onboarding-completed', 'true');
+            } catch {
+              // Ignore storage write errors
+            }
+            void api.updateSettings({ onboardingCompleted: true }).catch(() => {});
+          }
+        }
+      }
+
       if (isLocalCompletelyEmpty) {
         let dismissed = false;
         try {
@@ -461,6 +487,7 @@ export default function App() {
   const keyboardReorderRef = useRef<((direction: 'up' | 'down') => void) | null>(null);
   const keyStateRef = useRef({
     isSettingsOpen,
+    isWelcomeOpen,
     isMobileSidebarOpen,
     selectedTodoId,
     searchQuery,
@@ -469,6 +496,7 @@ export default function App() {
   });
   keyStateRef.current = {
     isSettingsOpen,
+    isWelcomeOpen,
     isMobileSidebarOpen,
     selectedTodoId,
     searchQuery,
@@ -494,8 +522,8 @@ export default function App() {
       }
 
       if (e.key === 'Escape') {
-        if (state.isSettingsOpen) {
-          // SettingsModal handles Escape internally (including returning from Legal sub-pages)
+        if (state.isSettingsOpen || state.isWelcomeOpen) {
+          // SettingsModal and WelcomeModal handle Escape internally
           return;
         }
         if (state.isMobileSidebarOpen) {
@@ -510,7 +538,7 @@ export default function App() {
         return;
       }
 
-      if (isTypingField || state.isSettingsOpen) return;
+      if (isTypingField || state.isSettingsOpen || state.isWelcomeOpen) return;
 
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault();
@@ -1330,6 +1358,29 @@ export default function App() {
     setIsSettingsOpen(false);
   }, []);
 
+  const handleCompleteWelcome = useCallback(
+    (openSettingsAfter = false) => {
+      setIsWelcomeOpen(false);
+      try {
+        localStorage.setItem('agendamea-onboarding-completed', 'true');
+      } catch {
+        // Ignore storage errors
+      }
+      void api.updateSettings({ onboardingCompleted: true }).catch(() => {});
+      if (openSettingsAfter) {
+        setIsSettingsOpen(true);
+      } else {
+        scheduleFocus(() => quickAddRef.current?.focus(), 60);
+      }
+    },
+    [scheduleFocus],
+  );
+
+  const handleOpenWelcomeGuide = useCallback(() => {
+    setIsSettingsOpen(false);
+    setIsWelcomeOpen(true);
+  }, []);
+
   const handleCloseMobileSidebar = useCallback(() => {
     setIsMobileSidebarOpen(false);
   }, []);
@@ -1353,11 +1404,14 @@ export default function App() {
     try {
       const { bootstrap } = await api.syncOneDrivePull();
       setOneDrivePrompt(null);
+      setIsWelcomeOpen(false);
       try {
         localStorage.setItem('agendamea-onedrive-prompt-dismissed', 'true');
+        localStorage.setItem('agendamea-onboarding-completed', 'true');
       } catch {
         // Ignore storage error
       }
+      void api.updateSettings({ onboardingCompleted: true }).catch(() => {});
       handleApplyRestoredBootstrap(bootstrap);
     } catch (err) {
       showInfoToast(formatUiError(err), 'error');
@@ -1624,9 +1678,12 @@ export default function App() {
                           <h2 className="font-display text-sm font-bold text-[var(--text-primary)]">
                             {t.onedriveBackupDetectedTitle}
                           </h2>
-                          {typeof oneDrivePrompt.remoteTodoCount === 'number' && (
+                          {((oneDrivePrompt.remoteTodoCount ?? 0) > 0 ||
+                            (oneDrivePrompt.remoteCategoryCount ?? 0) > 0) && (
                             <span className="rounded-md border border-[var(--border)] bg-[var(--surface-subtle)] px-2 py-0.5 font-mono-tabular text-[11px] text-[var(--text-secondary)]">
-                              {oneDrivePrompt.remoteTodoCount} {t.tasksTitle.toLowerCase()}
+                              {(oneDrivePrompt.remoteTodoCount ?? 0) > 0
+                                ? `${oneDrivePrompt.remoteTodoCount} ${t.tasksTitle.toLowerCase()}`
+                                : `${oneDrivePrompt.remoteCategoryCount} ${t.categories.toLowerCase()}`}
                             </span>
                           )}
                         </div>
@@ -1906,8 +1963,20 @@ export default function App() {
               onRestoreCategory={handleRestoreCategory}
               onPermanentDeleteCategory={handlePermanentDeleteCategory}
               onEmptyTrash={handleEmptyTrash}
+              onOpenWelcomeGuide={handleOpenWelcomeGuide}
             />
           </Suspense>
+        )}
+
+        {/* First-Launch Welcome & Onboarding Modal */}
+        {isWelcomeOpen && !oneDrivePrompt && !isSettingsOpen && (
+          <WelcomeModal
+            themeMode={themeMode}
+            themeId={themeId}
+            onChangeMode={handleModeChange}
+            onChangeTheme={handleThemeChange}
+            onComplete={handleCompleteWelcome}
+          />
         )}
 
         <OfflineIndicator />

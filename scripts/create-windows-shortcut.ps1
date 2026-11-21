@@ -1,4 +1,4 @@
-﻿# Agendamea - Windows Masaustu ve Baslat Menusu Kisayol Olusturucu
+# Agendamea - Windows Masaustu ve Baslat Menusu Kisayol Olusturucu
 $ErrorActionPreference = "Stop"
 
 $ProjectDir = Split-Path -Parent $PSScriptRoot

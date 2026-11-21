@@ -1076,6 +1076,11 @@ test('QA: Zero language leakage across all 73 languages, UI components, color na
     'onedriveStartFreshButton',
     'onedriveOpenFolderButton',
     'addTagPlaceholder',
+    'welcomeStep1Title',
+    'welcomeStep2Desc',
+    'welcomeStep4Desc',
+    'welcomeStartButton',
+    'welcomePrivacyLocalTitle',
   ];
 
   for (const langMeta of SUPPORTED_LANGUAGES) {
@@ -1387,6 +1392,9 @@ test('QA: Optional dueTime, post-creation #tags, Kanban/Calendar/Matrix helpers 
     assert.equal(byTag.length, 1);
 
     const snap = db.getBootstrap();
+    const afterOnboarding = db.updateSettings({ onboardingCompleted: true });
+    assert.equal(afterOnboarding.onboardingCompleted, true);
+    assert.equal(db.getSettings().onboardingCompleted, true);
     const db2 = new TodoDatabase(':memory:');
     try {
       const restored = db2.importBackup(snap);

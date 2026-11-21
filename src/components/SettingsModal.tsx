@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Scale,
   Shield,
+  Sparkles,
   Sun,
   Trash2,
   Unlock,
@@ -66,6 +67,7 @@ interface SettingsModalProps {
   onRestoreCategory: (id: string) => Promise<void>;
   onPermanentDeleteCategory: (id: string) => Promise<void>;
   onEmptyTrash: () => Promise<void>;
+  onOpenWelcomeGuide?: () => void;
 }
 
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
@@ -111,6 +113,7 @@ export function SettingsModal({
   onRestoreCategory,
   onPermanentDeleteCategory,
   onEmptyTrash,
+  onOpenWelcomeGuide,
 }: SettingsModalProps) {
   const { lang, t, meta, getThemeDisplayName, legalDocs } = useI18n();
   const [activeTab, setActiveTab] = useState<'general' | 'trash'>('general');
@@ -931,6 +934,17 @@ export function SettingsModal({
                   <span>© 2026 Vellium</span>
                 </div>
                 <div className="flex items-center gap-3">
+                  {onOpenWelcomeGuide && (
+                    <button
+                      type="button"
+                      data-testid="settings-open-welcome-guide"
+                      onClick={onOpenWelcomeGuide}
+                      className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+                    >
+                      <Sparkles className="h-3 w-3 text-[var(--accent)] shrink-0" />
+                      <span>{t.welcomeReplayButton}</span>
+                    </button>
+                  )}
                   <a
                     href="https://vellium.dev"
                     target="_blank"

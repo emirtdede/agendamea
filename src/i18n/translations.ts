@@ -233,6 +233,30 @@ export interface UiDictionary {
   onedriveBackupDetectedTitle: string;
   onedriveBackupDetectedDesc: string;
   onedriveStartFreshButton: string;
+  welcomeReplayButton: string;
+  welcomeSkipButton: string;
+  welcomeBackButton: string;
+  welcomeNextButton: string;
+  welcomeStartButton: string;
+  welcomeOpenSettingsButton: string;
+  welcomeStep1Title: string;
+  welcomeStep1Desc: string;
+  welcomeStep2Title: string;
+  welcomeStep2Desc: string;
+  welcomeStep3Title: string;
+  welcomeStep3Desc: string;
+  welcomeStep4Title: string;
+  welcomeStep4Desc: string;
+  welcomeCardListDesc: string;
+  welcomeCardKanbanDesc: string;
+  welcomeCardCalendarDesc: string;
+  welcomeCardMatrixDesc: string;
+  welcomePrivacyLocalTitle: string;
+  welcomePrivacyLocalDesc: string;
+  welcomePrivacyCloudTitle: string;
+  welcomePrivacyCloudDesc: string;
+  welcomePrivacyUndoTitle: string;
+  welcomePrivacyUndoDesc: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -452,6 +476,34 @@ export const TR_DICTIONARY: UiDictionary = {
   onedriveBackupDetectedDesc:
     'OneDrive klasörünüzde daha önceden kaydedilmiş bir Agendamea yedeği bulundu. Verilerinizi geri yüklemek mi, yoksa yeni bir başlangıç yapmak mı istersiniz?',
   onedriveStartFreshButton: 'Yeni Başlangıç Yap',
+  welcomeReplayButton: 'Karşılama Rehberi',
+  welcomeSkipButton: 'Atla',
+  welcomeBackButton: 'Geri',
+  welcomeNextButton: 'İleri',
+  welcomeStartButton: 'Planlamaya Başla',
+  welcomeOpenSettingsButton: 'OneDrive Ayarları',
+  welcomeStep1Title: "Agendamea'ya Hoş Geldiniz",
+  welcomeStep1Desc:
+    'İnternetsiz çalışan, her değişikliği anında cihazınıza kaydeden sade ve hızlı günlük planlayıcınız. Başlamadan önce görünümünüzü ve dilinizi seçebilirsiniz.',
+  welcomeStep2Title: 'Gününüzü 4 Farklı Görünümde Planlayın',
+  welcomeStep2Desc:
+    'Tek tıkla Düz Liste, Kanban Panosu, Takvim Planlayıcı ve Eisenhower Matrisi arasında geçiş yapın; görevlerinizi sürükleyip bırakarak düzenleyin.',
+  welcomeStep3Title: 'Akıllı Detaylar ve Klavye Kısayolları',
+  welcomeStep3Desc:
+    'Başlangıç-bitiş tarihleri, saatler, alt görevler, otomatik kaydedilen notlar ve #etiketler ile her işi netleştirin; kısayollarla hız kazanın.',
+  welcomeStep4Title: 'Verileriniz Sizde Kalır, Yedekleriniz Güvende',
+  welcomeStep4Desc:
+    'Tüm veriler yerel SQLite veritabanında tutulur. Dilerseniz kendi Microsoft OneDrive klasörünüzü bağlayarak ücretsiz ve sunucusuz 15 günlük otomatik yedekleme açabilirsiniz.',
+  welcomeCardListDesc: 'Hızlı günlük akış ve akıllı filtreler',
+  welcomeCardKanbanDesc: 'Öncelik veya duruma göre sütunlar',
+  welcomeCardCalendarDesc: 'Saatli aylık takvim ve sürükle-planla',
+  welcomeCardMatrixDesc: '4 kadranlı aciliyet-önem matrisi',
+  welcomePrivacyLocalTitle: 'Yerel SQLite ve Anlık Kayıt',
+  welcomePrivacyLocalDesc: 'Hesap veya internet gerekmez; veriler cihazınızdan dışarı çıkmaz.',
+  welcomePrivacyCloudTitle: 'Ücretsiz OneDrive Bulut Yedekleme',
+  welcomePrivacyCloudDesc: '15 günlük tarihli yedek ve format sonrası otomatik kurtarma.',
+  welcomePrivacyUndoTitle: 'Çöp Kutusu ve 12 Saniyelik Geri Al',
+  welcomePrivacyUndoDesc: 'Yanlışlıkla silinen görev ve kategorileri tek tıkla geri getirin.',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -671,6 +723,34 @@ export const EN_DICTIONARY: UiDictionary = {
   onedriveBackupDetectedDesc:
     'An existing Agendamea backup was found in your OneDrive folder. Would you like to restore your previous tasks or start fresh?',
   onedriveStartFreshButton: 'Start Fresh',
+  welcomeReplayButton: 'Welcome Guide',
+  welcomeSkipButton: 'Skip',
+  welcomeBackButton: 'Back',
+  welcomeNextButton: 'Next',
+  welcomeStartButton: 'Start Planning',
+  welcomeOpenSettingsButton: 'OneDrive Settings',
+  welcomeStep1Title: 'Welcome to Agendamea',
+  welcomeStep1Desc:
+    'Your fast, offline-first daily planner that saves every change instantly on your device. Choose your preferred appearance and language before you begin.',
+  welcomeStep2Title: 'Plan Your Day Across 4 Views',
+  welcomeStep2Desc:
+    'Switch effortlessly between List, Kanban Board, Calendar Planner, and Eisenhower Matrix with smooth drag-and-drop organization.',
+  welcomeStep3Title: 'Smart Details & Keyboard Shortcuts',
+  welcomeStep3Desc:
+    'Organize tasks with date ranges, due times, subtasks, auto-saving notes, and #tags, and move faster with built-in keyboard shortcuts.',
+  welcomeStep4Title: 'Your Data Stays Private & Protected',
+  welcomeStep4Desc:
+    'Everything lives locally in a self-healing SQLite database. Connect your own Microsoft OneDrive folder anytime for free, serverless 15-day backups.',
+  welcomeCardListDesc: 'Fast daily flow & smart filters',
+  welcomeCardKanbanDesc: 'Columns by priority or status',
+  welcomeCardCalendarDesc: 'Timed monthly grid & drag-to-schedule',
+  welcomeCardMatrixDesc: '4-quadrant urgent-important grid',
+  welcomePrivacyLocalTitle: 'Local SQLite & Instant Auto-Save',
+  welcomePrivacyLocalDesc: 'No account or internet needed; data never leaves your PC.',
+  welcomePrivacyCloudTitle: 'Free Serverless OneDrive Backup',
+  welcomePrivacyCloudDesc: '15-day daily snapshots and automatic recovery after reinstall.',
+  welcomePrivacyUndoTitle: 'Trash Bin & 12-Second Undo',
+  welcomePrivacyUndoDesc: 'Recover accidentally deleted tasks or categories in one click.',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {

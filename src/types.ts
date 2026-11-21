@@ -84,6 +84,7 @@ export interface AppSettings {
   autoUpdateCheck?: boolean;
   onedriveAutoSync?: boolean;
   onedriveCustomPath?: string;
+  onboardingCompleted?: boolean;
 }
 
 export interface BootstrapPayload {

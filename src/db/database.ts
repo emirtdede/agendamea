@@ -291,6 +291,7 @@ export class TodoDatabase {
       stmt.run('autoUpdateCheck', '1');
       stmt.run('onedriveAutoSync', '0');
       stmt.run('onedriveCustomPath', '');
+      stmt.run('onboardingCompleted', '0');
     });
     tx();
   }
@@ -369,7 +370,7 @@ export class TodoDatabase {
 
   getSettings(): AppSettings {
     const rows = this.db
-      .prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .prepare('SELECT key, value FROM settings WHERE key IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .all(
         'themeMode',
         'themeId',
@@ -380,6 +381,7 @@ export class TodoDatabase {
         'autoUpdateCheck',
         'onedriveAutoSync',
         'onedriveCustomPath',
+        'onboardingCompleted',
       ) as SettingRow[];
 
     const map = new Map(rows.map((r) => [r.key, r.value]));
@@ -392,6 +394,7 @@ export class TodoDatabase {
     const rawAutoUpdate = map.get('autoUpdateCheck');
     const rawOnedriveAutoSync = map.get('onedriveAutoSync');
     const rawOnedrivePath = map.get('onedriveCustomPath') ?? '';
+    const rawOnboardingCompleted = map.get('onboardingCompleted');
 
     const settings: AppSettings = {
       themeMode: rawMode === 'dark' ? 'dark' : 'light',
@@ -407,6 +410,9 @@ export class TodoDatabase {
     }
     if (rawOnedrivePath.length > 0) {
       settings.onedriveCustomPath = rawOnedrivePath;
+    }
+    if (rawOnboardingCompleted === '1' || rawOnboardingCompleted === 'true') {
+      settings.onboardingCompleted = true;
     }
     return settings;
   }
@@ -440,6 +446,9 @@ export class TodoDatabase {
     }
     if (typeof patch.onedriveCustomPath === 'string') {
       stmt.run('onedriveCustomPath', patch.onedriveCustomPath.trim().slice(0, 500));
+    }
+    if (typeof patch.onboardingCompleted === 'boolean') {
+      stmt.run('onboardingCompleted', patch.onboardingCompleted ? '1' : '0');
     }
   }
 
