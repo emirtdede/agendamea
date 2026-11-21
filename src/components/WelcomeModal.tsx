@@ -14,6 +14,7 @@ import {
   Hash,
   Keyboard,
   List,
+  Monitor,
   Moon,
   Palette,
   RotateCcw,
@@ -26,7 +27,11 @@ import {
 import { useI18n } from '../i18n/I18nContext';
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '../i18n/languages';
 import type { ThemeId, ThemeMode } from '../types';
-import { COLOR_THEMES, getContrastingForeground } from '../utils/themes';
+import {
+  COLOR_THEMES,
+  getContrastingForeground,
+  resolveEffectiveThemeMode,
+} from '../utils/themes';
 import { BrandMark } from './BrandMark';
 import { ColorSpectrumPicker } from './ColorSpectrumPicker';
 
@@ -266,7 +271,7 @@ export function WelcomeModal({
                           type="button"
                           data-testid="welcome-mode-dark"
                           onClick={() => onChangeMode('dark')}
-                          className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors whitespace-nowrap ${
+                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors whitespace-nowrap ${
                             themeMode === 'dark'
                               ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -280,6 +285,24 @@ export function WelcomeModal({
                           <Moon className="h-3 w-3" />
                           <span>{t.darkMode}</span>
                         </button>
+                        <button
+                          type="button"
+                          data-testid="welcome-mode-system"
+                          onClick={() => onChangeMode('system')}
+                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors whitespace-nowrap ${
+                            themeMode === 'system'
+                              ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
+                              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                          }`}
+                          style={
+                            themeMode === 'system'
+                              ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
+                              : undefined
+                          }
+                        >
+                          <Monitor className="h-3 w-3" />
+                          <span>{t.systemMode}</span>
+                        </button>
                       </div>
                     </div>
 
@@ -287,8 +310,9 @@ export function WelcomeModal({
                       <div className="flex items-center gap-1.5">
                         {featuredThemes.map((item) => {
                           const selected = item.id === themeId;
+                          const effectiveMode = resolveEffectiveThemeMode(themeMode);
                           const colorHex =
-                            themeMode === 'dark' ? item.dark.accent : item.light.accent;
+                            effectiveMode === 'dark' ? item.dark.accent : item.light.accent;
                           return (
                             <button
                               key={item.id}
@@ -312,7 +336,7 @@ export function WelcomeModal({
                                   className="h-3 w-3"
                                   style={{
                                     color:
-                                      themeMode === 'dark'
+                                      effectiveMode === 'dark'
                                         ? item.dark.accentFg
                                         : item.light.accentFg,
                                   }}

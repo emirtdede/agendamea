@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: Vellium.Agendamea
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: Vellium
+PublisherUrl: https://vellium.dev
+PublisherSupportUrl: https://github.com/emirtdede/agendamea/issues
+PrivacyUrl: https://vellium.dev
+Author: Vellium
+PackageName: Agendamea
+PackageUrl: https://github.com/emirtdede/agendamea
+License: MIT
+LicenseUrl: https://github.com/emirtdede/agendamea/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Vellium (vellium.dev)
+ShortDescription: Fast, offline-first daily task manager and planner for Windows 10/11.
+Description: Agendamea is a fast, offline-first daily task manager for Windows 10/11 built with local SQLite WAL persistence, 4 planning views (List, Kanban, Calendar, Eisenhower Matrix), serverless cloud folder sync (OneDrive, Google Drive, Dropbox), 14+ custom HEX themes, dynamic system-wide icons, and 73 languages.
+Moniker: agendamea
+Tags:
+  - todo
+  - tasks
+  - planner
+  - kanban
+  - productivity
+  - offline
+  - sqlite
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

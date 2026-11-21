@@ -6,12 +6,14 @@ import {
   ChevronRight,
   Cloud,
   Contrast,
+  Copy,
   Download,
   FileText,
   FolderOpen,
   Keyboard,
   Lock,
   Minus,
+  Monitor,
   Moon,
   Palette,
   Plus,
@@ -45,6 +47,7 @@ import type {
 import {
   COLOR_THEMES,
   resolveAppIconColors,
+  resolveEffectiveThemeMode,
   ZOOM_PRESETS,
 } from '../utils/themes';
 import { BrandMark } from './BrandMark';
@@ -65,6 +68,8 @@ interface SettingsModalProps {
   highContrast: boolean;
   reducedMotion: boolean;
   closeBehavior: CloseBehavior;
+  launchAtStartup?: boolean;
+  globalQuickAddShortcut?: boolean;
   dragLocked: boolean;
   onChangeMode: (mode: ThemeMode) => void;
   onChangeTheme: (id: ThemeId) => void;
@@ -75,6 +80,8 @@ interface SettingsModalProps {
   onToggleHighContrast: (enabled: boolean) => void;
   onToggleReducedMotion: (enabled: boolean) => void;
   onChangeCloseBehavior: (behavior: CloseBehavior) => void;
+  onToggleLaunchAtStartup?: (enabled: boolean) => void;
+  onToggleGlobalQuickAddShortcut?: (enabled: boolean) => void;
   onToggleDragLock: (locked: boolean) => void;
   autoUpdateCheck: boolean;
   onToggleAutoUpdateCheck: (enabled: boolean) => void;
@@ -129,6 +136,8 @@ export function SettingsModal({
   highContrast,
   reducedMotion,
   closeBehavior,
+  launchAtStartup = false,
+  globalQuickAddShortcut = true,
   dragLocked,
   onChangeMode,
   onChangeTheme,
@@ -139,6 +148,8 @@ export function SettingsModal({
   onToggleHighContrast,
   onToggleReducedMotion,
   onChangeCloseBehavior,
+  onToggleLaunchAtStartup,
+  onToggleGlobalQuickAddShortcut,
   onToggleDragLock,
   autoUpdateCheck,
   onToggleAutoUpdateCheck,
@@ -169,6 +180,7 @@ export function SettingsModal({
   const [busyTrashIds, setBusyTrashIds] = useState<Set<string>>(() => new Set());
   const [importError, setImportError] = useState<string | null>(null);
   const [isAppIconOpen, setIsAppIconOpen] = useState(false);
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
 
   const [oneDriveStatus, setOneDriveStatus] = useState<OneDriveStatus | null>(null);
   const [isOneDriveBusy, setIsOneDriveBusy] = useState(false);
@@ -264,6 +276,65 @@ export function SettingsModal({
       await api.openOneDriveFolder(oneDriveStatus?.folderPath);
     } catch {
       // Ignore folder open errors
+    }
+  };
+
+  const handleOneDrivePickFolder = async () => {
+    if (isOneDriveBusy) return;
+    setImportError(null);
+    try {
+      const picked = await window.agendameaWindow?.pickCloudSyncFolder?.();
+      if (!picked || picked.canceled || !picked.folderPath) return;
+      setIsOneDriveBusy(true);
+      const next = await api.connectOneDrive({
+        folderPath: picked.folderPath,
+        autoSync: true,
+      });
+      if (isMountedRef.current) setOneDriveStatus(next);
+      if (next.restoredBootstrap) {
+        if (onApplyRestoredBootstrap) {
+          onApplyRestoredBootstrap(next.restoredBootstrap);
+        } else {
+          await onImportBackup(next.restoredBootstrap);
+        }
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setImportError(
+          localizeErrorMessage(err, t.operationFailedToast, lang, t),
+        );
+      }
+    } finally {
+      if (isMountedRef.current) setIsOneDriveBusy(false);
+    }
+  };
+
+  const handleCopyDiagnostics = async () => {
+    try {
+      const diag = await window.agendameaWindow?.getDiagnostics?.();
+      const lines = [
+        `Agendamea v${diag?.appVersion || '1.0.0'} (Vellium)`,
+        `OS: ${diag ? `${diag.platform} ${diag.arch} (${diag.osRelease})` : navigator.userAgent}`,
+        diag?.electronVersion
+          ? `Runtime: Electron ${diag.electronVersion} / Chrome ${diag.chromeVersion} / Node ${diag.nodeVersion}`
+          : 'Runtime: Web/PWA',
+        `Channel: ${diag?.isWindowsStore ? 'Microsoft Store' : 'Desktop'}`,
+        `Language: ${lang} (${meta.nativeName})`,
+        `Theme: ${themeId} (${themeMode}) | Icon: ${appIconId} | Zoom: ${zoomPercent}%`,
+        `Accessibility: HighContrast=${Boolean(highContrast)} | ReducedMotion=${Boolean(reducedMotion)}`,
+        `Startup: LaunchAtStartup=${Boolean(launchAtStartup)} | GlobalShortcut=${Boolean(globalQuickAddShortcut)} | Close=${closeBehavior}`,
+        `CloudSync: Connected=${Boolean(oneDriveStatus?.connected)} | AutoSync=${Boolean(oneDriveStatus?.autoSync)}`,
+        `LocalData: ActiveTasks=${totalTodoCount} | Completed=${completedTodoCount} | Trash=${trashedTodos.length + trashedCategories.length}`,
+      ];
+      await navigator.clipboard.writeText(lines.join('\n'));
+      if (isMountedRef.current) {
+        setDiagnosticsCopied(true);
+        window.setTimeout(() => {
+          if (isMountedRef.current) setDiagnosticsCopied(false);
+        }, 3000);
+      }
+    } catch {
+      // Ignore clipboard permission errors
     }
   };
 
@@ -435,6 +506,7 @@ export function SettingsModal({
 
   const shortcuts = [
     { keys: 'N', label: t.shortcutNewTask },
+    { keys: 'Ctrl + Alt + N', label: t.globalQuickAddTitle },
     { keys: '/ · Ctrl+K', label: t.shortcutSearch },
     { keys: 'Alt + ↑ / ↓', label: t.shortcutReorder },
     { keys: 'Esc', label: t.shortcutEscape },
@@ -547,14 +619,15 @@ export function SettingsModal({
             />
           ) : activeTab === 'general' ? (
             <>
-              {/* Appearance Mode */}
+              {/* Appearance Mode (Light / Dark / System Auto-Follow) */}
               <section aria-label={t.appearanceModeTitle} className="space-y-2.5">
                 <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
                   {t.appearanceModeTitle}
                 </h3>
-                <div className="grid grid-cols-2 gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-1">
+                <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-1">
                   <button
                     type="button"
+                    data-testid="theme-mode-light"
                     onClick={() => onChangeMode('light')}
                     aria-pressed={themeMode === 'light'}
                     className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors whitespace-nowrap ${themeMode === 'light'
@@ -567,6 +640,7 @@ export function SettingsModal({
                   </button>
                   <button
                     type="button"
+                    data-testid="theme-mode-dark"
                     onClick={() => onChangeMode('dark')}
                     aria-pressed={themeMode === 'dark'}
                     className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors whitespace-nowrap ${themeMode === 'dark'
@@ -576,6 +650,19 @@ export function SettingsModal({
                   >
                     <Moon className="h-4 w-4" />
                     <span>{t.darkMode}</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="theme-mode-system"
+                    onClick={() => onChangeMode('system')}
+                    aria-pressed={themeMode === 'system'}
+                    className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors whitespace-nowrap ${themeMode === 'system'
+                        ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] shadow-xs'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      }`}
+                  >
+                    <Monitor className="h-4 w-4" />
+                    <span>{t.systemMode}</span>
                   </button>
                 </div>
               </section>
@@ -593,7 +680,8 @@ export function SettingsModal({
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {COLOR_THEMES.map((theme) => {
                     const isSelected = theme.id === themeId;
-                    const swatch = themeMode === 'dark' ? theme.swatchDark : theme.swatch;
+                    const effectiveMode = resolveEffectiveThemeMode(themeMode);
+                    const swatch = effectiveMode === 'dark' ? theme.swatchDark : theme.swatch;
                     return (
                       <button
                         key={theme.id}
@@ -1102,6 +1190,55 @@ export function SettingsModal({
                     );
                   })}
                 </div>
+
+                {/* Windows Startup in Tray & Global Quick-Add Shortcut (Ctrl+Alt+N) */}
+                <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]">
+                  <div className="flex items-center justify-between gap-4 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[var(--text-primary)]">
+                        {t.launchAtStartupTitle}
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">{t.launchAtStartupDesc}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      data-testid="toggle-launch-at-startup"
+                      aria-checked={launchAtStartup}
+                      onClick={() => onToggleLaunchAtStartup?.(!launchAtStartup)}
+                      className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                        launchAtStartup
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                          : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                      }`}
+                    >
+                      {launchAtStartup ? t.enabledBadge : t.disabledBadge}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[var(--text-primary)]">
+                        {t.globalQuickAddTitle}
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">{t.globalQuickAddDesc}</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      data-testid="toggle-global-quick-add"
+                      aria-checked={globalQuickAddShortcut}
+                      onClick={() => onToggleGlobalQuickAddShortcut?.(!globalQuickAddShortcut)}
+                      className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                        globalQuickAddShortcut
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                          : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                      }`}
+                    >
+                      {globalQuickAddShortcut ? t.enabledBadge : t.disabledBadge}
+                    </button>
+                  </div>
+                </div>
               </section>
 
               <div className="h-px bg-[var(--border)]" />
@@ -1282,6 +1419,18 @@ export function SettingsModal({
                       <p className="text-xs leading-relaxed text-[var(--text-muted)]">
                         {t.onedriveSectionDesc}
                       </p>
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        {t.cloudCustomFolderHint}
+                      </p>
+                      {oneDriveStatus?.folderPath && (
+                        <p
+                          data-testid="onedrive-folder-path"
+                          className="truncate font-mono-tabular text-[11px] text-[var(--text-secondary)]"
+                          title={oneDriveStatus.folderPath}
+                        >
+                          {oneDriveStatus.folderPath}
+                        </p>
+                      )}
                       {oneDriveStatus?.lastSyncedAt && (
                         <p className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
                           {t.onedriveLastSyncedPrefix}:{' '}
@@ -1320,6 +1469,17 @@ export function SettingsModal({
                       >
                         <Upload className="h-3.5 w-3.5 shrink-0" />
                         <span>{t.onedriveRestoreButton}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        data-testid="onedrive-pick-folder-btn"
+                        disabled={isOneDriveBusy}
+                        onClick={() => void handleOneDrivePickFolder()}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+                      >
+                        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                        <span>{t.cloudPickFolderButton}</span>
                       </button>
 
                       <button
@@ -1459,7 +1619,22 @@ export function SettingsModal({
                   <span>·</span>
                   <span>© 2026 Vellium</span>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    data-testid="copy-diagnostics-btn"
+                    onClick={() => void handleCopyDiagnostics()}
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+                  >
+                    {diagnosticsCopied ? (
+                      <Check className="h-3 w-3 text-emerald-500 shrink-0" />
+                    ) : (
+                      <Copy className="h-3 w-3 text-[var(--accent)] shrink-0" />
+                    )}
+                    <span>
+                      {diagnosticsCopied ? t.diagnosticsCopiedToast : t.copyDiagnosticsButton}
+                    </span>
+                  </button>
                   {onOpenWelcomeGuide && (
                     <button
                       type="button"

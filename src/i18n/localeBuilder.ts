@@ -214,6 +214,7 @@ export function compileSeedToDictionary(
     appearanceModeTitle: appearance,
     lightMode: light,
     darkMode: dark,
+    systemMode: `${light} / ${dark}`,
     colorThemeTitle: colorTheme,
     themesCountUnit: themesUnit,
     dataAndBackupTitle: dataAndBackup,
@@ -401,6 +402,14 @@ export function compileSeedToDictionary(
     closeActionQuitDesc: `${closeApp} (Agendamea)`,
     closeRememberChoiceLabel: `${autoSaved} (${settings})`,
     trayOpenApp: `${open} Agendamea`,
+    launchAtStartupTitle: `Windows · ${open} (${minimize})`,
+    launchAtStartupDesc: `Windows · ${minimize} (${autoSaved})`,
+    globalQuickAddTitle: `${keyboardShortcuts} · ${add} (Ctrl+Alt+N)`,
+    globalQuickAddDesc: `Ctrl+Alt+N · ${open} & ${add} (${tasks.toLowerCase()})`,
+    cloudPickFolderButton: `${open} · ${cloudSync}`,
+    cloudCustomFolderHint: `OneDrive / Google Drive / Dropbox · ${backupRestore}`,
+    copyDiagnosticsButton: `${currentVersion} · ${settings}`,
+    diagnosticsCopiedToast: `${currentVersion} · ${autoSaved}`,
   };
 }
 

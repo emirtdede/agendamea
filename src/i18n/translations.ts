@@ -91,6 +91,7 @@ export interface UiDictionary {
   appearanceModeTitle: string;
   lightMode: string;
   darkMode: string;
+  systemMode: string;
   colorThemeTitle: string;
   themesCountUnit: string;
   dataAndBackupTitle: string;
@@ -287,6 +288,14 @@ export interface UiDictionary {
   closeActionQuitDesc: string;
   closeRememberChoiceLabel: string;
   trayOpenApp: string;
+  launchAtStartupTitle: string;
+  launchAtStartupDesc: string;
+  globalQuickAddTitle: string;
+  globalQuickAddDesc: string;
+  cloudPickFolderButton: string;
+  cloudCustomFolderHint: string;
+  copyDiagnosticsButton: string;
+  diagnosticsCopiedToast: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -372,6 +381,7 @@ export const TR_DICTIONARY: UiDictionary = {
   appearanceModeTitle: 'Görünüm Modu',
   lightMode: 'Açık',
   darkMode: 'Koyu',
+  systemMode: 'Sistem',
   colorThemeTitle: 'Renk Teması',
   themesCountUnit: 'tema',
   dataAndBackupTitle: 'Veri ve Yedekleme',
@@ -564,6 +574,14 @@ export const TR_DICTIONARY: UiDictionary = {
   closeActionQuitDesc: 'Pencereyi ve arka plan sürecini tamamen sonlandırır.',
   closeRememberChoiceLabel: 'Tercihimi hatırla (Ayarlardan değiştirilebilir)',
   trayOpenApp: "Agendamea'yı Aç",
+  launchAtStartupTitle: 'Windows ile Başlat (Tepside Sessiz Açılış)',
+  launchAtStartupDesc: 'Bilgisayar açıldığında Agendamea arka planda sistem tepsisinde hazır başlar.',
+  globalQuickAddTitle: 'Global Hızlı Görev Kısayolu (Ctrl+Alt+N)',
+  globalQuickAddDesc: 'Başka bir uygulamadayken Ctrl+Alt+N ile Agendamea penceresini açıp yeni görev girişine odaklanır.',
+  cloudPickFolderButton: 'Klasör Seç',
+  cloudCustomFolderHint: 'OneDrive, Google Drive, Dropbox veya istediğiniz bir yerel yedek klasörünü seçebilirsiniz.',
+  copyDiagnosticsButton: 'Sistem Bilgisini Kopyala',
+  diagnosticsCopiedToast: 'Sistem ve tanı bilgisi panoya kopyalandı.',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -649,6 +667,7 @@ export const EN_DICTIONARY: UiDictionary = {
   appearanceModeTitle: 'Appearance Mode',
   lightMode: 'Light',
   darkMode: 'Dark',
+  systemMode: 'System',
   colorThemeTitle: 'Color Theme',
   themesCountUnit: 'themes',
   dataAndBackupTitle: 'Data & Backup',
@@ -841,6 +860,14 @@ export const EN_DICTIONARY: UiDictionary = {
   closeActionQuitDesc: 'Exits the window and background process completely.',
   closeRememberChoiceLabel: 'Remember my choice (changeable in Settings)',
   trayOpenApp: 'Open Agendamea',
+  launchAtStartupTitle: 'Launch at Windows Startup (Start in Tray)',
+  launchAtStartupDesc: 'Starts Agendamea quietly in the system tray when Windows signs in.',
+  globalQuickAddTitle: 'Global Quick Task Shortcut (Ctrl+Alt+N)',
+  globalQuickAddDesc: 'Press Ctrl+Alt+N from any application to bring Agendamea forward and focus the new task input.',
+  cloudPickFolderButton: 'Choose Folder',
+  cloudCustomFolderHint: 'Select OneDrive, Google Drive, Dropbox, or any local folder for automatic backups.',
+  copyDiagnosticsButton: 'Copy System Info',
+  diagnosticsCopiedToast: 'System diagnostic info copied to clipboard.',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {

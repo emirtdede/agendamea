@@ -384,6 +384,8 @@ export class TodoDatabase {
       'highContrast',
       'reducedMotion',
       'closeBehavior',
+      'launchAtStartup',
+      'globalQuickAddShortcut',
       'dragLocked',
       'sidebarCollapsed',
       'themeCustomized',
@@ -408,6 +410,8 @@ export class TodoDatabase {
     const rawHighContrast = map.get('highContrast');
     const rawReducedMotion = map.get('reducedMotion');
     const rawCloseBehavior = map.get('closeBehavior');
+    const rawLaunchAtStartup = map.get('launchAtStartup');
+    const rawGlobalQuickAdd = map.get('globalQuickAddShortcut');
     const rawDragLocked = map.get('dragLocked');
     const rawSidebarCollapsed = map.get('sidebarCollapsed');
     const rawThemeCustomized = map.get('themeCustomized');
@@ -418,7 +422,7 @@ export class TodoDatabase {
     const rawOnboardingCompleted = map.get('onboardingCompleted');
 
     const settings: AppSettings = {
-      themeMode: rawMode === 'dark' ? 'dark' : 'light',
+      themeMode: rawMode === 'dark' ? 'dark' : rawMode === 'system' ? 'system' : 'light',
       themeId: isValidThemeId(rawThemeId) ? rawThemeId : 'obsidian',
       dragLocked: rawDragLocked === '1' || rawDragLocked === 'true',
       sidebarCollapsed: rawSidebarCollapsed === '1' || rawSidebarCollapsed === 'true',
@@ -454,6 +458,12 @@ export class TodoDatabase {
         settings.closeBehavior = rawCloseBehavior;
       }
     }
+    if (rawLaunchAtStartup === '1' || rawLaunchAtStartup === 'true') {
+      settings.launchAtStartup = true;
+    }
+    if (rawGlobalQuickAdd !== undefined) {
+      settings.globalQuickAddShortcut = rawGlobalQuickAdd === '1' || rawGlobalQuickAdd === 'true';
+    }
     if (rawOnedriveAutoSync === '1' || rawOnedriveAutoSync === 'true') {
       settings.onedriveAutoSync = true;
     }
@@ -470,7 +480,11 @@ export class TodoDatabase {
     const stmt = this.db.prepare(
       'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
     );
-    if (patch.themeMode === 'light' || patch.themeMode === 'dark') {
+    if (
+      patch.themeMode === 'light' ||
+      patch.themeMode === 'dark' ||
+      patch.themeMode === 'system'
+    ) {
       stmt.run('themeMode', patch.themeMode);
       stmt.run('themeCustomized', '1');
     }
@@ -509,6 +523,12 @@ export class TodoDatabase {
       patch.closeBehavior === 'quit'
     ) {
       stmt.run('closeBehavior', patch.closeBehavior);
+    }
+    if (typeof patch.launchAtStartup === 'boolean') {
+      stmt.run('launchAtStartup', patch.launchAtStartup ? '1' : '0');
+    }
+    if (typeof patch.globalQuickAddShortcut === 'boolean') {
+      stmt.run('globalQuickAddShortcut', patch.globalQuickAddShortcut ? '1' : '0');
     }
     if (typeof patch.dragLocked === 'boolean') {
       stmt.run('dragLocked', patch.dragLocked ? '1' : '0');

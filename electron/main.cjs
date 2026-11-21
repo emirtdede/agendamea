@@ -1,4 +1,15 @@
-const { app, BrowserWindow, ipcMain, Menu, nativeImage, session, shell, Tray } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeImage,
+  session,
+  shell,
+  Tray,
+} = require('electron');
 const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
@@ -34,9 +45,13 @@ let isQuitting = false;
 let activePort = null;
 let backendRestartCount = 0;
 let activeCloseBehavior = 'ask';
+let activeLaunchAtStartup = false;
+let activeGlobalQuickAdd = true;
 let trayLabels = {
   openLabel: 'Open Agendamea',
   newTaskLabel: 'New Task',
+  todayLabel: 'Today',
+  importantLabel: 'Important',
   quitLabel: 'Quit',
 };
 
@@ -45,32 +60,129 @@ function readWindowPrefs(userDataDir) {
     const prefsPath = path.join(userDataDir, 'window-prefs.json');
     if (fs.existsSync(prefsPath)) {
       const parsed = JSON.parse(fs.readFileSync(prefsPath, 'utf8'));
-      if (
+      const closeBehavior =
         parsed &&
         (parsed.closeBehavior === 'ask' ||
           parsed.closeBehavior === 'tray' ||
           parsed.closeBehavior === 'quit')
-      ) {
-        return parsed.closeBehavior;
-      }
+          ? parsed.closeBehavior
+          : 'ask';
+      const launchAtStartup = Boolean(parsed?.launchAtStartup);
+      const globalQuickAdd =
+        parsed?.globalQuickAdd === undefined ? true : Boolean(parsed.globalQuickAdd);
+      return { closeBehavior, launchAtStartup, globalQuickAdd };
     }
   } catch {
     // Ignore unreadable prefs
   }
-  return 'ask';
+  return { closeBehavior: 'ask', launchAtStartup: false, globalQuickAdd: true };
 }
 
-function saveWindowPrefs(userDataDir, closeBehavior) {
+function saveWindowPrefs(userDataDir) {
   try {
     fs.mkdirSync(userDataDir, { recursive: true });
     fs.writeFileSync(
       path.join(userDataDir, 'window-prefs.json'),
-      JSON.stringify({ closeBehavior }, null, 2),
+      JSON.stringify(
+        {
+          closeBehavior: activeCloseBehavior,
+          launchAtStartup: activeLaunchAtStartup,
+          globalQuickAdd: activeGlobalQuickAdd,
+        },
+        null,
+        2,
+      ),
       'utf8',
     );
   } catch {
     // Ignore write failure
   }
+}
+
+function applyLoginItemSetting(enabled) {
+  activeLaunchAtStartup = Boolean(enabled);
+  try {
+    if (process.platform === 'win32' && typeof app.setLoginItemSettings === 'function') {
+      app.setLoginItemSettings({
+        openAtLogin: activeLaunchAtStartup,
+        path: process.execPath,
+        args: ['--minimized'],
+      });
+    }
+  } catch {
+    // Ignore unsupported portable / dev environments
+  }
+}
+
+function syncGlobalQuickAddShortcut(enabled) {
+  activeGlobalQuickAdd = Boolean(enabled);
+  try {
+    globalShortcut.unregister('CommandOrControl+Alt+N');
+    if (activeGlobalQuickAdd) {
+      globalShortcut.register('CommandOrControl+Alt+N', () => {
+        showAndFocusMainWindow();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('app:focus-quick-add');
+        }
+      });
+    }
+  } catch {
+    // Ignore global shortcut registration conflicts
+  }
+}
+
+function rebuildWindowsJumpList() {
+  if (process.platform !== 'win32' || typeof app.setUserTasks !== 'function') return;
+  try {
+    const exePath = process.execPath;
+    app.setUserTasks([
+      {
+        program: exePath,
+        arguments: '--jump-quick-add',
+        iconPath: exePath,
+        iconIndex: 0,
+        title: trayLabels.newTaskLabel || 'New Task',
+        description: trayLabels.newTaskLabel || 'New Task',
+      },
+      {
+        program: exePath,
+        arguments: '--jump-view=today',
+        iconPath: exePath,
+        iconIndex: 0,
+        title: trayLabels.todayLabel || 'Today',
+        description: trayLabels.todayLabel || 'Today',
+      },
+      {
+        program: exePath,
+        arguments: '--jump-view=important',
+        iconPath: exePath,
+        iconIndex: 0,
+        title: trayLabels.importantLabel || 'Important',
+        description: trayLabels.importantLabel || 'Important',
+      },
+    ]);
+  } catch {
+    // Ignore jump list error on restricted shells
+  }
+}
+
+function dispatchJumpListArgs(argv) {
+  if (!Array.isArray(argv) || !mainWindow || mainWindow.isDestroyed()) return false;
+  if (argv.includes('--jump-quick-add')) {
+    showAndFocusMainWindow();
+    mainWindow.webContents.send('app:focus-quick-add');
+    return true;
+  }
+  const viewArg = argv.find((a) => typeof a === 'string' && a.startsWith('--jump-view='));
+  if (viewArg) {
+    const viewId = viewArg.split('=')[1];
+    if (viewId === 'today' || viewId === 'important' || viewId === 'all') {
+      showAndFocusMainWindow();
+      mainWindow.webContents.send('app:navigate-smart-view', viewId);
+      return true;
+    }
+  }
+  return false;
 }
 
 let consumedInstallerLocale = undefined;
@@ -118,8 +230,10 @@ function showAndFocusMainWindow() {
   mainWindow.focus();
 }
 
-app.on('second-instance', () => {
-  showAndFocusMainWindow();
+app.on('second-instance', (_event, commandLine) => {
+  if (!dispatchJumpListArgs(commandLine)) {
+    showAndFocusMainWindow();
+  }
 });
 
 function getAvailablePort(candidates = PREFERRED_PORTS) {
@@ -483,9 +597,19 @@ async function createWindow(appUrl) {
     }
   });
 
+  const startMinimized =
+    process.argv.includes('--minimized') ||
+    process.argv.includes('--hidden') ||
+    Boolean(
+      typeof app.getLoginItemSettings === 'function' &&
+        app.getLoginItemSettings().wasOpenedAsHidden,
+    );
+
   mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
-    mainWindow?.focus();
+    if (!startMinimized) {
+      mainWindow?.show();
+      mainWindow?.focus();
+    }
   });
 
   // PowerPilot-style close behavior interception: Ask | Minimize to Tray | Quit Completely
@@ -554,8 +678,11 @@ async function createWindow(appUrl) {
   if (ready && mainWindow) {
     await mainWindow.loadURL(appUrl);
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.focus();
+      if (!startMinimized) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      dispatchJumpListArgs(process.argv);
     }
   } else if (mainWindow) {
     const isTrLocale = String(getInitialLocaleInfo().preferred || 'en').toLowerCase().startsWith('tr');
@@ -632,10 +759,36 @@ ipcMain.handle('window:close', (event) => {
 ipcMain.handle('window:set-close-behavior', (_event, behavior) => {
   if (behavior === 'ask' || behavior === 'tray' || behavior === 'quit') {
     activeCloseBehavior = behavior;
-    saveWindowPrefs(app.getPath('userData'), behavior);
+    saveWindowPrefs(app.getPath('userData'));
     return { ok: true, closeBehavior: activeCloseBehavior };
   }
   return { ok: false, closeBehavior: activeCloseBehavior };
+});
+
+ipcMain.handle('startup:set-login-item', (_event, enabled) => {
+  applyLoginItemSetting(Boolean(enabled));
+  saveWindowPrefs(app.getPath('userData'));
+  return { ok: true, launchAtStartup: activeLaunchAtStartup };
+});
+
+ipcMain.handle('shortcut:set-global-quick-add', (_event, enabled) => {
+  syncGlobalQuickAddShortcut(Boolean(enabled));
+  saveWindowPrefs(app.getPath('userData'));
+  return { ok: true, globalQuickAddShortcut: activeGlobalQuickAdd };
+});
+
+ipcMain.handle('app:get-diagnostics', () => {
+  return {
+    appVersion: app.getVersion() || '1.0.0',
+    electronVersion: process.versions.electron || '',
+    chromeVersion: process.versions.chrome || '',
+    nodeVersion: process.versions.node || '',
+    platform: process.platform,
+    arch: process.arch,
+    osRelease: typeof os.release === 'function' ? os.release() : '',
+    isWindowsStore: Boolean(process.windowsStore),
+    locale: typeof app.getLocale === 'function' ? app.getLocale() : 'en',
+  };
 });
 
 ipcMain.handle('window:perform-close-action', (event, action) => {
@@ -657,9 +810,12 @@ ipcMain.handle('tray:update-labels', (_event, labels) => {
     trayLabels = {
       openLabel: typeof labels.openLabel === 'string' && labels.openLabel.trim() ? labels.openLabel.trim() : trayLabels.openLabel,
       newTaskLabel: typeof labels.newTaskLabel === 'string' && labels.newTaskLabel.trim() ? labels.newTaskLabel.trim() : trayLabels.newTaskLabel,
+      todayLabel: typeof labels.todayLabel === 'string' && labels.todayLabel.trim() ? labels.todayLabel.trim() : trayLabels.todayLabel,
+      importantLabel: typeof labels.importantLabel === 'string' && labels.importantLabel.trim() ? labels.importantLabel.trim() : trayLabels.importantLabel,
       quitLabel: typeof labels.quitLabel === 'string' && labels.quitLabel.trim() ? labels.quitLabel.trim() : trayLabels.quitLabel,
     };
     rebuildTrayMenu();
+    rebuildWindowsJumpList();
   }
   return { ok: true };
 });
@@ -780,17 +936,33 @@ function detectDefaultOneDriveFolder() {
   return path.join(app.getPath('userData'), 'OneDrive-Agendamea');
 }
 
+ipcMain.handle('onedrive:pick-folder', async (event) => {
+  try {
+    const win = resolveSenderWindow(event);
+    const defaultFolder = detectDefaultOneDriveFolder();
+    const res = await dialog.showOpenDialog(win ?? undefined, {
+      defaultPath: fs.existsSync(defaultFolder) ? defaultFolder : os.homedir(),
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (res.canceled || !Array.isArray(res.filePaths) || !res.filePaths[0]) {
+      return { ok: false, canceled: true };
+    }
+    const chosen = path.resolve(res.filePaths[0]);
+    return { ok: true, canceled: false, folderPath: chosen };
+  } catch {
+    return { ok: false, canceled: true };
+  }
+});
+
 ipcMain.handle('onedrive:open-folder', async (_event, customFolderPath) => {
   try {
     const defaultFolder = detectDefaultOneDriveFolder();
     let targetFolder = defaultFolder;
     if (typeof customFolderPath === 'string' && customFolderPath.trim().length > 0) {
       const candidate = path.resolve(customFolderPath.trim());
-      const baseName = path.basename(candidate).toLowerCase();
       if (
         candidate === defaultFolder ||
-        baseName.includes('agendamea') ||
-        fs.existsSync(path.join(candidate, 'agendamea-onedrive-sync.json'))
+        (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory())
       ) {
         targetFolder = candidate;
       }
@@ -954,7 +1126,12 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
 app
   .whenReady()
   .then(async () => {
-    activeCloseBehavior = readWindowPrefs(app.getPath('userData'));
+    const prefs = readWindowPrefs(app.getPath('userData'));
+    activeCloseBehavior = prefs.closeBehavior;
+    activeLaunchAtStartup = prefs.launchAtStartup;
+    activeGlobalQuickAdd = prefs.globalQuickAdd;
+    syncGlobalQuickAddShortcut(activeGlobalQuickAdd);
+    rebuildWindowsJumpList();
 
     // Deny unexpected browser permission prompts (camera, microphone, geolocation, notifications)
     session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
@@ -975,6 +1152,11 @@ app
 
 app.on('before-quit', () => {
   isQuitting = true;
+  try {
+    globalShortcut.unregisterAll();
+  } catch {
+    // Ignore
+  }
   if (tray) {
     try {
       tray.destroy();

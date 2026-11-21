@@ -21,14 +21,24 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
     ipcRenderer.on('app:focus-quick-add', listener);
     return () => ipcRenderer.removeListener('app:focus-quick-add', listener);
   },
+  onNavigateSmartView: (callback) => {
+    const listener = (_event, viewId) => callback(String(viewId));
+    ipcRenderer.on('app:navigate-smart-view', listener);
+    return () => ipcRenderer.removeListener('app:navigate-smart-view', listener);
+  },
   setCloseBehavior: (behavior) => ipcRenderer.invoke('window:set-close-behavior', behavior),
   performCloseAction: (action) => ipcRenderer.invoke('window:perform-close-action', action),
+  setLaunchAtStartup: (enabled) => ipcRenderer.invoke('startup:set-login-item', Boolean(enabled)),
+  setGlobalQuickAddShortcut: (enabled) =>
+    ipcRenderer.invoke('shortcut:set-global-quick-add', Boolean(enabled)),
+  getDiagnostics: () => ipcRenderer.invoke('app:get-diagnostics'),
   updateTrayLabels: (labels) => ipcRenderer.invoke('tray:update-labels', labels),
   applyAppIcon: (payload) => ipcRenderer.invoke('icon:apply', payload),
   setZoomFactor: (factor) => ipcRenderer.invoke('window:set-zoom', factor),
   getInitialLocale: () => ipcRenderer.invoke('app:get-initial-locale'),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   downloadAndInstallUpdate: (url) => ipcRenderer.invoke('updater:download-and-install', url),
+  pickCloudSyncFolder: () => ipcRenderer.invoke('onedrive:pick-folder'),
   openOneDriveFolder: (folderPath) => ipcRenderer.invoke('onedrive:open-folder', folderPath),
   onUpdateProgress: (callback) => {
     const listener = (_event, percent) => callback(Number(percent) || 0);

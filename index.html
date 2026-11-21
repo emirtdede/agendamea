@@ -73,7 +73,11 @@
             document.title = savedTitle;
           }
           var mode = localStorage.getItem('agendamea-theme-mode');
-          if (mode === 'dark') {
+          var isSystemDark =
+            mode === 'system' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (mode === 'dark' || isSystemDark) {
             root.classList.add('dark');
           }
           if (localStorage.getItem('agendamea-high-contrast') === 'true') {

@@ -2,7 +2,9 @@ import type { LanguageCode } from './i18n/languages';
 
 export type Priority = 'low' | 'normal' | 'high';
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+export type EffectiveThemeMode = 'light' | 'dark';
 
 export type ThemeId =
   | 'obsidian'
@@ -89,6 +91,8 @@ export interface AppSettings {
   highContrast?: boolean;
   reducedMotion?: boolean;
   closeBehavior?: CloseBehavior;
+  launchAtStartup?: boolean;
+  globalQuickAddShortcut?: boolean;
   dragLocked: boolean;
   sidebarCollapsed: boolean;
   themeCustomized?: boolean;

@@ -44,6 +44,7 @@ import {
   isValidThemeId,
   normalizeHexColor,
   resolveAppIconColors,
+  resolveEffectiveThemeMode,
 } from './themes';
 import { TodoDatabase, ValidationError } from '../db/database';
 import type { Category, Todo } from '../types';
@@ -1092,6 +1093,14 @@ test('QA: Zero language leakage across all 73 languages, UI components, color na
     'closeModalTitle',
     'closeActionTrayDesc',
     'closeActionQuitDesc',
+    'launchAtStartupTitle',
+    'launchAtStartupDesc',
+    'globalQuickAddTitle',
+    'globalQuickAddDesc',
+    'cloudPickFolderButton',
+    'cloudCustomFolderHint',
+    'copyDiagnosticsButton',
+    'diagnosticsCopiedToast',
   ];
 
   for (const langMeta of SUPPORTED_LANGUAGES) {
@@ -1561,6 +1570,9 @@ test('QA: Custom HEX theme tokens, dynamic App Icon generator (.ico), accessibil
       highContrast: true,
       reducedMotion: true,
       closeBehavior: 'tray',
+      themeMode: 'system',
+      launchAtStartup: true,
+      globalQuickAddShortcut: false,
     });
     assert.equal(updated.themeId, 'custom');
     assert.equal(updated.customThemeColor, '#0ea5e9');
@@ -1570,6 +1582,10 @@ test('QA: Custom HEX theme tokens, dynamic App Icon generator (.ico), accessibil
     assert.equal(updated.highContrast, true);
     assert.equal(updated.reducedMotion, true);
     assert.equal(updated.closeBehavior, 'tray');
+    assert.equal(updated.themeMode, 'system');
+    assert.equal(updated.launchAtStartup, true);
+    assert.equal(updated.globalQuickAddShortcut, false);
+    assert.ok(['light', 'dark'].includes(resolveEffectiveThemeMode('system')));
   } finally {
     db.close();
   }
@@ -1587,6 +1603,19 @@ test('QA: Custom HEX theme tokens, dynamic App Icon generator (.ico), accessibil
   assert.ok(nshText.includes('installer-language.txt'), 'Setup must pass chosen language to Agendamea on first launch');
   assert.ok(nshText.includes('LangString UN_DATA_TITLE 1055'), 'Uninstaller custom page must be localized via LangString');
   assert.ok(nshText.includes('LangString UN_DATA_TITLE 1031'), 'Uninstaller custom page must include non-TR/EN LangStrings');
+
+  // 6. Winget manifest files exist and contain valid Vellium.Agendamea 1.0.0 schema metadata
+  const wingetDir = path.join(process.cwd(), 'winget', 'manifests', 'v', 'Vellium', 'Agendamea', '1.0.0');
+  for (const manifestFile of [
+    'Vellium.Agendamea.yaml',
+    'Vellium.Agendamea.installer.yaml',
+    'Vellium.Agendamea.locale.en-US.yaml',
+    'Vellium.Agendamea.locale.tr-TR.yaml',
+  ]) {
+    const manifestText = fs.readFileSync(path.join(wingetDir, manifestFile), 'utf8');
+    assert.ok(manifestText.includes('PackageIdentifier: Vellium.Agendamea'), `${manifestFile} must specify PackageIdentifier`);
+    assert.ok(manifestText.includes('PackageVersion: 1.0.0'), `${manifestFile} must specify PackageVersion 1.0.0`);
+  }
 });
 
 

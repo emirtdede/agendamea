@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.6.0.schema.json
+PackageIdentifier: Vellium.Agendamea
+PackageVersion: 1.0.0
+PackageLocale: tr-TR
+Publisher: Vellium
+PublisherUrl: https://vellium.dev
+PublisherSupportUrl: https://github.com/emirtdede/agendamea/issues
+PrivacyUrl: https://vellium.dev
+Author: Vellium
+PackageName: Agendamea
+PackageUrl: https://github.com/emirtdede/agendamea
+License: MIT
+LicenseUrl: https://github.com/emirtdede/agendamea/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Vellium (vellium.dev)
+ShortDescription: Windows 10/11 icin internetsiz calisan, sade ve hizli gunluk gorev yoneticisi.
+Description: Agendamea; yerel SQLite WAL veritabani, 4 farkli gorunum (Liste, Kanban, Takvim, Eisenhower Matrisi), sunucusuz bulut klasor esitlemesi (OneDrive, Google Drive, Dropbox), ozel HEX temalari, dinamik sistem ikonlari ve 73 dil destegi sunan hizli Windows gorev yoneticisidir.
+ManifestType: locale
+ManifestVersion: 1.6.0

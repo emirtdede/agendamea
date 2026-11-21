@@ -11,15 +11,37 @@ interface NativeWindowBridge {
   onMaximizedChange?: (cb: (isMaximized: boolean) => void) => (() => void) | void;
   onCloseRequested?: (cb: () => void) => (() => void) | void;
   onFocusQuickAdd?: (cb: () => void) => (() => void) | void;
+  onNavigateSmartView?: (
+    cb: (viewId: import('../types').SmartView) => void,
+  ) => (() => void) | void;
   setCloseBehavior?: (
     behavior: import('../types').CloseBehavior,
   ) => Promise<{ ok: boolean; closeBehavior?: import('../types').CloseBehavior }>;
   performCloseAction?: (
     action: 'tray' | 'quit',
   ) => Promise<{ ok: boolean; action?: 'tray' | 'quit' }>;
+  setLaunchAtStartup?: (
+    enabled: boolean,
+  ) => Promise<{ ok: boolean; launchAtStartup?: boolean }>;
+  setGlobalQuickAddShortcut?: (
+    enabled: boolean,
+  ) => Promise<{ ok: boolean; globalQuickAddShortcut?: boolean }>;
+  getDiagnostics?: () => Promise<{
+    appVersion: string;
+    electronVersion: string;
+    chromeVersion: string;
+    nodeVersion: string;
+    platform: string;
+    arch: string;
+    osRelease: string;
+    isWindowsStore: boolean;
+    locale: string;
+  }>;
   updateTrayLabels?: (labels: {
     openLabel: string;
     newTaskLabel: string;
+    todayLabel?: string;
+    importantLabel?: string;
     quitLabel: string;
   }) => Promise<{ ok: boolean }>;
   applyAppIcon?: (payload: {
@@ -37,6 +59,11 @@ interface NativeWindowBridge {
   downloadAndInstallUpdate?: (
     url: string,
   ) => Promise<{ ok: boolean; launchedInstaller?: boolean; launchedExternal?: boolean }>;
+  pickCloudSyncFolder?: () => Promise<{
+    ok: boolean;
+    canceled?: boolean;
+    folderPath?: string;
+  }>;
   openOneDriveFolder?: (folderPath?: string | null) => Promise<{ ok: boolean; path?: string }>;
   onUpdateProgress?: (cb: (percent: number) => void) => (() => void) | void;
 }

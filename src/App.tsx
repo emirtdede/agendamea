@@ -100,10 +100,15 @@ function readInitialTheme(): {
     const savedCustom = normalizeHexColor(
       localStorage.getItem('agendamea-custom-theme-color') ?? '',
     );
-    const hasMode = savedMode === 'light' || savedMode === 'dark';
+    const hasMode = savedMode === 'light' || savedMode === 'dark' || savedMode === 'system';
     const hasId = Boolean(savedId && isValidThemeId(savedId));
     return {
-      mode: savedMode === 'dark' ? 'dark' : 'light',
+      mode:
+        savedMode === 'dark'
+          ? 'dark'
+          : savedMode === 'system'
+            ? 'system'
+            : 'light',
       themeId: hasId && savedId ? (savedId as ThemeId) : 'obsidian',
       customThemeColor: savedCustom ?? '#2563eb',
       hasStoredPreference: hasMode || hasId,
@@ -155,6 +160,8 @@ export default function App() {
   const [highContrast, setHighContrast] = useState<boolean>(initialAccessibility.highContrast);
   const [reducedMotion, setReducedMotion] = useState<boolean>(initialAccessibility.reducedMotion);
   const [closeBehavior, setCloseBehavior] = useState<CloseBehavior>('ask');
+  const [launchAtStartup, setLaunchAtStartup] = useState<boolean>(false);
+  const [globalQuickAddShortcut, setGlobalQuickAddShortcut] = useState<boolean>(true);
   const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
   const [language, setLanguage] = useState<LanguageCode>(initialLang.code);
   const [autoUpdateCheck, setAutoUpdateCheck] = useState<boolean>(true);
@@ -254,9 +261,23 @@ export default function App() {
     );
   }, []);
 
+  const [systemDarkTick, setSystemDarkTick] = useState(0);
+
+  useEffect(() => {
+    if (themeMode !== 'system' || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const mql = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => setSystemDarkTick((n) => n + 1);
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    }
+  }, [themeMode]);
+
   useEffect(() => {
     applyThemeToDocument(themeId, themeMode, customThemeColor);
-  }, [themeId, themeMode, customThemeColor]);
+  }, [themeId, themeMode, customThemeColor, systemDarkTick]);
 
   // Synchronize active App Icon across in-app BrandMark, Window, Taskbar, System Tray & Windows Shortcuts
   useEffect(() => {
@@ -284,23 +305,25 @@ export default function App() {
     } else {
       iconInitializedRef.current = true;
     }
-  }, [appIconId, customIconColor, themeId, themeMode, customThemeColor]);
+  }, [appIconId, customIconColor, themeId, themeMode, customThemeColor, systemDarkTick]);
 
   // Apply Accessibility settings (Zoom %, High Contrast, Reduced Motion)
   useEffect(() => {
     applyAccessibilityToDocument({ zoomPercent, highContrast, reducedMotion });
   }, [zoomPercent, highContrast, reducedMotion]);
 
-  // Keep Electron System Tray labels localized across all 73 languages
+  // Keep Electron System Tray & Windows Taskbar Jump List labels localized across all 73 languages
   useEffect(() => {
     void window.agendameaWindow?.updateTrayLabels?.({
       openLabel: t.trayOpenApp,
       newTaskLabel: t.addFirstTaskButton,
+      todayLabel: t.today,
+      importantLabel: t.important,
       quitLabel: t.closeActionQuitTitle,
     });
-  }, [t.trayOpenApp, t.addFirstTaskButton, t.closeActionQuitTitle]);
+  }, [t.trayOpenApp, t.addFirstTaskButton, t.today, t.important, t.closeActionQuitTitle]);
 
-  // Keep Electron Main Process close behavior in sync & listen for close / quick-add events
+  // Keep Electron Main Process close behavior in sync & listen for close / quick-add / Jump List events
   useEffect(() => {
     void window.agendameaWindow?.setCloseBehavior?.(closeBehavior);
   }, [closeBehavior]);
@@ -310,11 +333,23 @@ export default function App() {
       setIsCloseModalOpen(true);
     });
     const unsubQuickAdd = window.agendameaWindow?.onFocusQuickAdd?.(() => {
+      setIsSettingsOpen(false);
+      setIsWelcomeOpen(false);
+      setIsCloseModalOpen(false);
       scheduleFocus(() => quickAddRef.current?.focus(), 60);
+    });
+    const unsubNavView = window.agendameaWindow?.onNavigateSmartView?.((viewId) => {
+      if (viewId === 'today' || viewId === 'important' || viewId === 'all') {
+        setIsSettingsOpen(false);
+        setIsWelcomeOpen(false);
+        setIsCloseModalOpen(false);
+        setActiveView({ type: 'smart', id: viewId });
+      }
     });
     return () => {
       if (typeof unsubClose === 'function') unsubClose();
       if (typeof unsubQuickAdd === 'function') unsubQuickAdd();
+      if (typeof unsubNavView === 'function') unsubNavView();
     };
   }, [scheduleFocus]);
 
@@ -371,6 +406,16 @@ export default function App() {
         data.settings.closeBehavior === 'quit'
       ) {
         setCloseBehavior(data.settings.closeBehavior);
+      }
+      if (typeof data.settings.launchAtStartup === 'boolean') {
+        setLaunchAtStartup(data.settings.launchAtStartup);
+        void window.agendameaWindow?.setLaunchAtStartup?.(data.settings.launchAtStartup);
+      }
+      if (typeof data.settings.globalQuickAddShortcut === 'boolean') {
+        setGlobalQuickAddShortcut(data.settings.globalQuickAddShortcut);
+        void window.agendameaWindow?.setGlobalQuickAddShortcut?.(
+          data.settings.globalQuickAddShortcut,
+        );
       }
 
       if (!langDirtyRef.current && data.settings.language && isValidLanguageCode(data.settings.language)) {
@@ -854,6 +899,28 @@ export default function App() {
       setCloseBehavior(nextBehavior);
       void window.agendameaWindow?.setCloseBehavior?.(nextBehavior);
       void api.updateSettings({ closeBehavior: nextBehavior }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleToggleLaunchAtStartup = useCallback(
+    (enabled: boolean) => {
+      setLaunchAtStartup(enabled);
+      void window.agendameaWindow?.setLaunchAtStartup?.(enabled);
+      void api.updateSettings({ launchAtStartup: enabled }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleToggleGlobalQuickAddShortcut = useCallback(
+    (enabled: boolean) => {
+      setGlobalQuickAddShortcut(enabled);
+      void window.agendameaWindow?.setGlobalQuickAddShortcut?.(enabled);
+      void api.updateSettings({ globalQuickAddShortcut: enabled }).catch((err) => {
         showInfoToast(formatUiError(err), 'error');
       });
     },
@@ -2245,6 +2312,8 @@ export default function App() {
               highContrast={highContrast}
               reducedMotion={reducedMotion}
               closeBehavior={closeBehavior}
+              launchAtStartup={launchAtStartup}
+              globalQuickAddShortcut={globalQuickAddShortcut}
               dragLocked={dragLocked}
               onChangeMode={handleModeChange}
               onChangeTheme={handleThemeChange}
@@ -2255,6 +2324,8 @@ export default function App() {
               onToggleHighContrast={handleToggleHighContrast}
               onToggleReducedMotion={handleToggleReducedMotion}
               onChangeCloseBehavior={handleCloseBehaviorChange}
+              onToggleLaunchAtStartup={handleToggleLaunchAtStartup}
+              onToggleGlobalQuickAddShortcut={handleToggleGlobalQuickAddShortcut}
               onToggleDragLock={handleToggleDragLock}
               autoUpdateCheck={autoUpdateCheck}
               onToggleAutoUpdateCheck={handleToggleAutoUpdateCheck}

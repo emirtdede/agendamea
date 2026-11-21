@@ -693,13 +693,28 @@ export function getContrastingForeground(hex: string): string {
   return luminance > 0.42 ? '#09090b' : '#ffffff';
 }
 
+export function resolveEffectiveThemeMode(mode: ThemeMode): 'light' | 'dark' {
+  if (mode === 'dark' || mode === 'light') {
+    return mode;
+  }
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  ) {
+    return 'dark';
+  }
+  return 'light';
+}
+
 export function buildCustomThemeTokens(hex: string, mode: ThemeMode): ThemeTokens {
+  const effectiveMode = resolveEffectiveThemeMode(mode);
   const normalized = normalizeHexColor(hex) ?? '#2563eb';
   const { r, g, b } = hexToRgb(normalized);
   const { h, s, l } = rgbToHsl(r, g, b);
   const subtleSat = Math.min(s, 0.35);
 
-  if (mode === 'light') {
+  if (effectiveMode === 'light') {
     // Keep very bright/pale custom colors legible as accents in light mode
     const accent = l > 0.84 ? hslToHex(h, Math.max(s, 0.25), 0.48) : normalized;
     const accentRgb = hexToRgb(accent);
@@ -761,6 +776,7 @@ export function resolveAppIconColors(
   customThemeColor?: string,
   customIconColor?: string,
 ): { bg: string; fg: string; border: string } {
+  const effectiveMode = resolveEffectiveThemeMode(themeMode);
   const id = appIconId ?? 'match-theme';
   if (id === 'obsidian') {
     return { bg: '#111114', fg: '#fafafa', border: 'rgba(255,255,255,0.14)' };
@@ -789,11 +805,11 @@ export function resolveAppIconColors(
     }
     const activeTheme = getThemeById(themeId);
     if (activeTheme.id === 'obsidian') {
-      return themeMode === 'dark'
+      return effectiveMode === 'dark'
         ? { bg: '#fafafa', fg: '#09090b', border: 'rgba(9,9,11,0.16)' }
         : { bg: '#18181b', fg: '#ffffff', border: 'rgba(255,255,255,0.12)' };
     }
-    const bg = themeMode === 'dark' ? activeTheme.swatchDark : activeTheme.swatch;
+    const bg = effectiveMode === 'dark' ? activeTheme.swatchDark : activeTheme.swatch;
     const fg = getContrastingForeground(bg);
     return {
       bg,
@@ -873,14 +889,15 @@ export function applyThemeToDocument(
 ): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
+  const effectiveMode = resolveEffectiveThemeMode(mode);
   const tokens =
     themeId === 'custom'
-      ? buildCustomThemeTokens(customThemeColor ?? '#2563eb', mode)
-      : mode === 'dark'
+      ? buildCustomThemeTokens(customThemeColor ?? '#2563eb', effectiveMode)
+      : effectiveMode === 'dark'
         ? getThemeById(themeId).dark
         : getThemeById(themeId).light;
 
-  if (mode === 'dark') {
+  if (effectiveMode === 'dark') {
     root.classList.add('dark');
   } else {
     root.classList.remove('dark');
