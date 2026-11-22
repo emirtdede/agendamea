@@ -29,7 +29,7 @@ run(process.execPath, [tsxCli, 'scripts/generate-installer-locales.mjs']);
 // 2. Ensure win-unpacked exists (run electron-builder --dir if missing or --rebuild-app passed)
 if (!fs.existsSync(path.join(unpackedDir, 'Agendamea.exe')) || process.argv.includes('--rebuild-app')) {
   const ebCli = path.join(rootDir, 'node_modules', 'electron-builder', 'cli.js');
-  run(process.execPath, [ebCli, '--win', '--x64', '--dir']);
+  run(process.execPath, [ebCli, '--win', '--x64', '--dir', '--publish', 'never']);
 }
 
 // Ensure electron-updater metadata exists inside win-unpacked/resources/app-update.yml
