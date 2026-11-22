@@ -36,6 +36,11 @@ interface NativeWindowBridge {
     osRelease: string;
     isWindowsStore: boolean;
     locale: string;
+    execPath?: string;
+    cliPath?: string;
+    mcpPath?: string;
+    runtimePort?: number | null;
+    userDataDir?: string;
   }>;
   updateTrayLabels?: (labels: {
     openLabel: string;

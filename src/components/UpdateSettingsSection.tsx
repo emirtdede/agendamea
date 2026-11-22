@@ -78,7 +78,7 @@ export const LanguageSelectorSection = React.memo(function LanguageSelectorSecti
         </button>
 
         {isLangListOpen && (
-          <div className="border-t border-[var(--border)] p-3 space-y-2.5 bg-[var(--surface-subtle)]/50">
+          <div className="animate-tab-enter border-t border-[var(--border)] p-3.5 space-y-2.5 bg-[var(--surface-subtle)]/50">
             <div className="relative flex items-center">
               <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
               <input
@@ -269,15 +269,22 @@ export const UpdatesSection = React.memo(function UpdatesSection({
             </div>
           </div>
 
-          {updateState.status === 'downloading' && updateState.downloadPercent !== null && (
+          {updateState.status === 'downloading' && (
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
-              <div
-                className="h-full rounded-full transition-all duration-150"
-                style={{
-                  width: `${Math.min(100, Math.max(5, updateState.downloadPercent))}%`,
-                  backgroundColor: 'var(--accent)',
-                }}
-              />
+              {updateState.downloadPercent !== null ? (
+                <div
+                  className="h-full rounded-full transition-all duration-150"
+                  style={{
+                    width: `${Math.min(100, Math.max(5, updateState.downloadPercent))}%`,
+                    backgroundColor: 'var(--accent)',
+                  }}
+                />
+              ) : (
+                <div
+                  className="h-full w-2/5 rounded-full animate-indeterminate"
+                  style={{ backgroundColor: 'var(--accent)' }}
+                />
+              )}
             </div>
           )}
 
@@ -326,19 +333,5 @@ export const UpdatesSection = React.memo(function UpdatesSection({
         </div>
       </div>
     </section>
-  );
-});
-
-interface UpdateAndLanguageSectionProps extends UpdatesSectionProps {}
-
-export const UpdateAndLanguageSection = React.memo(function UpdateAndLanguageSection(
-  props: UpdateAndLanguageSectionProps,
-) {
-  return (
-    <div className="space-y-6">
-      <LanguageSelectorSection />
-      <div className="h-px bg-[var(--border)]" />
-      <UpdatesSection {...props} />
-    </div>
   );
 });

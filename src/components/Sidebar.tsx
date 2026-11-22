@@ -112,6 +112,14 @@ export const Sidebar = React.memo(function Sidebar({
   const pendingCreateIdRef = useRef<string | null>(null);
   const isEditingRef = useRef(false);
   const isDeletingRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const smartItems: Array<{
     id: SmartView;
@@ -183,6 +191,7 @@ export const Sidebar = React.memo(function Sidebar({
 
     try {
       await onCreateCategory({ id, name: trimmed, color: newCatColor });
+      if (!isMountedRef.current) return;
       setNewCatName('');
       setNewCatColor(CATEGORY_COLORS[(categories.length + 1) % CATEGORY_COLORS.length].hex);
       setIsAddingCategory(false);
@@ -191,7 +200,9 @@ export const Sidebar = React.memo(function Sidebar({
       // Keep form open and retain pendingCreateIdRef for safe idempotent retry
     } finally {
       isCreatingRef.current = false;
-      setIsCreatingCategory(false);
+      if (isMountedRef.current) {
+        setIsCreatingCategory(false);
+      }
     }
   };
 
@@ -212,12 +223,16 @@ export const Sidebar = React.memo(function Sidebar({
     setIsSavingEdit(true);
     try {
       await onUpdateCategory(editingCatId, { name: trimmed, color: editCatColor });
-      setEditingCatId(null);
+      if (isMountedRef.current) {
+        setEditingCatId(null);
+      }
     } catch {
       // Error feedback handled by App toast
     } finally {
       isEditingRef.current = false;
-      setIsSavingEdit(false);
+      if (isMountedRef.current) {
+        setIsSavingEdit(false);
+      }
     }
   };
 
@@ -226,7 +241,9 @@ export const Sidebar = React.memo(function Sidebar({
     isDeletingRef.current = true;
     try {
       await onDeleteCategory(id);
-      setConfirmDeleteId(null);
+      if (isMountedRef.current) {
+        setConfirmDeleteId(null);
+      }
     } catch {
       // Error feedback handled by App toast
     } finally {

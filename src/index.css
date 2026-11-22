@@ -185,3 +185,106 @@ html.high-contrast input:focus-visible,
 html.high-contrast select:focus-visible {
   box-shadow: 0 0 0 3px var(--accent) !important;
 }
+
+/* Smooth GPU-accelerated micro-transitions (automatically disabled by .reduce-motion & prefers-reduced-motion) */
+@keyframes agFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes agTabEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes agModalPop {
+  from {
+    opacity: 0;
+    transform: scale(0.975) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes agSlideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes agToastUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes agCheckPop {
+  0% {
+    transform: scale(0.82);
+  }
+  60% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes agIndeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
+.animate-fade-in {
+  animation: agFadeIn 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-tab-enter {
+  animation: agTabEnter 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-modal-pop {
+  animation: agModalPop 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-in-right {
+  animation: agSlideInRight 210ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-toast-up {
+  animation: agToastUp 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-check-pop {
+  animation: agCheckPop 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-indeterminate {
+  animation: agIndeterminate 1.25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}

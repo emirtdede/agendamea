@@ -29,12 +29,12 @@ export function CloseActionModal({ onSelectAction, onCancel }: CloseActionModalP
       aria-modal="true"
       aria-labelledby="close-action-modal-title"
       data-testid="close-action-modal"
-      className="fixed inset-0 z-[58] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
+      className="animate-fade-in fixed inset-0 z-[58] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      <div className="w-full max-w-[404px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl">
+      <div className="animate-modal-pop w-full max-w-[404px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl">
         {/* Clean Borderless Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">

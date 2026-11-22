@@ -304,11 +304,40 @@ export interface UiDictionary {
   settingsNavGroupSystem: string;
   settingsTabAppearance: string;
   settingsTabGeneral: string;
+  settingsTabDocs: string;
   settingsTabAbout: string;
   welcomeLanguageDesc: string;
   welcomeBenefitOffline: string;
   welcomeBenefitInstant: string;
   welcomeBenefitPrivate: string;
+  cloudSyncSectionTitle: string;
+  cloudSyncSectionDesc: string;
+  cloudSyncProvidersTitle: string;
+  cloudDetectedBadge: string;
+  cloudNotInstalledHint: string;
+  trashSearchPlaceholder: string;
+  trashFilterAll: string;
+  trashFilterTodos: string;
+  trashFilterCategories: string;
+  trashSortNewest: string;
+  trashSortOldest: string;
+  trashSortAZ: string;
+  trashSortZA: string;
+  trashDateFrom: string;
+  trashDateTo: string;
+  trashNoMatchesTitle: string;
+  docsSubtitle: string;
+  docsCliTitle: string;
+  docsCliDesc: string;
+  docsMcpTitle: string;
+  docsMcpDesc: string;
+  docsCopyButton: string;
+  docsCopiedLabel: string;
+  docsCmdListDesc: string;
+  docsCmdAddDesc: string;
+  docsCmdDoneDesc: string;
+  docsCmdDelDesc: string;
+  docsCmdStatusDesc: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -456,7 +485,7 @@ export const TR_DICTIONARY: UiDictionary = {
   legalKvkkGdprTitle: 'KVKK ve GDPR Veri Koruma Aydınlatma Metni',
   legalOpenSourceTitle: 'Açık Kaynak ve Üçüncü Taraf Lisansları',
   legalAccessibilityTitle: 'Erişilebilirlik ve Destek Beyanı',
-  legalLastUpdated: '© 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
+  legalLastUpdated: 'Son güncelleme: 22 Kasım 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
 
   offlineBannerText: 'Çevrimdışı çalışıyor - verileriniz cihazınızda güvende',
   undoButton: 'Geri Al',
@@ -553,8 +582,8 @@ export const TR_DICTIONARY: UiDictionary = {
   welcomeCardMatrixDesc: '4 kadranlı aciliyet-önem matrisi',
   welcomePrivacyLocalTitle: 'Cihazınızda Güvende ve Anlık Kayıt',
   welcomePrivacyLocalDesc: 'Hesap veya internet gerekmez; veriler cihazınızdan dışarı çıkmaz.',
-  welcomePrivacyCloudTitle: 'Ücretsiz OneDrive Bulut Yedekleme',
-  welcomePrivacyCloudDesc: '15 günlük tarihli yedek ve format sonrası otomatik kurtarma.',
+  welcomePrivacyCloudTitle: 'Ücretsiz Bulut Klasör Yedekleme',
+  welcomePrivacyCloudDesc: 'OneDrive, Google Drive, iCloud veya Dropbox ile 15 günlük otomatik yedek.',
   welcomePrivacyUndoTitle: 'Çöp Kutusu ve 12 Saniyelik Geri Al',
   welcomePrivacyUndoDesc: 'Yanlışlıkla silinen görev ve kategorileri tek tıkla geri getirin.',
   customThemeButton: 'Özel Renk',
@@ -603,11 +632,41 @@ export const TR_DICTIONARY: UiDictionary = {
   settingsNavGroupSystem: 'Sistem ve Hakkında',
   settingsTabAppearance: 'Görünüm ve Tema',
   settingsTabGeneral: 'Genel ve Dil',
+  settingsTabDocs: 'Dokümantasyon',
   settingsTabAbout: 'Güncelleme ve Yasal',
   welcomeLanguageDesc: 'Uygulamayı kullanmak istediğiniz dili seçin.',
   welcomeBenefitOffline: 'İnternetsiz çalışır',
   welcomeBenefitInstant: 'Anlık otomatik kayıt',
   welcomeBenefitPrivate: 'Hesapsız ve reklamsız',
+  cloudSyncSectionTitle: 'Bulut Klasör Eşitleme (Ücretsiz)',
+  cloudSyncSectionDesc:
+    'OneDrive, Google Drive, iCloud Drive, Dropbox veya istediğiniz bir yerel klasör üzerinden sunucusuz, hesapsız ve ücretsiz otomatik yedekleme yapın.',
+  cloudSyncProvidersTitle: 'Bulut Sağlayıcıları (Tek Tıkla Bağla)',
+  cloudDetectedBadge: 'Algılandı',
+  cloudNotInstalledHint: 'Klasör seçilerek bağlanabilir',
+  trashSearchPlaceholder: 'Çöp kutusunda görev veya kategori ara...',
+  trashFilterAll: 'Tümü',
+  trashFilterTodos: 'Görevler',
+  trashFilterCategories: 'Kategoriler',
+  trashSortNewest: 'En Yeni Silinen',
+  trashSortOldest: 'En Eski Silinen',
+  trashSortAZ: 'Ada Göre (A-Z)',
+  trashSortZA: 'Ada Göre (Z-A)',
+  trashDateFrom: 'Başlangıç',
+  trashDateTo: 'Bitiş',
+  trashNoMatchesTitle: 'Filtreyle eşleşen silinmiş öğe bulunamadı',
+  docsSubtitle: 'Basit terminal komutları (CLI), yapay zeka MCP sunucusu ve klavye kısayolları.',
+  docsCliTitle: 'Terminal ve CLI Komutları',
+  docsCliDesc: 'Agendamea açıkken terminalden görev ekleyin, listeleyin ve tamamlayın.',
+  docsMcpTitle: 'MCP Sunucusu (Yapay Zeka Entegrasyonu)',
+  docsMcpDesc: 'Claude Desktop, Cursor, Antigravity veya VS Code ayarlarına bu JSON yapılandırmasını yapıştırın.',
+  docsCopyButton: 'Kopyala',
+  docsCopiedLabel: 'Kopyalandı',
+  docsCmdListDesc: 'Aktif görevleri listeler (--today, --important, --done)',
+  docsCmdAddDesc: 'Hızlıca yeni görev ekler (--today, --high, --important)',
+  docsCmdDoneDesc: 'Belirtilen kimlik önekiyle görevi tamamlar',
+  docsCmdDelDesc: 'Görevi çöp kutusuna taşır',
+  docsCmdStatusDesc: 'Anlık görev ve kategori özetini gösterir',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -755,7 +814,7 @@ export const EN_DICTIONARY: UiDictionary = {
   legalKvkkGdprTitle: 'GDPR & Data Protection Notice',
   legalOpenSourceTitle: 'Open Source & Third-Party Notices',
   legalAccessibilityTitle: 'Accessibility & Support Statement',
-  legalLastUpdated: '© 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
+  legalLastUpdated: 'Last updated: November 22, 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
 
   offlineBannerText: 'Working offline - your data is safely stored on your device',
   undoButton: 'Undo',
@@ -852,8 +911,8 @@ export const EN_DICTIONARY: UiDictionary = {
   welcomeCardMatrixDesc: '4-quadrant urgent-important grid',
   welcomePrivacyLocalTitle: 'Stored Locally & Saved Instantly',
   welcomePrivacyLocalDesc: 'No account or internet needed; data never leaves your PC.',
-  welcomePrivacyCloudTitle: 'Free Serverless OneDrive Backup',
-  welcomePrivacyCloudDesc: '15-day daily snapshots and automatic recovery after reinstall.',
+  welcomePrivacyCloudTitle: 'Free Cloud Folder Backup',
+  welcomePrivacyCloudDesc: 'Automatic 15-day backups via OneDrive, Google Drive, iCloud, or Dropbox.',
   welcomePrivacyUndoTitle: 'Trash Bin & 12-Second Undo',
   welcomePrivacyUndoDesc: 'Recover accidentally deleted tasks or categories in one click.',
   customThemeButton: 'Custom Color',
@@ -902,11 +961,41 @@ export const EN_DICTIONARY: UiDictionary = {
   settingsNavGroupSystem: 'System & About',
   settingsTabAppearance: 'Appearance & Theme',
   settingsTabGeneral: 'General & Language',
+  settingsTabDocs: 'Documentation',
   settingsTabAbout: 'Updates & Legal',
   welcomeLanguageDesc: 'Choose the language you would like to use in Agendamea.',
   welcomeBenefitOffline: 'Works offline',
   welcomeBenefitInstant: 'Instant auto-save',
   welcomeBenefitPrivate: 'Private & no account needed',
+  cloudSyncSectionTitle: 'Cloud Folder Sync (Free)',
+  cloudSyncSectionDesc:
+    'Back up and sync your tasks automatically using OneDrive, Google Drive, iCloud Drive, Dropbox, or any local folder - zero servers and zero cost.',
+  cloudSyncProvidersTitle: 'Cloud Providers (One-Click Connect)',
+  cloudDetectedBadge: 'Detected',
+  cloudNotInstalledHint: 'Connect via folder picker',
+  trashSearchPlaceholder: 'Search deleted tasks or categories...',
+  trashFilterAll: 'All',
+  trashFilterTodos: 'Tasks',
+  trashFilterCategories: 'Categories',
+  trashSortNewest: 'Newest Deleted',
+  trashSortOldest: 'Oldest Deleted',
+  trashSortAZ: 'Name (A-Z)',
+  trashSortZA: 'Name (Z-A)',
+  trashDateFrom: 'From',
+  trashDateTo: 'To',
+  trashNoMatchesTitle: 'No deleted items match the current filter',
+  docsSubtitle: 'Simple terminal commands (CLI), AI MCP server setup, and keyboard shortcuts.',
+  docsCliTitle: 'Terminal & CLI Commands',
+  docsCliDesc: 'List, add, complete, and manage tasks directly from your terminal while Agendamea is running.',
+  docsMcpTitle: 'MCP Server (AI Assistant Integration)',
+  docsMcpDesc: 'Paste this JSON configuration into Claude Desktop, Cursor, Antigravity, or VS Code.',
+  docsCopyButton: 'Copy',
+  docsCopiedLabel: 'Copied',
+  docsCmdListDesc: 'List active tasks (--today, --important, --done)',
+  docsCmdAddDesc: 'Quickly add a new task (--today, --high, --important)',
+  docsCmdDoneDesc: 'Mark a task complete by ID prefix',
+  docsCmdDelDesc: 'Move a task to Trash',
+  docsCmdStatusDesc: 'Show live task and category summary',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {
@@ -1020,9 +1109,10 @@ export const TR_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
         ],
       },
       {
-        heading: '3. Güncelleme Kontrolü ve Veri Taşınabilirliği',
+        heading: '3. Güncelleme Politikası, Bulut Klasörleri ve Veri Taşınabilirliği',
         paragraphs: [
-          'Güncelleme kontrolü yalnızca en son sürüm numarasını doğrulamak amacıyla GitHub Releases (api.github.com/repos/emirtdede/agendamea/releases/latest) adresine kişisel veri içermeyen standart bir HTTPS sorgusu gönderir. Verilerinizi dilediğiniz an yedek dosyası olarak indirebilir veya kaldırıcı üzerinden kalıcı olarak silebilirsiniz.',
+          'Microsoft Store üzerinden yüklenen sürümlerde tüm güncellemeler yalnızca Microsoft Store tarafından yönetilir ve uygulama harici güncelleme uç noktalarına bağlanmaz (Microsoft Store Politikası 10.2.7). GitHub üzerinden kurulan masaüstü sürümlerde güncelleme kontrolü yalnızca kişisel veri içermeyen standart bir HTTPS sorgusu ile GitHub Releases üzerinden SHA-512 doğrulamalı güncelleme denetimi yapar.',
+          'İsteğe bağlı Bulut Klasör Eşitleme (OneDrive, Google Drive, iCloud Drive, Dropbox) kullanıldığında Agendamea hiçbir bulut hesap şifresi veya OAuth erişim anahtarı toplamaz; yalnızca kullanıcının seçtiği yerel klasöre JSON yedeği yazar. Verilerinizi dilediğiniz an dışa aktarabilir veya kaldırıcı üzerinden kalıcı olarak silebilirsiniz.',
           'Resmi Gizlilik Politikası: https://vellium.dev/tr/yasal/gizlilik-politikasi · Veri ve Gizlilik İletişim: privacy@vellium.dev',
         ],
       },
@@ -1036,13 +1126,13 @@ export const TR_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
       {
         heading: '1. Lisans Kapsamı ve Kullanım Hakkı',
         paragraphs: [
-          'Agendamea, Vellium Teknoloji Anonim Şirketi tarafından MIT Açık Kaynak Lisansı ve Microsoft Store Standart Uygulama Lisans Koşulları çerçevesinde sunulmaktadır. Uygulamayı kişisel ve ticari görev yönetimi amacıyla cihazlarınızda ücretsiz olarak kurabilir ve kullanabilirsiniz.',
+          'Agendamea, Vellium Teknoloji Anonim Şirketi (Microsoft Store ID: 9MT5X1NGZJXZ) tarafından MIT Açık Kaynak Lisansı ve Microsoft Store Standart Uygulama Lisans Koşulları çerçevesinde sunulmaktadır. Uygulamayı kişisel ve ticari görev yönetimi amacıyla cihazlarınızda ücretsiz olarak kurabilir ve kullanabilirsiniz.',
         ],
       },
       {
         heading: '2. Kullanıcı Sorumluluğu ve Yedekleme',
         paragraphs: [
-          'Veriler tamamen kullanıcının kendi cihazında yerel olarak tutulduğundan, cihaz arızası veya işletim sistemi sıfırlaması gibi durumlara karşı Ayarlar > Yedek İndir özelliğiyle düzenli yedek almak kullanıcının sorumluluğundadır.',
+          'Veriler tamamen kullanıcının kendi cihazında yerel olarak tutulduğundan, cihaz arızası veya işletim sistemi sıfırlaması gibi durumlara karşı Ayarlar > Veri ve Yedekleme bölümünden düzenli JSON yedeği almak veya isteğe bağlı yerel bulut klasörü (OneDrive, Google Drive, iCloud Drive, Dropbox) eşitlemesini etkinleştirmek kullanıcının sorumluluğundadır.',
         ],
       },
       {
@@ -1094,7 +1184,7 @@ export const TR_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
       {
         heading: '2. Üçüncü Taraf Açık Kaynak Bileşenleri',
         paragraphs: [
-          '• Electron (MIT) · React & React DOM (MIT) · Better-SQLite3 & SQLite (MIT) · Express (MIT) · Tailwind CSS (MIT) · Lucide React (ISC) · Vite & Vite Plugin PWA (MIT)',
+          '• Electron (MIT) · Electron Updater (MIT) · React & React DOM (MIT) · Better-SQLite3 & SQLite (MIT) · Express (MIT) · Tailwind CSS (MIT) · Lucide React (ISC) · Vite & Vite Plugin PWA (MIT) · esbuild (MIT)',
         ],
       },
     ],
@@ -1105,9 +1195,9 @@ export const TR_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
     subtitle: TR_DICTIONARY.legalLastUpdated,
     sections: [
       {
-        heading: '1. Klavye ve Ekran Okuyucu Erişilebilirliği',
+        heading: '1. Klavye, Yakınlaştırma ve Ekran Okuyucu Erişilebilirliği',
         paragraphs: [
-          'Agendamea, WCAG 2.1 AA kontrast hedefleri ve tam klavye navigasyonu gözetilerek tasarlanmıştır: N (yeni görev), / veya Ctrl+K (arama), Alt+Yukarı/Aşağı (sıralama) ve Esc (kapatma).',
+          'Agendamea, WCAG 2.1 AA kontrast hedefleri, Yüksek Kontrast Modu, Azaltılmış Hareket, %80-%150 Yakınlaştırma (Ctrl + / - / 0) ve tam klavye navigasyonu gözetilerek tasarlanmıştır: N (yeni görev), Ctrl+Alt+N (global hızlı görev), / veya Ctrl+K (arama), Alt+Yukarı/Aşağı (sıralama) ve Esc (kapatma).',
         ],
       },
       {
@@ -1119,7 +1209,7 @@ export const TR_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
       {
         heading: '3. Microsoft Store Sertifikasyon ve Destek İletişimi',
         paragraphs: [
-          'Web Sitesi: https://vellium.dev · Destek Politikası: https://vellium.dev/tr/yasal/destek-politikasi · Şirket Bilgileri: https://vellium.dev/tr/yasal/sirket-bilgileri · Güvenlik: https://vellium.dev/tr/yasal/guvenlik-acigi-bildirimi',
+          'Yayıncı: Vellium Teknoloji Anonim Şirketi · Store ID: 9MT5X1NGZJXZ · Web Sitesi: https://vellium.dev · Destek Politikası: https://vellium.dev/tr/yasal/destek-politikasi · Güvenlik: https://vellium.dev/tr/yasal/guvenlik-acigi-bildirimi',
           'E-posta: support@vellium.dev · contact@vellium.dev · privacy@vellium.dev · legal@vellium.dev · security@vellium.dev · billing@vellium.dev',
         ],
       },
@@ -1131,13 +1221,13 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
   privacy: {
     id: 'privacy',
     title: EN_DICTIONARY.legalPrivacyTitle,
-    subtitle: EN_DICTIONARY.legalLastUpdated,
+    subtitle: 'Last updated: November 22, 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
     sections: [
       {
         heading: '1. Local-First (Offline-First) Data Architecture',
         paragraphs: [
           'Agendamea is built by Vellium Teknoloji Anonim Şirketi (vellium.dev) with a strict local-first privacy architecture. All tasks, optional start and due dates, subtasks, notes, categories, and theme settings you create are stored exclusively on your own device (%APPDATA%\\Agendamea).',
-          'None of your task data is ever transmitted to external cloud servers, sold to third parties, or used for advertising or profiling.',
+          'None of your task data is ever transmitted to Vellium servers, sold to third parties, or used for advertising or profiling.',
         ],
       },
       {
@@ -1147,9 +1237,10 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
         ],
       },
       {
-        heading: '3. Update Checks & Data Portability',
+        heading: '3. Update Policy, Optional Cloud Folders & Data Portability',
         paragraphs: [
-          'Update checks make a standard read-only HTTPS request to GitHub Releases (api.github.com/repos/emirtdede/agendamea/releases/latest) without personal data. You can export, restore, or permanently delete all local data at any time.',
+          'For Microsoft Store installations, updates are managed exclusively by Microsoft Store and the app does not query external update endpoints (Microsoft Store Policy 10.2.7). Direct GitHub desktop builds perform read-only HTTPS checks against GitHub Releases with SHA-512 integrity verification.',
+          'When optional Cloud Folder Sync (OneDrive, Google Drive, iCloud Drive, Dropbox) is enabled, Agendamea never accesses cloud credentials or OAuth tokens - it only writes local JSON backups into the folder you choose. You can export, restore, or permanently delete all local data at any time.',
           'Official Privacy Policy: https://vellium.dev/en/legal/privacy · Privacy Inquiries: privacy@vellium.dev',
         ],
       },
@@ -1158,18 +1249,18 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
   terms: {
     id: 'terms',
     title: EN_DICTIONARY.legalTermsTitle,
-    subtitle: EN_DICTIONARY.legalLastUpdated,
+    subtitle: 'Last updated: November 22, 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
     sections: [
       {
         heading: '1. License Grant & Permitted Use',
         paragraphs: [
-          'Agendamea is provided by Vellium Teknoloji Anonim Şirketi under the MIT License and the Microsoft Store Standard Application License Terms for personal and commercial task management.',
+          'Agendamea is provided by Vellium Teknoloji Anonim Şirketi (Microsoft Store ID: 9MT5X1NGZJXZ) under the MIT License and the Microsoft Store Standard Application License Terms for personal and commercial task management.',
         ],
       },
       {
         heading: '2. User Data & Backup Responsibility',
         paragraphs: [
-          'Because all records reside locally on your device without cloud synchronization, you are responsible for maintaining periodic backups using the Download Backup feature in Settings.',
+          'Because all records reside locally on your device by default, you are responsible for maintaining periodic backups using JSON export or optional user-controlled cloud folder sync (OneDrive, Google Drive, iCloud Drive, Dropbox) in Settings > Data & Backup.',
         ],
       },
       {
@@ -1184,7 +1275,7 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
   gdpr: {
     id: 'gdpr',
     title: EN_DICTIONARY.legalKvkkGdprTitle,
-    subtitle: EN_DICTIONARY.legalLastUpdated,
+    subtitle: 'Last updated: November 22, 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
     sections: [
       {
         heading: '1. Data Controller & Local Processing',
@@ -1210,7 +1301,7 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
   opensource: {
     id: 'opensource',
     title: EN_DICTIONARY.legalOpenSourceTitle,
-    subtitle: EN_DICTIONARY.legalLastUpdated,
+    subtitle: 'Last updated: November 22, 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
     sections: [
       {
         heading: '1. Agendamea License (MIT)',
@@ -1221,7 +1312,7 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
       {
         heading: '2. Third-Party Open Source Attributions',
         paragraphs: [
-          '• Electron (MIT) · React & React DOM (MIT) · Better-SQLite3 & SQLite (MIT) · Express (MIT) · Tailwind CSS (MIT) · Lucide React (ISC) · Vite & Vite Plugin PWA (MIT)',
+          '• Electron (MIT) · Electron Updater (MIT) · React & React DOM (MIT) · Better-SQLite3 & SQLite (MIT) · Express (MIT) · Tailwind CSS (MIT) · Lucide React (ISC) · Vite & Vite Plugin PWA (MIT) · esbuild (MIT)',
         ],
       },
     ],
@@ -1229,12 +1320,12 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
   accessibility: {
     id: 'accessibility',
     title: EN_DICTIONARY.legalAccessibilityTitle,
-    subtitle: EN_DICTIONARY.legalLastUpdated,
+    subtitle: 'Last updated: November 22, 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
     sections: [
       {
-        heading: '1. Keyboard Navigation & Screen Reader Support',
+        heading: '1. Keyboard, Zoom & Screen Reader Accessibility',
         paragraphs: [
-          'Agendamea is engineered for WCAG 2.1 AA contrast compliance and complete keyboard operation: N (new task), / or Ctrl+K (search), Alt+Up/Down (reorder), and Esc (close).',
+          'Agendamea is engineered for WCAG 2.1 AA contrast compliance, High Contrast Mode, Reduced Motion, 80%-150% Zoom (Ctrl + / - / 0), and complete keyboard operation: N (new task), Ctrl+Alt+N (global quick task), / or Ctrl+K (search), Alt+Up/Down (reorder), and Esc (close).',
         ],
       },
       {
@@ -1246,7 +1337,7 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
       {
         heading: '3. Microsoft Store Compliance & Publisher Support',
         paragraphs: [
-          'Website: https://vellium.dev · Support Policy: https://vellium.dev/en/legal/support · Company Information: https://vellium.dev/en/legal/company-information · Security Disclosure: https://vellium.dev/en/legal/security-disclosure',
+          'Publisher: Vellium Teknoloji Anonim Şirketi · Store ID: 9MT5X1NGZJXZ · Website: https://vellium.dev · Support Policy: https://vellium.dev/en/legal/support · Security Disclosure: https://vellium.dev/en/legal/security-disclosure',
           'Official Emails: support@vellium.dev · contact@vellium.dev · privacy@vellium.dev · legal@vellium.dev · security@vellium.dev · billing@vellium.dev',
         ],
       },

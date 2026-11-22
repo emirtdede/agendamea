@@ -29,7 +29,7 @@ export const ToastContainer = React.memo(function ToastContainer({
       <div
         role="alert"
         aria-live="assertive"
-        className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-red-500/40 bg-[var(--surface)] px-4 py-2.5 text-xs text-red-600 dark:text-red-400 shadow-lg"
+        className="animate-toast-up fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-red-500/40 bg-[var(--surface)] px-4 py-2.5 text-xs text-red-600 dark:text-red-400 shadow-lg"
       >
         <span>{infoToast.message}</span>
         <button
@@ -54,7 +54,7 @@ export const ToastContainer = React.memo(function ToastContainer({
         onMouseLeave={onResumeUndo}
         onFocus={onPauseUndo}
         onBlur={onResumeUndo}
-        className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-sm shadow-lg"
+        className="animate-toast-up fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-sm shadow-lg"
       >
         <span className="text-[var(--text-primary)] whitespace-nowrap">
           {undoToast.label}
@@ -85,7 +85,7 @@ export const ToastContainer = React.memo(function ToastContainer({
       <div
         role="status"
         aria-live="polite"
-        className="fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-xs text-[var(--text-primary)] shadow-lg"
+        className="animate-toast-up fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-xs text-[var(--text-primary)] shadow-lg"
       >
         <span>{infoToast.message}</span>
         <button

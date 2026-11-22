@@ -234,7 +234,7 @@ export const TodoItem = React.memo(function TodoItem({
               }
         }
       >
-        {todo.completed && <Check className="h-3 w-3 stroke-[3]" />}
+        {todo.completed && <Check className="h-3 w-3 stroke-[3] animate-check-pop" />}
       </button>
 
       {/* Main Clickable Task Area */}

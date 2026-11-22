@@ -33,6 +33,7 @@ export type SettingsTabId =
   | 'general'
   | 'data'
   | 'trash'
+  | 'docs'
   | 'about';
 
 export type SmartView = 'all' | 'today' | 'important' | 'completed';
@@ -139,6 +140,15 @@ export interface TodoPatch {
   categoryId?: string | null;
 }
 
+export type CloudProviderId = 'onedrive' | 'googledrive' | 'icloud' | 'dropbox';
+
+export interface DetectedCloudProvider {
+  id: CloudProviderId;
+  label: string;
+  folderPath: string;
+  detected: boolean;
+}
+
 export interface OneDriveStatus {
   available: boolean;
   connected: boolean;
@@ -152,6 +162,8 @@ export interface OneDriveStatus {
   remoteTodoCount?: number;
   remoteCategoryCount?: number;
   backupFilesCount?: number;
+  activeProvider?: CloudProviderId | 'custom' | null;
+  detectedProviders?: DetectedCloudProvider[];
   restoredBootstrap?: BootstrapPayload;
 }
 

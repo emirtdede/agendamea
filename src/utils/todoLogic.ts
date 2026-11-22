@@ -485,3 +485,93 @@ export function compareSemver(a: string, b: string): number {
   }
   return 0;
 }
+
+export type TrashTypeFilter = 'all' | 'todos' | 'categories';
+export type TrashSortOption = 'newest' | 'oldest' | 'az' | 'za';
+
+export interface TrashFilterOptions {
+  query: string;
+  typeFilter: TrashTypeFilter;
+  sortBy: TrashSortOption;
+  dateFrom: string; // YYYY-MM-DD or ''
+  dateTo: string; // YYYY-MM-DD or ''
+  locale?: string;
+}
+
+function getDeletedDateKey(iso: string | null): string {
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return '';
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function matchesDeletedDateRange(iso: string | null, dateFrom: string, dateTo: string): boolean {
+  if (!dateFrom && !dateTo) return true;
+  const key = getDeletedDateKey(iso);
+  if (!key) return false;
+  if (dateFrom && key < dateFrom) return false;
+  if (dateTo && key > dateTo) return false;
+  return true;
+}
+
+export function filterAndSortTrash(
+  trashedCategories: Category[],
+  trashedTodos: Todo[],
+  options: TrashFilterOptions,
+): { categories: Category[]; todos: Todo[] } {
+  const locale = options.locale || 'tr';
+  const normalizedQuery = options.query.trim().toLocaleLowerCase(locale);
+  const { typeFilter, sortBy, dateFrom, dateTo } = options;
+
+  const sortDeleted = <T extends { deletedAt: string | null }>(
+    list: T[],
+    getLabel: (item: T) => string,
+  ): T[] => {
+    return [...list].sort((a, b) => {
+      if (sortBy === 'az') {
+        return getLabel(a).localeCompare(getLabel(b), locale);
+      }
+      if (sortBy === 'za') {
+        return getLabel(b).localeCompare(getLabel(a), locale);
+      }
+      const timeA = a.deletedAt ? Date.parse(a.deletedAt) || 0 : 0;
+      const timeB = b.deletedAt ? Date.parse(b.deletedAt) || 0 : 0;
+      if (sortBy === 'oldest') {
+        return timeA - timeB;
+      }
+      return timeB - timeA;
+    });
+  };
+
+  const categories =
+    typeFilter === 'todos'
+      ? []
+      : sortDeleted(
+          trashedCategories.filter((cat) => {
+            if (!matchesDeletedDateRange(cat.deletedAt, dateFrom, dateTo)) return false;
+            if (!normalizedQuery) return true;
+            return cat.name.toLocaleLowerCase(locale).includes(normalizedQuery);
+          }),
+          (cat) => cat.name,
+        );
+
+  const todos =
+    typeFilter === 'categories'
+      ? []
+      : sortDeleted(
+          trashedTodos.filter((todo) => {
+            if (!matchesDeletedDateRange(todo.deletedAt, dateFrom, dateTo)) return false;
+            if (!normalizedQuery) return true;
+            return (
+              todo.title.toLocaleLowerCase(locale).includes(normalizedQuery) ||
+              todo.notes.toLocaleLowerCase(locale).includes(normalizedQuery)
+            );
+          }),
+          (todo) => todo.title,
+        );
+
+  return { categories, todos };
+}

@@ -194,7 +194,7 @@ export function WelcomeModal({
       aria-modal="true"
       aria-labelledby="welcome-modal-title"
       data-testid="welcome-modal"
-      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+      className="animate-fade-in fixed inset-0 z-[55] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           onComplete(false);
@@ -202,7 +202,7 @@ export function WelcomeModal({
       }}
     >
       {/* Generous, Strictly Fixed 700x560 Dialog: Footer & Next button stay locked across all 7 steps */}
-      <div className="relative flex h-[560px] max-h-[calc(100vh-20px)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+      <div className="animate-modal-pop relative flex h-[560px] max-h-[calc(100vh-20px)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
         {/* Top Bar (Fixed 48px) */}
         <div className="flex h-12 shrink-0 items-center justify-between gap-3 px-6">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -261,7 +261,7 @@ export function WelcomeModal({
         </div>
 
         {/* Fixed-Height Content Area (438px) */}
-        <div className="flex flex-1 flex-col overflow-hidden px-6 py-4">
+        <div key={step} className="animate-tab-enter flex flex-1 flex-col overflow-hidden px-6 py-4">
           {/* STEP 1 / 7: CENTERED HERO + SEARCH & DROPDOWN + 3-COLUMN LANGUAGE GRID */}
           {step === 0 ? (
             <div className="flex flex-1 flex-col min-h-0" data-testid="welcome-language-dropdown">
@@ -573,7 +573,7 @@ export function WelcomeModal({
                     data-testid="welcome-icon-step"
                   >
                     {/* Row 1: Large Active Icon Preview (Left) + Clean Mode Selector (Right) */}
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <BrandMark
                           className="h-12 w-12 shrink-0 rounded-xl border border-[var(--border-strong)] shadow-sm"
@@ -584,7 +584,7 @@ export function WelcomeModal({
                           Agendamea
                         </span>
                       </div>
-                      <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-1 shrink-0">
+                      <div className="inline-flex max-w-full flex-wrap items-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-1">
                         {(
                           [
                             { id: 'match-theme', label: t.appIconMatchTheme },

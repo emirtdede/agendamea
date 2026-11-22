@@ -7,6 +7,7 @@ interface ColorSpectrumPickerProps {
   hexInputLabel: string;
   hexInputTestId?: string;
   compact?: boolean;
+  hideFooter?: boolean;
   paletteHeightClass?: string;
   previewNode?: React.ReactNode;
 }
@@ -68,6 +69,7 @@ export function ColorSpectrumPicker({
   hexInputLabel,
   hexInputTestId,
   compact = false,
+  hideFooter = false,
   paletteHeightClass,
   previewNode,
 }: ColorSpectrumPickerProps) {
@@ -80,16 +82,18 @@ export function ColorSpectrumPicker({
 
   useEffect(() => {
     setHexDraft(normalized);
-    const currentHex = hsvToHex(hsv.h, hsv.s, hsv.v);
-    if (currentHex.toLowerCase() !== normalized.toLowerCase()) {
+    setHsv((prev) => {
+      const currentHex = hsvToHex(prev.h, prev.s, prev.v);
+      if (currentHex.toLowerCase() === normalized.toLowerCase()) {
+        return prev;
+      }
       const next = hexToHsv(normalized);
-      setHsv((prev) => ({
+      return {
         h: next.s === 0 ? prev.h : next.h,
         s: next.s,
         v: next.v,
-      }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      };
+    });
   }, [normalized]);
 
   const huePureHex = useMemo(() => hsvToHex(hsv.h, 1, 1), [hsv.h]);
@@ -252,38 +256,40 @@ export function ColorSpectrumPicker({
       </div>
 
       {/* Live Preview + Editable HEX Code Input */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          {previewNode ?? (
-            <span
-              aria-hidden="true"
-              className="h-7 w-7 shrink-0 rounded-lg border border-[var(--border-strong)] shadow-2xs"
-              style={{ backgroundColor: normalized }}
-            />
-          )}
-          <span className="truncate text-[11px] font-medium text-[var(--text-muted)]">
-            {hexInputLabel}
-          </span>
+      {!hideFooter && (
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {previewNode ?? (
+              <span
+                aria-hidden="true"
+                className="h-7 w-7 shrink-0 rounded-lg border border-[var(--border-strong)] shadow-2xs"
+                style={{ backgroundColor: normalized }}
+              />
+            )}
+            <span className="truncate text-[11px] font-medium text-[var(--text-muted)]">
+              {hexInputLabel}
+            </span>
+          </div>
+          <input
+            type="text"
+            data-testid={hexInputTestId}
+            aria-label={hexInputLabel}
+            value={hexDraft}
+            maxLength={7}
+            spellCheck={false}
+            placeholder="#2563eb"
+            onChange={(e) => {
+              const val = e.target.value;
+              setHexDraft(val);
+              const norm = normalizeHexColor(val);
+              if (norm) {
+                onChange(norm);
+              }
+            }}
+            className="h-7 w-[92px] shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-center font-mono-tabular text-xs font-semibold uppercase text-[var(--text-primary)] focus:border-[var(--accent)]"
+          />
         </div>
-        <input
-          type="text"
-          data-testid={hexInputTestId}
-          aria-label={hexInputLabel}
-          value={hexDraft}
-          maxLength={7}
-          spellCheck={false}
-          placeholder="#2563eb"
-          onChange={(e) => {
-            const val = e.target.value;
-            setHexDraft(val);
-            const norm = normalizeHexColor(val);
-            if (norm) {
-              onChange(norm);
-            }
-          }}
-          className="h-7 w-[92px] shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-center font-mono-tabular text-xs font-semibold uppercase text-[var(--text-primary)] focus:border-[var(--accent)]"
-        />
-      </div>
+      )}
     </div>
   );
 }

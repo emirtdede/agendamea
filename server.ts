@@ -7,7 +7,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { TodoDatabase, ValidationError } from './src/db/database.ts';
-import type { OneDriveStatus } from './src/types.ts';
+import type { CloudProviderId, DetectedCloudProvider, OneDriveStatus } from './src/types.ts';
 import { compareSemver, getLocalDateString } from './src/utils/todoLogic.ts';
 
 const APP_VERSION = '1.0.0';
@@ -61,22 +61,118 @@ async function startServer() {
   const db = new TodoDatabase();
   const PORT = Number(process.env.PORT) || 3000;
 
-  function detectDefaultOneDriveRoot(): string {
-    const candidates = [
-      process.env.OneDriveConsumer,
-      process.env.OneDrive,
-      process.env.OneDriveCommercial,
-      path.join(os.homedir(), 'OneDrive'),
-    ].filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
-
+  function findFirstExistingDir(candidates: Array<string | undefined>): string | null {
     for (const candidate of candidates) {
+      if (typeof candidate !== 'string' || !candidate.trim()) continue;
       try {
         if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
-          return path.join(candidate, 'Agendamea');
+          return candidate;
         }
       } catch {
         // Ignore inaccessible paths
       }
+    }
+    return null;
+  }
+
+  function detectCloudProviders(): DetectedCloudProvider[] {
+    const home = os.homedir();
+
+    const oneDriveRoot = findFirstExistingDir([
+      process.env.OneDriveConsumer,
+      process.env.OneDrive,
+      process.env.OneDriveCommercial,
+      path.join(home, 'OneDrive'),
+    ]);
+
+    // Google Drive for Desktop creates either a virtual drive (often G:\My Drive or G:\Drive'ım) or user-home folder
+    const googleCandidates: string[] = [
+      path.join(home, 'Google Drive'),
+      path.join(home, 'My Drive'),
+    ];
+    if (process.platform === 'win32') {
+      for (const letter of ['G', 'H', 'I', 'D', 'E', 'F']) {
+        googleCandidates.push(`${letter}:\\My Drive`);
+        googleCandidates.push(`${letter}:\\Drive'ım`);
+        googleCandidates.push(`${letter}:\\Mon Drive`);
+        googleCandidates.push(`${letter}:\\Meine Ablage`);
+      }
+    }
+    const googleDriveRoot = findFirstExistingDir(googleCandidates);
+
+    const iCloudRoot = findFirstExistingDir([
+      path.join(home, 'iCloudDrive'),
+      path.join(home, 'iCloud Drive'),
+      path.join(home, 'Library', 'Mobile Documents', 'com~apple~CloudDocs'),
+    ]);
+
+    const dropboxRoot = findFirstExistingDir([
+      path.join(home, 'Dropbox'),
+      path.join(home, 'Dropbox (Personal)'),
+    ]);
+
+    return [
+      {
+        id: 'onedrive',
+        label: 'OneDrive',
+        folderPath: oneDriveRoot
+          ? path.join(oneDriveRoot, 'Agendamea')
+          : path.join(home, 'OneDrive', 'Agendamea'),
+        detected: Boolean(oneDriveRoot),
+      },
+      {
+        id: 'googledrive',
+        label: 'Google Drive',
+        folderPath: googleDriveRoot
+          ? path.join(googleDriveRoot, 'Agendamea')
+          : path.join(home, 'Google Drive', 'Agendamea'),
+        detected: Boolean(googleDriveRoot),
+      },
+      {
+        id: 'icloud',
+        label: 'iCloud Drive',
+        folderPath: iCloudRoot
+          ? path.join(iCloudRoot, 'Agendamea')
+          : path.join(home, 'iCloudDrive', 'Agendamea'),
+        detected: Boolean(iCloudRoot),
+      },
+      {
+        id: 'dropbox',
+        label: 'Dropbox',
+        folderPath: dropboxRoot
+          ? path.join(dropboxRoot, 'Agendamea')
+          : path.join(home, 'Dropbox', 'Agendamea'),
+        detected: Boolean(dropboxRoot),
+      },
+    ];
+  }
+
+  function detectProviderForFolder(
+    folderPath: string,
+    providers: DetectedCloudProvider[],
+  ): CloudProviderId | 'custom' {
+    const normalized = path.resolve(folderPath).toLowerCase();
+    for (const p of providers) {
+      const pNorm = path.resolve(p.folderPath).toLowerCase();
+      const pParent = path.dirname(pNorm);
+      if (normalized === pNorm || normalized.startsWith(`${pParent}${path.sep}`)) {
+        return p.id;
+      }
+    }
+    if (normalized.includes('onedrive')) return 'onedrive';
+    if (normalized.includes('google drive') || normalized.includes('my drive') || normalized.includes("drive'ım")) {
+      return 'googledrive';
+    }
+    if (normalized.includes('icloud')) return 'icloud';
+    if (normalized.includes('dropbox')) return 'dropbox';
+    return 'custom';
+  }
+
+  function detectDefaultOneDriveRoot(): string {
+    const providers = detectCloudProviders();
+    const firstDetected = providers.find((p) => p.detected);
+    if (firstDetected) {
+      return firstDetected.folderPath;
     }
     const baseDataDir = process.env.AGENDAMEA_DATA_DIR
       ? path.resolve(process.env.AGENDAMEA_DATA_DIR)
@@ -140,6 +236,7 @@ async function startServer() {
 
   function resolveOneDriveStatus(): OneDriveStatus {
     const settings = db.getSettings();
+    const detectedProviders = detectCloudProviders();
     const customPath = (settings.onedriveCustomPath ?? '').trim();
     const connected = customPath.length > 0;
     const folderPath = connected ? customPath : detectDefaultOneDriveRoot();
@@ -160,6 +257,8 @@ async function startServer() {
       remoteTodoCount: validBackup ? validBackup.todoCount : 0,
       remoteCategoryCount: validBackup ? validBackup.categoryCount : 0,
       backupFilesCount: candidates.length,
+      activeProvider: connected ? detectProviderForFolder(folderPath, detectedProviders) : null,
+      detectedProviders,
     };
   }
 
@@ -373,8 +472,7 @@ async function startServer() {
     try {
       res.json(db.getBootstrap());
     } catch (err) {
-      console.error('GET /api/bootstrap error:', err);
-      res.status(500).json({ error: 'Veriler yüklenemedi.' });
+      sendRouteError(res, 'GET /api/bootstrap', err, 'Veriler yüklenemedi.');
     }
   });
 
@@ -440,8 +538,7 @@ async function startServer() {
       }
       res.json(trashed);
     } catch (err) {
-      console.error('DELETE /api/categories/:id error:', err);
-      res.status(500).json({ error: 'Kategori çöp kutusuna taşınamadı.' });
+      sendRouteError(res, 'DELETE /api/categories/:id', err, 'Kategori çöp kutusuna taşınamadı.');
     }
   });
 
@@ -454,8 +551,7 @@ async function startServer() {
       }
       res.json(restored);
     } catch (err) {
-      console.error('POST /api/categories/:id/restore error:', err);
-      res.status(500).json({ error: 'Kategori geri yüklenemedi.' });
+      sendRouteError(res, 'POST /api/categories/:id/restore', err, 'Kategori geri yüklenemedi.');
     }
   });
 
@@ -468,8 +564,12 @@ async function startServer() {
       }
       res.json({ ok: true });
     } catch (err) {
-      console.error('DELETE /api/categories/:id/permanent error:', err);
-      res.status(500).json({ error: 'Kategori kalıcı olarak silinemedi.' });
+      sendRouteError(
+        res,
+        'DELETE /api/categories/:id/permanent',
+        err,
+        'Kategori kalıcı olarak silinemedi.',
+      );
     }
   });
 
@@ -504,7 +604,6 @@ async function startServer() {
             : undefined,
         subtasks: Array.isArray(body.subtasks) ? body.subtasks : undefined,
       });
-      triggerOneDriveAutoSync();
       res.status(201).json(created);
     } catch (err) {
       sendRouteError(res, 'POST /api/todos', err, 'Görev eklenemedi.');
@@ -535,8 +634,12 @@ async function startServer() {
       const trashedTodos = db.clearCompleted(categoryId);
       res.json({ ok: true, trashedTodos });
     } catch (err) {
-      console.error('DELETE /api/todos/completed error:', err);
-      res.status(500).json({ error: 'Tamamlananlar çöp kutusuna taşınamadı.' });
+      sendRouteError(
+        res,
+        'DELETE /api/todos/completed',
+        err,
+        'Tamamlananlar çöp kutusuna taşınamadı.',
+      );
     }
   });
 
@@ -568,7 +671,6 @@ async function startServer() {
         res.status(404).json({ error: 'Görev bulunamadı.' });
         return;
       }
-      triggerOneDriveAutoSync();
       res.json(updated);
     } catch (err) {
       sendRouteError(res, 'PATCH /api/todos/:id', err, 'Görev güncellenemedi.');
@@ -585,8 +687,7 @@ async function startServer() {
       }
       res.json(trashed);
     } catch (err) {
-      console.error('DELETE /api/todos/:id error:', err);
-      res.status(500).json({ error: 'Görev çöp kutusuna taşınamadı.' });
+      sendRouteError(res, 'DELETE /api/todos/:id', err, 'Görev çöp kutusuna taşınamadı.');
     }
   });
 
@@ -599,8 +700,7 @@ async function startServer() {
       }
       res.json(restored);
     } catch (err) {
-      console.error('POST /api/todos/:id/restore error:', err);
-      res.status(500).json({ error: 'Görev geri yüklenemedi.' });
+      sendRouteError(res, 'POST /api/todos/:id/restore', err, 'Görev geri yüklenemedi.');
     }
   });
 
@@ -613,8 +713,7 @@ async function startServer() {
       }
       res.json({ ok: true });
     } catch (err) {
-      console.error('DELETE /api/todos/:id/permanent error:', err);
-      res.status(500).json({ error: 'Görev kalıcı olarak silinemedi.' });
+      sendRouteError(res, 'DELETE /api/todos/:id/permanent', err, 'Görev kalıcı olarak silinemedi.');
     }
   });
 
@@ -624,8 +723,7 @@ async function startServer() {
       const result = db.emptyTrash();
       res.json({ ok: true, ...result });
     } catch (err) {
-      console.error('DELETE /api/trash error:', err);
-      res.status(500).json({ error: 'Çöp kutusu boşaltılamadı.' });
+      sendRouteError(res, 'DELETE /api/trash', err, 'Çöp kutusu boşaltılamadı.');
     }
   });
 
@@ -674,8 +772,7 @@ async function startServer() {
       }
       res.json({ ok: true });
     } catch (err) {
-      console.error('DELETE /api/subtasks/:id error:', err);
-      res.status(500).json({ error: 'Alt görev silinemedi.' });
+      sendRouteError(res, 'DELETE /api/subtasks/:id', err, 'Alt görev silinemedi.');
     }
   });
 
@@ -689,8 +786,14 @@ async function startServer() {
     }
   });
 
-  // Version & Update Check (manual and automatic background check via GitHub Releases)
-  app.get('/api/update-check', async (_req, res) => {
+  // Version & Update Check (cached 30s to protect GitHub unauthenticated rate limits; ?force=1 bypasses)
+  let updateCheckCache: { expiresAt: number; payload: Record<string, unknown> } | null = null;
+  app.get('/api/update-check', async (req, res) => {
+    const force = req.query.force === '1' || req.query.force === 'true';
+    if (!force && updateCheckCache && Date.now() < updateCheckCache.expiresAt) {
+      res.json(updateCheckCache.payload);
+      return;
+    }
     const checkedAt = new Date().toISOString();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
@@ -739,7 +842,7 @@ async function startServer() {
       const msixAsset = assets.find(
         (a) => typeof a?.name === 'string' && /\.(msix|appx)$/i.test(a.name),
       );
-      res.json({
+      const resultPayload = {
         ok: true,
         currentVersion: APP_VERSION,
         latestVersion,
@@ -762,7 +865,12 @@ async function startServer() {
             ? msixAsset.browser_download_url
             : null,
         checkedAt,
-      });
+      };
+      updateCheckCache = {
+        expiresAt: Date.now() + 30_000,
+        payload: resultPayload,
+      };
+      res.json(resultPayload);
     } catch {
       res.json({
         ok: false,
@@ -837,8 +945,7 @@ async function startServer() {
       );
       res.send(JSON.stringify(payload, null, 2));
     } catch (err) {
-      console.error('GET /api/export error:', err);
-      res.status(500).json({ error: 'Yedek oluşturulamadı.' });
+      sendRouteError(res, 'GET /api/export', err, 'Yedek oluşturulamadı.');
     }
   });
 
@@ -846,7 +953,6 @@ async function startServer() {
   app.post('/api/import', (req, res) => {
     try {
       const restored = db.importBackup(req.body ?? {});
-      triggerOneDriveAutoSync();
       res.json(restored);
     } catch (err) {
       sendRouteError(res, 'POST /api/import', err, 'Yedek dosyası içe aktarılamadı.');

@@ -55,6 +55,14 @@ export const QuickAddBar = React.memo(function QuickAddBar({
   const datePopoverRef = useRef<HTMLDivElement>(null);
   const isSubmittingRef = useRef(false);
   const pendingTodoIdRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Reset manual overrides when switching views so defaults match the newly opened list
   useEffect(() => {
@@ -131,6 +139,7 @@ export const QuickAddBar = React.memo(function QuickAddBar({
         categoryId: effectiveCategoryId,
         important: defaultImportant,
       });
+      if (!isMountedRef.current) return;
       setTitle('');
       setPriority('normal');
       setStartDate(null);
@@ -143,7 +152,9 @@ export const QuickAddBar = React.memo(function QuickAddBar({
       // Keep title and pendingTodoIdRef for safe idempotent retry
     } finally {
       isSubmittingRef.current = false;
-      setIsSubmitting(false);
+      if (isMountedRef.current) {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -414,7 +425,7 @@ export const QuickAddBar = React.memo(function QuickAddBar({
               <div
                 role="listbox"
                 aria-label={t.categories}
-                className="absolute left-0 top-7 z-30 min-w-[176px] rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-1 shadow-lg"
+                className="animate-modal-pop absolute left-0 top-7 z-30 min-w-[176px] rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-1 shadow-lg"
               >
                 <button
                   type="button"

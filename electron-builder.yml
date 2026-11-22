@@ -14,6 +14,8 @@ publish:
 
 asar: true
 asarUnpack:
+  - "cli/**"
+  - "mcp/**"
   - "dist/**"
   - "dist-server/**"
   - "electron-resources/icon.ico"
@@ -22,6 +24,8 @@ asarUnpack:
   - "node_modules/file-uri-to-path/**"
 
 files:
+  - "cli/**"
+  - "mcp/**"
   - "dist/**"
   - "dist-server/**"
   - "electron/**"

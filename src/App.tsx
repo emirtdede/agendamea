@@ -65,7 +65,6 @@ import type {
   ThemeMode,
   Todo,
   TodoPatch,
-  UpdateCheckResult,
 } from './types';
 import {
   applyAccessibilityToDocument,
@@ -1396,6 +1395,43 @@ export default function App() {
       setTrashedTodos(restored.trashedTodos);
       setThemeMode(restored.settings.themeMode);
       setThemeId(restored.settings.themeId);
+      setCustomThemeColor(
+        (restored.settings.customThemeColor &&
+          normalizeHexColor(restored.settings.customThemeColor)) ||
+          '#2563eb',
+      );
+      setAppIconId(
+        restored.settings.appIconId && isValidAppIconId(restored.settings.appIconId)
+          ? restored.settings.appIconId
+          : 'match-theme',
+      );
+      setCustomIconColor(
+        (restored.settings.customIconColor &&
+          normalizeHexColor(restored.settings.customIconColor)) ||
+          '#2563eb',
+      );
+      setZoomPercent(
+        typeof restored.settings.zoomPercent === 'number'
+          ? clampZoomPercent(restored.settings.zoomPercent)
+          : 100,
+      );
+      setHighContrast(Boolean(restored.settings.highContrast));
+      setReducedMotion(Boolean(restored.settings.reducedMotion));
+      const nextCloseBehavior: CloseBehavior =
+        restored.settings.closeBehavior === 'tray' || restored.settings.closeBehavior === 'quit'
+          ? restored.settings.closeBehavior
+          : 'ask';
+      setCloseBehavior(nextCloseBehavior);
+      void window.agendameaWindow?.setCloseBehavior?.(nextCloseBehavior);
+      const nextLaunchAtStartup = Boolean(restored.settings.launchAtStartup);
+      setLaunchAtStartup(nextLaunchAtStartup);
+      void window.agendameaWindow?.setLaunchAtStartup?.(nextLaunchAtStartup);
+      const nextGlobalQuickAdd =
+        restored.settings.globalQuickAddShortcut === undefined
+          ? true
+          : Boolean(restored.settings.globalQuickAddShortcut);
+      setGlobalQuickAddShortcut(nextGlobalQuickAdd);
+      void window.agendameaWindow?.setGlobalQuickAddShortcut?.(nextGlobalQuickAdd);
       setDragLocked(Boolean(restored.settings.dragLocked));
       if (restored.settings.language && isValidLanguageCode(restored.settings.language)) {
         setLanguage(restored.settings.language);
@@ -1769,7 +1805,18 @@ export default function App() {
     setIsSettingsOpen(true);
   }, []);
 
+  const handleOpenDefaultSettings = useCallback(() => {
+    handleOpenSettings('appearance');
+  }, [handleOpenSettings]);
+
+  const handleOpenMobileSidebar = useCallback(() => {
+    setIsMobileSidebarOpen(true);
+  }, []);
+
   const handleCloseSettings = useCallback(() => {
+    setActiveView({ type: 'smart', id: 'all' });
+    setStatusFilter('all');
+    setTagFilter(null);
     setIsSettingsOpen(false);
   }, []);
 
@@ -1880,7 +1927,7 @@ export default function App() {
           onSearchChange={handleSearchChange}
           searchInputRef={searchInputRef}
           isSettingsOpen={isSettingsOpen}
-          onOpenSettings={() => handleOpenSettings('appearance')}
+          onOpenSettings={handleOpenDefaultSettings}
           onCreateCategory={handleCreateCategory}
           onUpdateCategory={handleUpdateCategory}
           onTogglePinCategory={handleTogglePinCategory}
@@ -1903,7 +1950,7 @@ export default function App() {
             <SettingsModal
               onClose={handleCloseSettings}
               initialTab={settingsInitialTab}
-              onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
+              onOpenMobileSidebar={handleOpenMobileSidebar}
               themeMode={themeMode}
               themeId={themeId}
               customThemeColor={customThemeColor}
@@ -2224,71 +2271,147 @@ export default function App() {
                 </div>
               )}
 
-              {/* Loading Skeleton */}
+              {/* 1:1 Layout-Matched Loading Skeleton */}
               {isLoading ? (
-                <div
-                  aria-busy="true"
-                  aria-label="Agendamea"
-                  className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
-                >
-                  {[0, 1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-3 px-4 py-4 border-b border-[var(--border)] last:border-b-0"
-                    >
-                      <div className="h-5 w-5 rounded-full bg-[var(--surface-hover)] animate-pulse" />
-                      <div className="flex-1 space-y-2">
-                        <div className="h-4 w-2/3 rounded bg-[var(--surface-hover)] animate-pulse" />
-                        <div className="h-3 w-1/3 rounded bg-[var(--surface-subtle)] animate-pulse" />
+                layoutMode === 'kanban' ? (
+                  <div
+                    aria-busy="true"
+                    aria-label="Agendamea"
+                    className="grid grid-cols-1 md:grid-cols-3 gap-3"
+                  >
+                    {[0, 1, 2].map((col) => (
+                      <div
+                        key={col}
+                        className="rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)]/60 p-3 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between px-1">
+                          <div className="h-3.5 w-24 rounded bg-[var(--surface-hover)] animate-pulse" />
+                          <div className="h-4 w-6 rounded bg-[var(--surface-hover)] animate-pulse" />
+                        </div>
+                        {[0, 1].map((card) => (
+                          <div
+                            key={card}
+                            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 space-y-2"
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <div className="mt-0.5 h-4 w-4 shrink-0 rounded-full bg-[var(--surface-hover)] animate-pulse" />
+                              <div className="flex-1 space-y-1.5">
+                                <div className="h-3.5 w-3/4 rounded bg-[var(--surface-hover)] animate-pulse" />
+                                <div className="h-3 w-1/2 rounded bg-[var(--surface-subtle)] animate-pulse" />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : layoutMode === 'matrix' ? (
+                  <div
+                    aria-busy="true"
+                    aria-label="Agendamea"
+                    className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                  >
+                    {[0, 1, 2, 3].map((q) => (
+                      <div
+                        key={q}
+                        className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-2.5 min-h-[168px]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="h-3.5 w-36 rounded bg-[var(--surface-hover)] animate-pulse" />
+                          <div className="h-4 w-6 rounded bg-[var(--surface-subtle)] animate-pulse" />
+                        </div>
+                        <div className="rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-3 space-y-1.5">
+                          <div className="h-3.5 w-2/3 rounded bg-[var(--surface-hover)] animate-pulse" />
+                          <div className="h-3 w-1/3 rounded bg-[var(--surface-subtle)] animate-pulse" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div
+                    aria-busy="true"
+                    aria-label="Agendamea"
+                    className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
+                  >
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-3 px-4 py-3 border-b border-[var(--border)] last:border-b-0"
+                      >
+                        <div className="mt-0.5 h-5 w-5 shrink-0 rounded-full border border-[var(--border)] bg-[var(--surface-hover)] animate-pulse" />
+                        <div className="flex-1 min-w-0 space-y-2 py-0.5">
+                          <div
+                            className={`h-[15px] rounded bg-[var(--surface-hover)] animate-pulse ${
+                              i % 2 === 0 ? 'w-3/5' : 'w-2/5'
+                            }`}
+                          />
+                          <div className="flex items-center gap-2">
+                            <div className="h-3 w-16 rounded bg-[var(--surface-subtle)] animate-pulse" />
+                            <div className="h-3 w-20 rounded bg-[var(--surface-subtle)] animate-pulse" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                          <div className="h-7 w-7 rounded-md bg-[var(--surface-subtle)] animate-pulse" />
+                          <div className="h-7 w-7 rounded-md bg-[var(--surface-subtle)] animate-pulse" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
               ) : layoutMode === 'calendar' ? (
-                <CalendarPlannerView
-                  todos={visibleTodos}
-                  categoryMap={categoryMap}
-                  todayStr={todayStr}
-                  selectedTodoId={selectedTodoId}
-                  dragLocked={dragLocked}
-                  onSelectTodo={handleSelectTodo}
-                  onToggleComplete={handleToggleTodoComplete}
-                  onToggleImportant={handleToggleTodoImportant}
-                  onTogglePin={handleToggleTodoPin}
-                  onUpdateTodo={handleUpdateTodo}
-                  onTagClick={handleTagClick}
-                />
+                <div key="view-calendar" className="animate-tab-enter">
+                  <CalendarPlannerView
+                    todos={visibleTodos}
+                    categoryMap={categoryMap}
+                    todayStr={todayStr}
+                    selectedTodoId={selectedTodoId}
+                    dragLocked={dragLocked}
+                    onSelectTodo={handleSelectTodo}
+                    onToggleComplete={handleToggleTodoComplete}
+                    onToggleImportant={handleToggleTodoImportant}
+                    onTogglePin={handleToggleTodoPin}
+                    onUpdateTodo={handleUpdateTodo}
+                    onTagClick={handleTagClick}
+                  />
+                </div>
               ) : layoutMode === 'kanban' ? (
-                <KanbanBoardView
-                  todos={visibleTodos}
-                  categoryMap={categoryMap}
-                  todayStr={todayStr}
-                  selectedTodoId={selectedTodoId}
-                  dragLocked={dragLocked}
-                  onSelectTodo={handleSelectTodo}
-                  onToggleComplete={handleToggleTodoComplete}
-                  onToggleImportant={handleToggleTodoImportant}
-                  onTogglePin={handleToggleTodoPin}
-                  onUpdateTodo={handleUpdateTodo}
-                  onTagClick={handleTagClick}
-                />
+                <div key="view-kanban" className="animate-tab-enter">
+                  <KanbanBoardView
+                    todos={visibleTodos}
+                    categoryMap={categoryMap}
+                    todayStr={todayStr}
+                    selectedTodoId={selectedTodoId}
+                    dragLocked={dragLocked}
+                    onSelectTodo={handleSelectTodo}
+                    onToggleComplete={handleToggleTodoComplete}
+                    onToggleImportant={handleToggleTodoImportant}
+                    onTogglePin={handleToggleTodoPin}
+                    onUpdateTodo={handleUpdateTodo}
+                    onTagClick={handleTagClick}
+                  />
+                </div>
               ) : layoutMode === 'matrix' ? (
-                <EisenhowerMatrixView
-                  todos={visibleTodos}
-                  categoryMap={categoryMap}
-                  todayStr={todayStr}
-                  selectedTodoId={selectedTodoId}
-                  dragLocked={dragLocked}
-                  onSelectTodo={handleSelectTodo}
-                  onToggleComplete={handleToggleTodoComplete}
-                  onToggleImportant={handleToggleTodoImportant}
-                  onTogglePin={handleToggleTodoPin}
-                  onUpdateTodo={handleUpdateTodo}
-                  onTagClick={handleTagClick}
-                />
+                <div key="view-matrix" className="animate-tab-enter">
+                  <EisenhowerMatrixView
+                    todos={visibleTodos}
+                    categoryMap={categoryMap}
+                    todayStr={todayStr}
+                    selectedTodoId={selectedTodoId}
+                    dragLocked={dragLocked}
+                    onSelectTodo={handleSelectTodo}
+                    onToggleComplete={handleToggleTodoComplete}
+                    onToggleImportant={handleToggleTodoImportant}
+                    onTogglePin={handleToggleTodoPin}
+                    onUpdateTodo={handleUpdateTodo}
+                    onTagClick={handleTagClick}
+                  />
+                </div>
               ) : visibleTodos.length === 0 ? (
                 /* Clean Empty State */
-                <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-14 text-center">
+                <div
+                  key={`empty-${activeView.type}-${activeView.id}`}
+                  className="animate-tab-enter flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-14 text-center"
+                >
                   <div
                     className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl"
                     style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}

@@ -52,7 +52,6 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newTagInput, setNewTagInput] = useState('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
-  const [saveHint, setSaveHint] = useState<'idle' | 'saved'>('idle');
 
   const timerRef = useRef<number | null>(null);
   const isAddingSubtaskRef = useRef(false);
@@ -96,10 +95,6 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
           if (lastSavedRef.current === nextSaved) {
             lastSavedRef.current = prevSaved;
           }
-          return;
-        }
-        if (isMountedRef.current && draftRef.current.id === targetId) {
-          setSaveHint('saved');
         }
       },
     );
@@ -121,7 +116,6 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
       setNotes(todo.notes);
       setNewSubtaskTitle('');
       setNewTagInput('');
-      setSaveHint('idle');
       lastSavedRef.current = { id: todo.id, title: todo.title, notes: todo.notes };
       draftRef.current = { id: todo.id, title: todo.title, notes: todo.notes };
       return;
@@ -244,7 +238,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
   return (
     <aside
       aria-label={todo.title}
-      className="fixed inset-y-0 right-0 z-30 flex w-full max-w-[380px] flex-col border-l border-[var(--border)] bg-[var(--surface)] lg:relative lg:z-auto lg:w-[368px] shrink-0"
+      className="animate-slide-in-right fixed inset-y-0 right-0 z-30 flex w-full max-w-[380px] flex-col border-l border-[var(--border)] bg-[var(--surface)] lg:relative lg:z-auto lg:w-[368px] shrink-0"
     >
       {/* Top frameless drag clearance (stops before top-right WindowControls) */}
       <div
@@ -692,14 +686,10 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
         </div>
       </div>
 
-      {/* Footer (Non-technical user-friendly copy) */}
+      {/* Footer */}
       <div className="flex items-center justify-between border-t border-[var(--border)] px-5 py-3 text-xs text-[var(--text-muted)]">
         <span>
-          {saveHint === 'saved'
-            ? t.autoSavedBadge
-            : createdFormatted
-              ? `${t.createdPrefix}: ${createdFormatted}`
-              : t.instantSaveBadge}
+          {createdFormatted ? `${t.createdPrefix}: ${createdFormatted}` : ''}
         </span>
         <button
           type="button"

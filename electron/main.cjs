@@ -130,11 +130,13 @@ function rebuildWindowsJumpList() {
   if (process.platform !== 'win32' || typeof app.setUserTasks !== 'function') return;
   try {
     const exePath = process.execPath;
+    const { icoPath } = resolveStartupIcons(resolveRuntimeRoot());
+    const iconPath = icoPath && fs.existsSync(icoPath) ? icoPath : exePath;
     app.setUserTasks([
       {
         program: exePath,
         arguments: '--jump-quick-add',
-        iconPath: exePath,
+        iconPath,
         iconIndex: 0,
         title: trayLabels.newTaskLabel || 'New Task',
         description: trayLabels.newTaskLabel || 'New Task',
@@ -142,7 +144,7 @@ function rebuildWindowsJumpList() {
       {
         program: exePath,
         arguments: '--jump-view=today',
-        iconPath: exePath,
+        iconPath,
         iconIndex: 0,
         title: trayLabels.todayLabel || 'Today',
         description: trayLabels.todayLabel || 'Today',
@@ -150,7 +152,7 @@ function rebuildWindowsJumpList() {
       {
         program: exePath,
         arguments: '--jump-view=important',
-        iconPath: exePath,
+        iconPath,
         iconIndex: 0,
         title: trayLabels.importantLabel || 'Important',
         description: trayLabels.importantLabel || 'Important',
@@ -158,6 +160,34 @@ function rebuildWindowsJumpList() {
     ]);
   } catch {
     // Ignore jump list error on restricted shells
+  }
+}
+
+function writeRuntimePortFile(userDataDir, port) {
+  try {
+    fs.mkdirSync(userDataDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(userDataDir, 'runtime-port.json'),
+      JSON.stringify(
+        { port: Number(port), pid: process.pid, updatedAt: new Date().toISOString() },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+  } catch {
+    // Ignore runtime port write error
+  }
+}
+
+function removeRuntimePortFile() {
+  try {
+    const portFile = path.join(app.getPath('userData'), 'runtime-port.json');
+    if (fs.existsSync(portFile)) {
+      fs.rmSync(portFile, { force: true });
+    }
+  } catch {
+    // Ignore cleanup error
   }
 }
 
@@ -518,6 +548,7 @@ function startBackend(port) {
   });
   serverProcess = proc;
   activePort = port;
+  writeRuntimePortFile(userDataDir, port);
 
   // Self-healing watchdog: automatically restart local backend if it crashes unexpectedly
   proc.on('exit', (code) => {
@@ -572,6 +603,7 @@ function stopBackend() {
     logFd = null;
   }
   unlockCriticalRuntimeFiles();
+  removeRuntimePortFile();
 }
 
 async function waitForServer(url, timeoutMs = 15000) {
@@ -758,14 +790,14 @@ async function createWindow(appUrl) {
       '<body style="font-family:Segoe UI,system-ui,sans-serif;display:flex;flex-direction:column;height:100vh;margin:0;background:#09090b;color:#fafafa;user-select:none;">',
       '<div style="-webkit-app-region:drag;height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid #27272a;">',
       '<div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;">',
-      '<svg width="18" height="18" viewBox="0 0 64 64" fill="none"><rect width="64" height="64" rx="16" fill="#18181b"/><path d="M18 33L27.5 42.5L46 22" stroke="#fafafa" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      '<svg width="18" height="18" viewBox="0 0 512 512" fill="none"><rect width="512" height="512" rx="116" fill="#18181b"/><g transform="translate(-4 3)" stroke="#fafafa" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"><path d="M 144 378 L 252 128 L 294 224"/><path d="M 332 312 L 360 378"/><path d="M 202 288 L 252 336 L 376 198"/></g></svg>',
       '<span>Agendamea</span></div>',
       `<button type="button" aria-label="${closeLabel}" onclick="if(window.agendameaWindow&&window.agendameaWindow.performCloseAction){window.agendameaWindow.performCloseAction('quit')}else{window.close()}" style="-webkit-app-region:no-drag;background:transparent;border:none;color:#a1a1aa;font-size:18px;line-height:1;width:32px;height:28px;border-radius:6px;cursor:pointer;">&times;</button>`,
       '</div>',
       '<div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px;">',
       '<div style="max-width:380px;text-align:center;background:#18181b;border:1px solid #27272a;border-radius:16px;padding:28px 24px;">',
       '<div style="margin:0 auto 14px;width:44px;height:44px;border-radius:12px;background:#27272a;display:flex;align-items:center;justify-content:center;">',
-      '<svg width="24" height="24" viewBox="0 0 64 64" fill="none"><path d="M18 33L27.5 42.5L46 22" stroke="#fafafa" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      '<svg width="28" height="28" viewBox="0 0 512 512" fill="none"><g transform="translate(-4 3)" stroke="#fafafa" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"><path d="M 144 378 L 252 128 L 294 224"/><path d="M 332 312 L 360 378"/><path d="M 202 288 L 252 336 L 376 198"/></g></svg>',
       '</div>',
       `<h2 style="margin:0 0 8px;font-size:17px;font-weight:700;">${errHeading}</h2>`,
       `<p style="margin:0 0 20px;font-size:13px;line-height:1.5;color:#a1a1aa;">${errBody}</p>`,
@@ -838,6 +870,9 @@ ipcMain.handle('shortcut:set-global-quick-add', (_event, enabled) => {
 });
 
 ipcMain.handle('app:get-diagnostics', () => {
+  const runtimeRoot = resolveRuntimeRoot();
+  const cliPath = path.join(runtimeRoot, 'cli', 'agendamea.cjs');
+  const mcpPath = path.join(runtimeRoot, 'mcp', 'server.cjs');
   return {
     appVersion: app.getVersion() || '1.0.0',
     electronVersion: process.versions.electron || '',
@@ -848,6 +883,11 @@ ipcMain.handle('app:get-diagnostics', () => {
     osRelease: typeof os.release === 'function' ? os.release() : '',
     isWindowsStore: Boolean(process.windowsStore),
     locale: typeof app.getLocale === 'function' ? app.getLocale() : 'en',
+    execPath: process.execPath,
+    cliPath,
+    mcpPath,
+    runtimePort: activePort,
+    userDataDir: app.getPath('userData'),
   };
 });
 
@@ -926,6 +966,7 @@ ipcMain.handle('icon:apply', (event, payload) => {
         isStoreBuild: Boolean(process.windowsStore),
       });
     }
+    rebuildWindowsJumpList();
 
     return {
       ok: true,
@@ -1077,9 +1118,11 @@ ipcMain.handle('onedrive:open-folder', async (_event, customFolderPath) => {
     let targetFolder = defaultFolder;
     if (typeof customFolderPath === 'string' && customFolderPath.trim().length > 0) {
       const candidate = path.resolve(customFolderPath.trim());
+      const parentDir = path.dirname(candidate);
       if (
         candidate === defaultFolder ||
-        (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory())
+        (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) ||
+        (fs.existsSync(parentDir) && fs.statSync(parentDir).isDirectory())
       ) {
         targetFolder = candidate;
       }

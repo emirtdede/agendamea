@@ -1,6 +1,8 @@
+import { Palette } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 import { CATEGORY_COLORS, isValidHexColor, normalizeHexColor } from '../utils/themes';
+import { ColorSpectrumPicker } from './ColorSpectrumPicker';
 
 interface CategoryColorPickerProps {
   value: string;
@@ -16,6 +18,7 @@ export function CategoryColorPicker({
   const { t, getCategoryColorDisplayName } = useI18n();
   const [hexDraft, setHexDraft] = useState(value.toUpperCase());
   const [isEditingHex, setIsEditingHex] = useState(false);
+  const [showSpectrum, setShowSpectrum] = useState(false);
 
   useEffect(() => {
     if (!isEditingHex) {
@@ -85,22 +88,24 @@ export function CategoryColorPicker({
         })}
       </div>
 
-      {/* Custom Visual Color Picker + Hex Code Input */}
+      {/* Custom In-App Visual Spectrum Toggle + Balanced Hex Input (Replaces misaligned native OS color popup) */}
       <div className="flex items-center gap-2">
-        <label
+        <button
+          type="button"
+          onClick={() => setShowSpectrum((prev) => !prev)}
+          aria-expanded={showSpectrum}
+          aria-label={t.customColorTitle}
           title={t.customColorTitle}
-          className="relative flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-md border border-[var(--border-strong)]"
+          data-testid="category-color-spectrum-toggle"
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors ${
+            showSpectrum
+              ? 'border-[var(--accent)] ring-2 ring-[var(--accent-ring)]'
+              : 'border-[var(--border-strong)] hover:brightness-110'
+          }`}
           style={{ backgroundColor: safePickerValue }}
         >
-          <span className="sr-only">{t.customColorTitle}</span>
-          <input
-            type="color"
-            value={safePickerValue}
-            onChange={(e) => handleDirectSelect(e.target.value)}
-            aria-label={t.customColorTitle}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-          />
-        </label>
+          <Palette className="h-3.5 w-3.5 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.65)]" />
+        </button>
         <input
           type="text"
           value={hexDraft}
@@ -114,6 +119,22 @@ export function CategoryColorPicker({
           className="h-7 flex-1 min-w-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 font-mono-tabular text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
         />
       </div>
+
+      {showSpectrum && (
+        <div
+          className="animate-modal-pop rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5"
+          data-testid="category-color-spectrum-panel"
+        >
+          <ColorSpectrumPicker
+            value={safePickerValue}
+            onChange={handleDirectSelect}
+            hexInputLabel={t.customColorHexLabel}
+            compact
+            hideFooter
+            paletteHeightClass="h-[88px]"
+          />
+        </div>
+      )}
     </div>
   );
 }

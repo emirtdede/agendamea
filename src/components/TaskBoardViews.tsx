@@ -81,7 +81,10 @@ const CompactBoardCard = React.memo(function CompactBoardCard({
     todo.dueTime,
   );
 
-  const completedSubtasks = todo.subtasks.filter((s) => s.completed).length;
+  let completedSubtasks = 0;
+  for (let i = 0; i < todo.subtasks.length; i += 1) {
+    if (todo.subtasks[i].completed) completedSubtasks += 1;
+  }
   const totalSubtasks = todo.subtasks.length;
   const tags = todo.tags ?? [];
 

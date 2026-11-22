@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownToLine,
   ArrowLeft,
+  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
@@ -23,6 +24,7 @@ import {
   RefreshCw,
   RotateCcw,
   Scale,
+  Search,
   Settings,
   Shield,
   SlidersHorizontal,
@@ -31,6 +33,7 @@ import {
   Trash2,
   Unlock,
   Upload,
+  X,
   ZoomIn,
 } from 'lucide-react';
 import { api } from '../api/client';
@@ -41,6 +44,7 @@ import type {
   BootstrapPayload,
   Category,
   CloseBehavior,
+  DetectedCloudProvider,
   OneDriveStatus,
   SettingsTabId,
   ThemeId,
@@ -53,9 +57,15 @@ import {
   resolveEffectiveThemeMode,
   ZOOM_PRESETS,
 } from '../utils/themes';
+import {
+  filterAndSortTrash,
+  type TrashSortOption,
+  type TrashTypeFilter,
+} from '../utils/todoLogic';
 import { BrandMark } from './BrandMark';
 import { ColorDot } from './ColorDot';
 import { ColorSpectrumPicker } from './ColorSpectrumPicker';
+import { DocsSettingsSection } from './DocsSettingsSection';
 import { LegalDocumentView } from './LegalDocumentView';
 import {
   LanguageSelectorSection,
@@ -191,6 +201,13 @@ export function SettingsModal({
   const [isAppIconOpen, setIsAppIconOpen] = useState(false);
   const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
 
+  // Trash search, type filter, sort & deleted date-range state
+  const [trashSearchQuery, setTrashSearchQuery] = useState('');
+  const [trashTypeFilter, setTrashTypeFilter] = useState<TrashTypeFilter>('all');
+  const [trashSortBy, setTrashSortBy] = useState<TrashSortOption>('newest');
+  const [trashDateFrom, setTrashDateFrom] = useState('');
+  const [trashDateTo, setTrashDateTo] = useState('');
+
   const [oneDriveStatus, setOneDriveStatus] = useState<OneDriveStatus | null>(null);
   const [isOneDriveBusy, setIsOneDriveBusy] = useState(false);
   const [isExportingBackup, setIsExportingBackup] = useState(false);
@@ -309,6 +326,36 @@ export function SettingsModal({
       setIsOneDriveBusy(true);
       const next = await api.connectOneDrive({
         folderPath: picked.folderPath,
+        autoSync: true,
+      });
+      if (isMountedRef.current) setOneDriveStatus(next);
+      if (next.restoredBootstrap) {
+        if (onApplyRestoredBootstrap) {
+          onApplyRestoredBootstrap(next.restoredBootstrap);
+        } else {
+          await onImportBackup(next.restoredBootstrap);
+        }
+      }
+    } catch (err) {
+      if (isMountedRef.current) {
+        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
+      }
+    } finally {
+      if (isMountedRef.current) setIsOneDriveBusy(false);
+    }
+  };
+
+  const handleSelectCloudProvider = async (provider: DetectedCloudProvider) => {
+    if (isOneDriveBusy) return;
+    if (!provider.detected) {
+      await handleOneDrivePickFolder();
+      return;
+    }
+    setIsOneDriveBusy(true);
+    setImportError(null);
+    try {
+      const next = await api.connectOneDrive({
+        folderPath: provider.folderPath,
         autoSync: true,
       });
       if (isMountedRef.current) setOneDriveStatus(next);
@@ -516,66 +563,133 @@ export function SettingsModal({
     }
   };
 
-  const shortcuts = [
-    { keys: 'N', label: t.shortcutNewTask },
-    { keys: 'Ctrl + Alt + N', label: t.globalQuickAddTitle },
-    { keys: '/ · Ctrl+K', label: t.shortcutSearch },
-    { keys: 'Alt + ↑ / ↓', label: t.shortcutReorder },
-    { keys: 'Esc', label: t.shortcutEscape },
-  ];
+  const shortcuts = useMemo(
+    () => [
+      { keys: 'N', label: t.shortcutNewTask },
+      { keys: 'Ctrl + Alt + N', label: t.globalQuickAddTitle },
+      { keys: '/ · Ctrl+K', label: t.shortcutSearch },
+      { keys: 'Alt + ↑ / ↓', label: t.shortcutReorder },
+      { keys: 'Esc', label: t.shortcutEscape },
+    ],
+    [
+      t.shortcutNewTask,
+      t.globalQuickAddTitle,
+      t.shortcutSearch,
+      t.shortcutReorder,
+      t.shortcutEscape,
+    ],
+  );
 
-  const legalItems: Array<{ id: LegalDocId; title: string; Icon: typeof Shield }> = [
-    { id: 'privacy', title: t.legalPrivacyTitle, Icon: Shield },
-    { id: 'terms', title: t.legalTermsTitle, Icon: Scale },
-    { id: 'gdpr', title: t.legalKvkkGdprTitle, Icon: FileText },
-    { id: 'opensource', title: t.legalOpenSourceTitle, Icon: FileText },
-    { id: 'accessibility', title: t.legalAccessibilityTitle, Icon: Shield },
-  ];
+  const legalItems = useMemo<Array<{ id: LegalDocId; title: string; Icon: typeof Shield }>>(
+    () => [
+      { id: 'privacy', title: t.legalPrivacyTitle, Icon: Shield },
+      { id: 'terms', title: t.legalTermsTitle, Icon: Scale },
+      { id: 'gdpr', title: t.legalKvkkGdprTitle, Icon: FileText },
+      { id: 'opensource', title: t.legalOpenSourceTitle, Icon: FileText },
+      { id: 'accessibility', title: t.legalAccessibilityTitle, Icon: Shield },
+    ],
+    [
+      t.legalPrivacyTitle,
+      t.legalTermsTitle,
+      t.legalKvkkGdprTitle,
+      t.legalOpenSourceTitle,
+      t.legalAccessibilityTitle,
+    ],
+  );
 
-  const navGroups: Array<{
-    groupTitle: string;
-    items: Array<{
-      id: SettingsTabId;
-      label: string;
-      Icon: React.ComponentType<{ className?: string }>;
-      badge?: number;
-      hasDot?: boolean;
-    }>;
-  }> = [
-    {
-      groupTitle: t.settingsNavGroupPersonalization,
-      items: [
-        { id: 'appearance', label: t.settingsTabAppearance, Icon: Palette },
-        { id: 'accessibility', label: t.accessibilitySectionTitle, Icon: ZoomIn },
-      ],
-    },
-    {
-      groupTitle: t.settingsNavGroupWorkspace,
-      items: [
-        { id: 'general', label: t.settingsTabGeneral, Icon: SlidersHorizontal },
-        { id: 'data', label: t.dataAndBackupTitle, Icon: Cloud },
-        {
-          id: 'trash',
-          label: t.tabTrash,
-          Icon: Trash2,
-          badge: trashCount > 0 ? trashCount : undefined,
-        },
-      ],
-    },
-    {
-      groupTitle: t.settingsNavGroupSystem,
-      items: [
-        {
-          id: 'about',
-          label: t.settingsTabAbout,
-          Icon: Shield,
-          hasDot: updateState.status === 'available' || updateState.status === 'downloaded',
-        },
-      ],
-    },
-  ];
+  const filteredTrash = useMemo(
+    () =>
+      filterAndSortTrash(trashedCategories, trashedTodos, {
+        query: trashSearchQuery,
+        typeFilter: trashTypeFilter,
+        sortBy: trashSortBy,
+        dateFrom: trashDateFrom,
+        dateTo: trashDateTo,
+        locale: meta.intlLocale,
+      }),
+    [
+      trashedCategories,
+      trashedTodos,
+      trashSearchQuery,
+      trashTypeFilter,
+      trashSortBy,
+      trashDateFrom,
+      trashDateTo,
+      meta.intlLocale,
+    ],
+  );
 
-  const allNavItems = navGroups.flatMap((g) => g.items);
+  const hasTrashFilters =
+    trashSearchQuery.trim().length > 0 ||
+    trashTypeFilter !== 'all' ||
+    trashDateFrom.length > 0 ||
+    trashDateTo.length > 0;
+
+  const filteredTrashCount = filteredTrash.categories.length + filteredTrash.todos.length;
+
+  const navGroups = useMemo<
+    Array<{
+      groupTitle: string;
+      items: Array<{
+        id: SettingsTabId;
+        label: string;
+        Icon: React.ComponentType<{ className?: string }>;
+        badge?: number;
+        hasDot?: boolean;
+      }>;
+    }>
+  >(
+    () => [
+      {
+        groupTitle: t.settingsNavGroupPersonalization,
+        items: [
+          { id: 'appearance', label: t.settingsTabAppearance, Icon: Palette },
+          { id: 'accessibility', label: t.accessibilitySectionTitle, Icon: ZoomIn },
+        ],
+      },
+      {
+        groupTitle: t.settingsNavGroupWorkspace,
+        items: [
+          { id: 'general', label: t.settingsTabGeneral, Icon: SlidersHorizontal },
+          { id: 'data', label: t.dataAndBackupTitle, Icon: Cloud },
+          {
+            id: 'trash',
+            label: t.tabTrash,
+            Icon: Trash2,
+            badge: trashCount > 0 ? trashCount : undefined,
+          },
+        ],
+      },
+      {
+        groupTitle: t.settingsNavGroupSystem,
+        items: [
+          { id: 'docs', label: t.settingsTabDocs, Icon: BookOpen },
+          {
+            id: 'about',
+            label: t.settingsTabAbout,
+            Icon: Shield,
+            hasDot: updateState.status === 'available' || updateState.status === 'downloaded',
+          },
+        ],
+      },
+    ],
+    [
+      t.settingsNavGroupPersonalization,
+      t.settingsTabAppearance,
+      t.accessibilitySectionTitle,
+      t.settingsNavGroupWorkspace,
+      t.settingsTabGeneral,
+      t.dataAndBackupTitle,
+      t.tabTrash,
+      t.settingsNavGroupSystem,
+      t.settingsTabDocs,
+      t.settingsTabAbout,
+      trashCount,
+      updateState.status,
+    ],
+  );
+
+  const allNavItems = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
   const currentTabMeta = allNavItems.find((item) => item.id === activeTab) ?? allNavItems[0];
   const CurrentTabIcon = currentTabMeta.Icon;
 
@@ -589,16 +703,31 @@ export function SettingsModal({
   const activeIconLabel =
     appIconId === 'match-theme'
       ? t.appIconMatchTheme
-      : appIconId === 'obsidian-light'
-        ? t.appIconLightMono
-        : appIconId === 'custom'
-          ? `${t.appIconCustom} (${customIconColor.toUpperCase()})`
-          : (() => {
-              const matched = COLOR_THEMES.find((item) => item.id === appIconId);
-              return matched
-                ? getThemeDisplayName(matched.id, matched.name)
-                : t.appIconMatchTheme;
-            })();
+      : appIconId === 'obsidian'
+        ? t.appIconDarkMono
+        : appIconId === 'obsidian-light'
+          ? t.appIconLightMono
+          : appIconId === 'custom'
+            ? `${t.appIconCustom} (${customIconColor.toUpperCase()})`
+            : (() => {
+                const matched = COLOR_THEMES.find((item) => item.id === appIconId);
+                return matched
+                  ? getThemeDisplayName(matched.id, matched.name)
+                  : t.appIconMatchTheme;
+              })();
+
+  const cloudProviders = useMemo<DetectedCloudProvider[]>(
+    () =>
+      oneDriveStatus?.detectedProviders && oneDriveStatus.detectedProviders.length > 0
+        ? oneDriveStatus.detectedProviders
+        : [
+            { id: 'onedrive', label: 'OneDrive', folderPath: '', detected: false },
+            { id: 'googledrive', label: 'Google Drive', folderPath: '', detected: false },
+            { id: 'icloud', label: 'iCloud Drive', folderPath: '', detected: false },
+            { id: 'dropbox', label: 'Dropbox', folderPath: '', detected: false },
+          ],
+    [oneDriveStatus?.detectedProviders],
+  );
 
   return (
     <section
@@ -618,15 +747,12 @@ export function SettingsModal({
           >
             <Settings className="h-3.5 w-3.5" />
           </div>
-          <div className="min-w-0">
-            <h2
-              id="settings-page-title"
-              className="font-display text-[14.5px] font-bold tracking-tight text-[var(--text-primary)] truncate"
-            >
-              {t.settings}
-            </h2>
-            <p className="text-[11px] text-[var(--text-muted)] truncate">{t.autoSavedBadge}</p>
-          </div>
+          <h2
+            id="settings-page-title"
+            className="font-display text-[14.5px] font-bold tracking-tight text-[var(--text-primary)] truncate"
+          >
+            {t.settings}
+          </h2>
         </div>
 
         <nav
@@ -635,7 +761,7 @@ export function SettingsModal({
           aria-label={t.settings}
           className="flex-1 overflow-y-auto px-3 py-4 space-y-5"
         >
-          {navGroups.map((group) => (
+          {navGroups.map((group, groupIdx) => (
             <div key={group.groupTitle} className="space-y-1">
               <p className="px-2.5 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">
                 {group.groupTitle}
@@ -687,19 +813,33 @@ export function SettingsModal({
                   </button>
                 );
               })}
+
+              {/* Quick 1-click access to Welcome Guide inside the System group */}
+              {groupIdx === navGroups.length - 1 && onOpenWelcomeGuide && (
+                <button
+                  type="button"
+                  data-testid="settings-sidebar-welcome-guide"
+                  onClick={onOpenWelcomeGuide}
+                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  <Sparkles className="h-4 w-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors" />
+                  <span className="truncate">{t.welcomeReplayButton}</span>
+                </button>
+              )}
             </div>
           ))}
         </nav>
 
-        <div className="border-t border-[var(--border)] p-3 space-y-2">
+        {/* Back to All Tasks (Unified sidebar nav button style) */}
+        <div className="border-t border-[var(--border)] px-3 py-2.5">
           <button
             type="button"
             data-testid="settings-back-button"
             disabled={isImporting}
             onClick={safeClose}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+            className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
           >
-            <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+            <ArrowLeft className="h-4 w-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--text-primary)] rtl:rotate-180 transition-colors" />
             <span className="truncate">{t.settingsBackToTasks}</span>
           </button>
         </div>
@@ -726,16 +866,13 @@ export function SettingsModal({
               onClick={safeClose}
               aria-label={t.settingsBackToTasks}
               title={t.settingsBackToTasks}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 shrink-0 transition-colors"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 shrink-0 transition-colors"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
             </button>
-            <div className="min-w-0">
-              <h2 className="font-display text-sm font-bold tracking-tight text-[var(--text-primary)] truncate">
-                {t.settings}
-              </h2>
-              <p className="text-[11px] text-[var(--text-muted)] truncate">{t.autoSavedBadge}</p>
-            </div>
+            <h2 className="font-display text-sm font-bold tracking-tight text-[var(--text-primary)] truncate">
+              {t.settings}
+            </h2>
           </div>
         </div>
 
@@ -779,6 +916,16 @@ export function SettingsModal({
               </button>
             );
           })}
+          {onOpenWelcomeGuide && (
+            <button
+              type="button"
+              onClick={onOpenWelcomeGuide}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap shrink-0"
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+              <span>{t.welcomeReplayButton}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -792,13 +939,14 @@ export function SettingsModal({
               {activeLegalDoc ? legalDocs[activeLegalDoc].title : currentTabMeta.label}
             </h1>
             <span className="hidden xl:inline min-w-0 text-xs text-[var(--text-muted)] truncate">
-              · {activeLegalDoc ? legalDocs[activeLegalDoc].subtitle : t.settingsSubtitle}
+              ·{' '}
+              {activeLegalDoc
+                ? legalDocs[activeLegalDoc].subtitle
+                : activeTab === 'docs'
+                  ? t.docsSubtitle
+                  : t.settingsSubtitle}
             </span>
           </div>
-          <span className="app-no-drag inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)] whitespace-nowrap shrink-0">
-            <Check className="h-3 w-3 text-emerald-500 shrink-0" />
-            <span>{t.autoSavedBadge}</span>
-          </span>
         </header>
 
         {/* Scrollable Content Body */}
@@ -806,7 +954,10 @@ export function SettingsModal({
           ref={scrollContainerRef}
           className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-7"
         >
-          <div className="mx-auto w-full max-w-[700px] space-y-6">
+          <div
+            key={activeLegalDoc ? `legal-${activeLegalDoc}` : `tab-${activeTab}`}
+            className="animate-tab-enter mx-auto w-full max-w-[700px] space-y-6"
+          >
             {activeLegalDoc ? (
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6">
                 <LegalDocumentView
@@ -956,7 +1107,7 @@ export function SettingsModal({
                     {themeId === 'custom' && (
                       <div
                         data-testid="custom-theme-editor"
-                        className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
+                        className="animate-tab-enter rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
                       >
                         <div className="min-w-0">
                           <p className="text-xs font-semibold text-[var(--text-primary)]">
@@ -1027,9 +1178,9 @@ export function SettingsModal({
                     {isAppIconOpen && (
                       <div
                         data-testid="app-icon-panel"
-                        className="border-t border-[var(--border)] bg-[var(--surface-subtle)]/50 p-3.5 space-y-3"
+                        className="animate-tab-enter border-t border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5"
                       >
-                        <div className="grid grid-cols-2 gap-1.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {(
                             [
                               { id: 'match-theme' as AppIconId, label: t.appIconMatchTheme },
@@ -1051,20 +1202,20 @@ export function SettingsModal({
                                 data-testid={`app-icon-${opt.id}`}
                                 aria-pressed={selected}
                                 onClick={() => onChangeAppIcon(opt.id)}
-                                className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                                className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
                                   selected
                                     ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                    : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                                 }`}
                               >
                                 <span className="flex items-center gap-2 min-w-0">
                                   <BrandMark
-                                    className="h-5 w-5 rounded-md shrink-0"
+                                    className="h-4 w-4 rounded-[5px] shrink-0"
                                     bgColor={previewColors.bg}
                                     fgColor={previewColors.fg}
                                     borderColor={previewColors.border}
                                   />
-                                  <span className="truncate">{opt.label}</span>
+                                  <span className="truncate whitespace-nowrap">{opt.label}</span>
                                 </span>
                                 {selected && (
                                   <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
@@ -1074,7 +1225,7 @@ export function SettingsModal({
                           })}
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {COLOR_THEMES.map((item) => {
                             const selected = appIconId === item.id;
                             const previewColors = resolveAppIconColors(
@@ -1092,20 +1243,20 @@ export function SettingsModal({
                                 data-testid={`app-icon-${item.id}`}
                                 aria-pressed={selected}
                                 onClick={() => onChangeAppIcon(item.id)}
-                                className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                                className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
                                   selected
                                     ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                    : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                                 }`}
                               >
                                 <span className="flex items-center gap-2 min-w-0">
                                   <BrandMark
-                                    className="h-5 w-5 rounded-md shrink-0"
+                                    className="h-4 w-4 rounded-[5px] shrink-0"
                                     bgColor={previewColors.bg}
                                     fgColor={previewColors.fg}
                                     borderColor={previewColors.border}
                                   />
-                                  <span className="truncate">{label}</span>
+                                  <span className="truncate whitespace-nowrap">{label}</span>
                                 </span>
                                 {selected && (
                                   <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
@@ -1119,26 +1270,26 @@ export function SettingsModal({
                             data-testid="app-icon-custom"
                             aria-pressed={appIconId === 'custom'}
                             onClick={() => onChangeAppIcon('custom')}
-                            className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                            className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
                               appIconId === 'custom'
                                 ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                : 'border-dashed border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                                : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                             }`}
                           >
                             <span className="flex items-center gap-2 min-w-0">
                               {appIconId === 'custom' ? (
                                 <BrandMark
-                                  className="h-5 w-5 rounded-md shrink-0"
+                                  className="h-4 w-4 rounded-[5px] shrink-0"
                                   bgColor={activeIconColors.bg}
                                   fgColor={activeIconColors.fg}
                                   borderColor={activeIconColors.border}
                                 />
                               ) : (
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--border-strong)] text-[var(--accent)]">
-                                  <Palette className="h-3 w-3" />
+                                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--accent)]">
+                                  <Palette className="h-3.5 w-3.5" />
                                 </span>
                               )}
-                              <span className="truncate">
+                              <span className="truncate whitespace-nowrap">
                                 {appIconId === 'custom'
                                   ? customIconColor.toUpperCase()
                                   : t.appIconCustom}
@@ -1153,17 +1304,24 @@ export function SettingsModal({
                         {appIconId === 'custom' && (
                           <div
                             data-testid="custom-icon-editor"
-                            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                            className="animate-tab-enter rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
                           >
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-[var(--text-primary)]">
+                                {t.appIconCustom} (HEX)
+                              </p>
+                              <p className="text-[11px] text-[var(--text-muted)]">
+                                {t.customThemeHexHint}
+                              </p>
+                            </div>
                             <ColorSpectrumPicker
                               value={customIconColor}
                               onChange={onChangeCustomIconColor}
                               hexInputLabel={`${t.appIconCustom} (HEX)`}
                               hexInputTestId="custom-icon-hex-input"
-                              compact
                               previewNode={
                                 <BrandMark
-                                  className="h-7 w-7 shrink-0"
+                                  className="h-8 w-8 shrink-0"
                                   bgColor={activeIconColors.bg}
                                   fgColor={activeIconColors.fg}
                                   borderColor={activeIconColors.border}
@@ -1559,31 +1717,31 @@ export function SettingsModal({
                       >
                         {backupDownloaded ? (
                           <Check className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : isExportingBackup ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-[var(--accent)]" />
                         ) : (
                           <Download className="h-3.5 w-3.5" />
                         )}
-                        <span>
-                          {backupDownloaded ? t.autoSavedBadge : t.downloadBackupButton}
-                        </span>
+                        <span>{t.downloadBackupButton}</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Zero-Cost OneDrive & Custom Cloud Folder Sync Card */}
-                  <div data-testid="onedrive-sync-card" className="px-4 py-4 space-y-3">
+                  {/* Zero-Cost Multi-Cloud Folder Sync (OneDrive, Google Drive, iCloud Drive, Dropbox, Custom) */}
+                  <div data-testid="onedrive-sync-card" className="px-4 py-4 space-y-3.5">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <Cloud className="h-4 w-4 text-[var(--accent)] shrink-0" />
                           <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                            {t.onedriveSectionTitle}
+                            {t.cloudSyncSectionTitle}
                           </p>
                         </div>
                         {oneDriveStatus?.connected && (
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)] whitespace-nowrap">
                               <Check className="h-3 w-3 shrink-0" />
-                              <span>{t.onedriveConnectedBadge}</span>
+                              <span>{t.enabledBadge}</span>
                             </span>
                             <button
                               type="button"
@@ -1597,12 +1755,59 @@ export function SettingsModal({
                         )}
                       </div>
                       <p className="text-xs leading-relaxed text-[var(--text-muted)]">
-                        {t.onedriveSectionDesc}
+                        {t.cloudSyncSectionDesc}
                       </p>
-                      <p className="text-[11px] text-[var(--text-muted)]">
-                        {t.cloudCustomFolderHint}
+                    </div>
+
+                    {/* 1-Click Free Cloud Providers (OneDrive, Google Drive, iCloud Drive, Dropbox) */}
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
+                        {t.cloudSyncProvidersTitle}
                       </p>
-                      {oneDriveStatus?.folderPath && (
+                      <div className="grid grid-cols-2 gap-2" data-testid="cloud-providers-grid">
+                        {cloudProviders.map((provider) => {
+                          const isActive =
+                            Boolean(oneDriveStatus?.connected) &&
+                            oneDriveStatus?.activeProvider === provider.id;
+                          return (
+                            <button
+                              key={provider.id}
+                              type="button"
+                              data-testid={`cloud-provider-${provider.id}`}
+                              disabled={isOneDriveBusy}
+                              onClick={() => void handleSelectCloudProvider(provider)}
+                              className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-45 ${
+                                isActive
+                                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                                  : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-xs font-semibold text-[var(--text-primary)]">
+                                  {provider.label}
+                                </p>
+                                <p className="truncate text-[10.5px] text-[var(--text-muted)]">
+                                  {provider.detected ? t.cloudDetectedBadge : t.cloudNotInstalledHint}
+                                </p>
+                              </div>
+                              {isActive ? (
+                                <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                              ) : provider.detected ? (
+                                <span
+                                  aria-hidden="true"
+                                  className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                                />
+                              ) : (
+                                <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {oneDriveStatus?.folderPath && (
+                      <div className="space-y-0.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2">
                         <p
                           data-testid="onedrive-folder-path"
                           className="truncate font-mono-tabular text-[11px] text-[var(--text-secondary)]"
@@ -1610,18 +1815,18 @@ export function SettingsModal({
                         >
                           {oneDriveStatus.folderPath}
                         </p>
-                      )}
-                      {oneDriveStatus?.lastSyncedAt && (
-                        <p className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
-                          {t.onedriveLastSyncedPrefix}:{' '}
-                          {formatDeletedAt(oneDriveStatus.lastSyncedAt, meta.intlLocale)}
-                          {oneDriveStatus.hasRemoteBackup &&
-                          typeof oneDriveStatus.remoteTodoCount === 'number'
-                            ? ` · ${oneDriveStatus.remoteTodoCount} ${t.tasksTitle.toLowerCase()}`
-                            : ''}
-                        </p>
-                      )}
-                    </div>
+                        {oneDriveStatus.lastSyncedAt && (
+                          <p className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                            {t.onedriveLastSyncedPrefix}:{' '}
+                            {formatDeletedAt(oneDriveStatus.lastSyncedAt, meta.intlLocale)}
+                            {oneDriveStatus.hasRemoteBackup &&
+                            typeof oneDriveStatus.remoteTodoCount === 'number'
+                              ? ` · ${oneDriveStatus.remoteTodoCount} ${t.tasksTitle.toLowerCase()}`
+                              : ''}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                       <button
@@ -1783,18 +1988,161 @@ export function SettingsModal({
                   </div>
                 ) : (
                   <>
-                    {trashedCategories.length > 0 && (
+                    {/* Search, Type Filter, Sort & Deleted Date-Range Toolbar */}
+                    <div
+                      data-testid="trash-filter-toolbar"
+                      className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative flex flex-1 min-w-[200px] items-center">
+                          <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+                          <input
+                            type="text"
+                            data-testid="trash-search-input"
+                            value={trashSearchQuery}
+                            onChange={(e) => setTrashSearchQuery(e.target.value)}
+                            placeholder={t.trashSearchPlaceholder}
+                            aria-label={t.trashSearchPlaceholder}
+                            className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
+                          />
+                          {trashSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setTrashSearchQuery('')}
+                              aria-label={t.clearSearch}
+                              className="absolute right-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        <select
+                          data-testid="trash-sort-select"
+                          value={trashSortBy}
+                          onChange={(e) => setTrashSortBy(e.target.value as TrashSortOption)}
+                          aria-label={t.trashSortNewest}
+                          className="h-8 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none cursor-pointer"
+                        >
+                          <option value="newest">{t.trashSortNewest}</option>
+                          <option value="oldest">{t.trashSortOldest}</option>
+                          <option value="az">{t.trashSortAZ}</option>
+                          <option value="za">{t.trashSortZA}</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div
+                          role="tablist"
+                          aria-label={t.tabTrash}
+                          className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5"
+                        >
+                          {(
+                            [
+                              { id: 'all' as TrashTypeFilter, label: t.trashFilterAll },
+                              { id: 'todos' as TrashTypeFilter, label: t.trashFilterTodos },
+                              {
+                                id: 'categories' as TrashTypeFilter,
+                                label: t.trashFilterCategories,
+                              },
+                            ] as const
+                          ).map((opt) => {
+                            const active = trashTypeFilter === opt.id;
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                role="tab"
+                                data-testid={`trash-filter-${opt.id}`}
+                                aria-selected={active}
+                                onClick={() => setTrashTypeFilter(opt.id)}
+                                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                                  active
+                                    ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
+                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <label className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                            <span>{t.trashDateFrom}</span>
+                            <input
+                              type="date"
+                              data-testid="trash-date-from"
+                              value={trashDateFrom}
+                              onChange={(e) => setTrashDateFrom(e.target.value)}
+                              aria-label={t.trashDateFrom}
+                              className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 font-mono-tabular text-[11px] text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
+                            />
+                          </label>
+                          <label className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
+                            <span>{t.trashDateTo}</span>
+                            <input
+                              type="date"
+                              data-testid="trash-date-to"
+                              value={trashDateTo}
+                              onChange={(e) => setTrashDateTo(e.target.value)}
+                              aria-label={t.trashDateTo}
+                              className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 font-mono-tabular text-[11px] text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
+                            />
+                          </label>
+                          {hasTrashFilters && (
+                            <button
+                              type="button"
+                              data-testid="trash-clear-filters"
+                              onClick={() => {
+                                setTrashSearchQuery('');
+                                setTrashTypeFilter('all');
+                                setTrashDateFrom('');
+                                setTrashDateTo('');
+                              }}
+                              className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 text-[11px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
+                            >
+                              {t.zoomResetButton}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {filteredTrashCount === 0 ? (
+                      <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-10 text-center">
+                        <Search className="mb-2 h-5 w-5 text-[var(--text-muted)]" />
+                        <p className="font-display text-sm font-semibold text-[var(--text-primary)]">
+                          {t.trashNoMatchesTitle}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTrashSearchQuery('');
+                            setTrashTypeFilter('all');
+                            setTrashDateFrom('');
+                            setTrashDateTo('');
+                          }}
+                          className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+                        >
+                          {t.clearSearch}
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                    {filteredTrash.categories.length > 0 && (
                       <section aria-label={t.categories} className="space-y-2">
                         <div className="flex items-center justify-between">
                           <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
                             {t.categories}
                           </h3>
                           <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                            {trashedCategories.length}
+                            {filteredTrash.categories.length}
                           </span>
                         </div>
                         <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                          {trashedCategories.map((cat) => (
+                          {filteredTrash.categories.map((cat) => (
                             <div
                               key={cat.id}
                               className="flex items-center justify-between gap-3 px-4 py-3"
@@ -1847,18 +2195,18 @@ export function SettingsModal({
                       </section>
                     )}
 
-                    {trashedTodos.length > 0 && (
+                    {filteredTrash.todos.length > 0 && (
                       <section aria-label={t.tasksTitle} className="space-y-2">
                         <div className="flex items-center justify-between">
                           <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
                             {t.tasksTitle}
                           </h3>
                           <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                            {trashedTodos.length}
+                            {filteredTrash.todos.length}
                           </span>
                         </div>
                         <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                          {trashedTodos.map((todo) => (
+                          {filteredTrash.todos.map((todo) => (
                             <div
                               key={todo.id}
                               className="flex items-center justify-between gap-3 px-4 py-3"
@@ -1916,9 +2264,13 @@ export function SettingsModal({
                         </div>
                       </section>
                     )}
+                      </>
+                    )}
                   </>
                 )}
               </div>
+            ) : activeTab === 'docs' ? (
+              <DocsSettingsSection shortcuts={shortcuts} />
             ) : (
               /* About, Updates & Legal Tab */
               <>
@@ -1960,15 +2312,20 @@ export function SettingsModal({
                   </div>
                 </section>
 
-                {/* About & Diagnostics Card */}
+                {/* About & Diagnostics Card (Proper Agendamea BrandMark + Razor-Sharp 34x27 Vellium Mark) */}
                 <section
                   aria-label="Agendamea"
-                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <VelliumLogo className="h-5 w-5 text-[var(--text-primary)] shrink-0" />
-                      <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <BrandMark
+                        className="h-10 w-10 rounded-xl shrink-0"
+                        bgColor={activeIconColors.bg}
+                        fgColor={activeIconColors.fg}
+                        borderColor={activeIconColors.border}
+                      />
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-display text-sm font-bold text-[var(--text-primary)]">
                             Agendamea
@@ -1977,10 +2334,41 @@ export function SettingsModal({
                             v1.0.0
                           </span>
                         </div>
-                        <p className="text-xs text-[var(--text-muted)]">
+                        <p className="mt-0.5 text-xs text-[var(--text-muted)] truncate">
                           © 2026 Vellium · vellium.dev
                         </p>
                       </div>
+                    </div>
+
+                    <a
+                      href="https://vellium.dev"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Vellium"
+                      title="Vellium (vellium.dev)"
+                      data-testid="about-vellium-logo"
+                      className="flex items-center justify-center rounded-lg px-2 py-1.5 text-[var(--text-primary)] opacity-85 hover:opacity-100 hover:bg-[var(--surface-hover)] transition-all shrink-0"
+                    >
+                      <VelliumLogo className="h-[27px] w-[34px]" />
+                    </a>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--text-muted)]">
+                      <a
+                        href="https://vellium.dev"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
+                      >
+                        vellium.dev
+                      </a>
+                      <a
+                        href="mailto:support@vellium.dev"
+                        className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
+                      >
+                        support@vellium.dev
+                      </a>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -1988,7 +2376,7 @@ export function SettingsModal({
                         type="button"
                         data-testid="copy-diagnostics-btn"
                         onClick={() => void handleCopyDiagnostics()}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
                       >
                         {diagnosticsCopied ? (
                           <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
@@ -2004,30 +2392,13 @@ export function SettingsModal({
                           type="button"
                           data-testid="settings-open-welcome-guide"
                           onClick={onOpenWelcomeGuide}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
                         >
                           <Sparkles className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
                           <span>{t.welcomeReplayButton}</span>
                         </button>
                       )}
                     </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-4 border-t border-[var(--border)] pt-3 text-xs text-[var(--text-muted)]">
-                    <a
-                      href="https://vellium.dev"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
-                    >
-                      vellium.dev
-                    </a>
-                    <a
-                      href="mailto:support@vellium.dev"
-                      className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
-                    >
-                      support@vellium.dev
-                    </a>
                   </div>
                 </section>
               </>

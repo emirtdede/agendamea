@@ -11,6 +11,7 @@ import {
   compareSemver,
   computeViewCounts,
   filterAndSortTodos,
+  filterAndSortTrash,
   formatDueDateLabel,
   formatTodoDateSchedule,
   getVerticalDropPosition,
@@ -1631,6 +1632,192 @@ test('QA: Custom HEX theme tokens, dynamic App Icon generator (.ico), accessibil
   assert.ok(mainCjs.includes("require('electron-updater')"), 'Electron main process must integrate electron-updater');
   assert.ok(mainCjs.includes('quitAndInstall(true, true)'), 'Electron main process must support silent quitAndInstall');
   assert.ok(mainCjs.includes('!process.windowsStore'), 'Native auto-updater must stay disabled inside Microsoft Store builds');
+});
+
+test('QA: Trash search/sort/date-range, CLI & MCP server protocol, zero icon/auto-saved leakage & Store legal compliance', async () => {
+  // 1. Trash search, type filter, sorting & deleted date-range filtering
+  const trashedCats: Category[] = [
+    {
+      id: 'c-old',
+      name: 'Arşiv',
+      color: '#2563eb',
+      pinned: false,
+      sortOrder: 0,
+      createdAt: '2026-11-01T10:00:00.000Z',
+      deletedAt: '2026-11-10T10:00:00.000Z',
+    },
+    {
+      id: 'c-new',
+      name: 'Zamanlama',
+      color: '#16a34a',
+      pinned: false,
+      sortOrder: 1,
+      createdAt: '2026-11-02T10:00:00.000Z',
+      deletedAt: '2026-11-20T10:00:00.000Z',
+    },
+  ];
+  const trashedItems: Todo[] = [
+    {
+      id: 't-1',
+      title: 'Bütçe raporu',
+      notes: 'Q4 özet',
+      completed: false,
+      important: false,
+      pinned: false,
+      priority: 'normal',
+      dueDate: null,
+      categoryId: null,
+      sortOrder: 0,
+      createdAt: '2026-11-01T08:00:00.000Z',
+      updatedAt: '2026-11-01T08:00:00.000Z',
+      deletedAt: '2026-11-12T09:00:00.000Z',
+      subtasks: [],
+    },
+    {
+      id: 't-2',
+      title: 'Aylık değerlendirme',
+      notes: '',
+      completed: true,
+      important: false,
+      pinned: false,
+      priority: 'high',
+      dueDate: null,
+      categoryId: null,
+      sortOrder: 1,
+      createdAt: '2026-11-05T08:00:00.000Z',
+      updatedAt: '2026-11-05T08:00:00.000Z',
+      deletedAt: '2026-11-21T15:00:00.000Z',
+      subtasks: [],
+    },
+  ];
+
+  const byNewest = filterAndSortTrash(trashedCats, trashedItems, {
+    query: '',
+    typeFilter: 'all',
+    sortBy: 'newest',
+    dateFrom: '',
+    dateTo: '',
+    locale: 'tr-TR',
+  });
+  assert.deepEqual(byNewest.todos.map((x) => x.id), ['t-2', 't-1']);
+  assert.deepEqual(byNewest.categories.map((x) => x.id), ['c-new', 'c-old']);
+
+  const byAZ = filterAndSortTrash(trashedCats, trashedItems, {
+    query: '',
+    typeFilter: 'todos',
+    sortBy: 'az',
+    dateFrom: '',
+    dateTo: '',
+    locale: 'tr-TR',
+  });
+  assert.equal(byAZ.categories.length, 0);
+  assert.deepEqual(byAZ.todos.map((x) => x.id), ['t-2', 't-1']);
+
+  const byDateRange = filterAndSortTrash(trashedCats, trashedItems, {
+    query: '',
+    typeFilter: 'all',
+    sortBy: 'oldest',
+    dateFrom: '2026-11-15',
+    dateTo: '2026-11-22',
+    locale: 'tr-TR',
+  });
+  assert.deepEqual(byDateRange.categories.map((x) => x.id), ['c-new']);
+  assert.deepEqual(byDateRange.todos.map((x) => x.id), ['t-2']);
+
+  const byNoteSearch = filterAndSortTrash(trashedCats, trashedItems, {
+    query: 'q4',
+    typeFilter: 'all',
+    sortBy: 'newest',
+    dateFrom: '',
+    dateTo: '',
+    locale: 'tr-TR',
+  });
+  assert.equal(byNoteSearch.categories.length, 0);
+  assert.deepEqual(byNoteSearch.todos.map((x) => x.id), ['t-1']);
+
+  // 2. CLI script responds cleanly to --help & --version
+  const { execFileSync, spawn } = await import('node:child_process');
+  const cliPath = path.join(process.cwd(), 'cli', 'agendamea.cjs');
+  const helpOut = execFileSync(process.execPath, [cliPath, '--help'], { encoding: 'utf8' });
+  assert.ok(helpOut.includes('agendamea list'), 'CLI help must list simple commands');
+  assert.ok(helpOut.includes('agendamea mcp'), 'CLI help must document MCP command');
+
+  // 3. MCP JSON-RPC 2.0 stdio server responds cleanly to initialize & tools/list
+  const mcpPath = path.join(process.cwd(), 'mcp', 'server.cjs');
+  const mcpResponses = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
+    const child = spawn(process.execPath, [mcpPath], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('MCP server timed out'));
+    }, 5000);
+    child.stdout.on('data', (chunk) => {
+      out += chunk.toString('utf8');
+      const lines = out.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length >= 2) {
+        clearTimeout(timer);
+        child.kill();
+        resolve(lines.map((l) => JSON.parse(l) as Record<string, unknown>));
+      }
+    });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })}\n`,
+    );
+    child.stdin.write(
+      `${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })}\n`,
+    );
+  });
+  assert.equal(mcpResponses[0].id, 1);
+  assert.equal(
+    (mcpResponses[0].result as { serverInfo?: { name?: string } })?.serverInfo?.name,
+    'agendamea',
+  );
+  const tools = (mcpResponses[1].result as { tools?: Array<{ name: string }> })?.tools ?? [];
+  assert.ok(tools.length >= 6, 'MCP server must register all core task tools');
+  assert.ok(tools.some((tool) => tool.name === 'agendamea_list_tasks'));
+  assert.ok(tools.some((tool) => tool.name === 'agendamea_add_task'));
+
+  // 4. Zero icon leakage in Electron fallback HTML & Jump List + zero native <input type="color"> + zero autoSavedBadge clutter in SettingsModal
+  const mainCjs = fs.readFileSync(path.join(process.cwd(), 'electron', 'main.cjs'), 'utf8');
+  assert.ok(
+    !mainCjs.includes('M18 33L27.5 42.5L46 22'),
+    'Electron fallback HTML must use official Agendamea A-check monogram (zero generic checkmark leakage)',
+  );
+  assert.ok(mainCjs.includes('M 144 378 L 252 128 L 294 224'));
+  assert.ok(mainCjs.includes('runtime-port.json'), 'Electron main process must publish runtime-port.json for CLI/MCP');
+
+  const catColorPicker = fs.readFileSync(
+    path.join(process.cwd(), 'src', 'components', 'CategoryColorPicker.tsx'),
+    'utf8',
+  );
+  assert.ok(
+    !catColorPicker.includes('type="color"'),
+    'CategoryColorPicker must use custom ColorSpectrumPicker instead of misaligned Chromium native color popup',
+  );
+
+  const settingsModalSrc = fs.readFileSync(
+    path.join(process.cwd(), 'src', 'components', 'SettingsModal.tsx'),
+    'utf8',
+  );
+  assert.ok(
+    !settingsModalSrc.includes('t.autoSavedBadge'),
+    'SettingsModal must not display autoSavedBadge clutter',
+  );
+
+  // 5. Microsoft Store Policy 10.2.7 & multi-cloud accuracy in Legal Documents (TR & EN)
+  const trLegal = getLegalDocuments('tr', TR_DICTIONARY);
+  const enLegal = getLegalDocuments('en', EN_DICTIONARY);
+  assert.ok(trLegal.privacy.sections[2].paragraphs[0].includes('10.2.7'));
+  assert.ok(enLegal.privacy.sections[2].paragraphs[0].includes('10.2.7'));
+  assert.ok(!enLegal.terms.sections[1].paragraphs[0].includes('without cloud synchronization'));
+  assert.ok(trLegal.opensource.sections[1].paragraphs[0].includes('Electron Updater'));
+  assert.ok(enLegal.opensource.sections[1].paragraphs[0].includes('Electron Updater'));
+  assert.ok(trLegal.accessibility.sections[2].paragraphs[0].includes('9MT5X1NGZJXZ'));
+  assert.ok(enLegal.accessibility.sections[2].paragraphs[0].includes('9MT5X1NGZJXZ'));
 });
 
 

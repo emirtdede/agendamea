@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "main": "electron/main.cjs",
+  "bin": {
+    "agendamea": "./cli/agendamea.cjs"
+  },
   "description": "Günlük görevlerinizi zahmetsizce planlayın. İnternetsiz çalışan, her değişikliği anında kaydeden sade ve hızlı Windows görev yöneticisi.",
   "author": {
     "name": "Vellium",
