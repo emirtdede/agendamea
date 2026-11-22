@@ -24,8 +24,7 @@ const DEFAULT_IDLE_UNLOAD_MS = 180_000;
 
 function sleep(ms) {
   return new Promise((resolve) => {
-    const t = setTimeout(resolve, ms);
-    if (typeof t.unref === 'function') t.unref();
+    setTimeout(resolve, ms);
   });
 }
 

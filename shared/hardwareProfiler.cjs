@@ -191,7 +191,6 @@ function runPowerShellGpuProbe(execFn, timeoutMs = DEFAULT_TIMEOUT_MS) {
       }
       finish({ ok: false, reason: 'powershell_timeout', stdout: '' });
     }, timeoutMs);
-    if (typeof timer.unref === 'function') timer.unref();
 
     try {
       child = runner(
