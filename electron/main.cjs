@@ -27,12 +27,6 @@ if (process.platform === 'win32') {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
 
-// Single-instance guard prevents duplicate colliding desktop windows & DB locks
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-  process.exit(0);
-}
-
 // Fixed preferred local port list keeps localStorage (anti-FOUC theme cache) stable across restarts
 // while safely bypassing Windows Hyper-V / WinNAT excluded port ranges (EACCES) and busy ports (EADDRINUSE)
 const PREFERRED_PORTS = [38721, 47821, 39721, 41721, 0];
@@ -41,6 +35,7 @@ let mainWindow = null;
 let tray = null;
 let serverProcess = null;
 let logFd = null;
+let lockedRuntimeFds = [];
 let isQuitting = false;
 let activePort = null;
 let backendRestartCount = 0;
@@ -230,7 +225,71 @@ function showAndFocusMainWindow() {
   mainWindow.focus();
 }
 
-app.on('second-instance', (_event, commandLine) => {
+function lockCriticalRuntimeFiles(runtimeRoot) {
+  const targets = [
+    path.join(runtimeRoot, 'dist', 'index.html'),
+    path.join(runtimeRoot, 'dist-server', 'server.mjs'),
+  ];
+  for (const target of targets) {
+    try {
+      if (fs.existsSync(target)) {
+        lockedRuntimeFds.push(fs.openSync(target, 'r'));
+      }
+    } catch {
+      // Ignore lock errors
+    }
+  }
+}
+
+function unlockCriticalRuntimeFiles() {
+  for (const fd of lockedRuntimeFds) {
+    try {
+      fs.closeSync(fd);
+    } catch {
+      // Ignore already closed
+    }
+  }
+  lockedRuntimeFds = [];
+}
+
+async function acquireSingleInstanceLockWithHandoff() {
+  const lockPayload = { execPath: process.execPath };
+  if (app.requestSingleInstanceLock(lockPayload)) {
+    return true;
+  }
+  // Wait briefly in case an older Portable instance in a different %TEMP% directory is handing off and quitting
+  for (let i = 0; i < 20; i += 1) {
+    await new Promise((r) => setTimeout(r, 150));
+    if (app.requestSingleInstanceLock(lockPayload)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+app.on('second-instance', (_event, commandLine, _workingDir, additionalData) => {
+  const incomingExecPath =
+    (additionalData && typeof additionalData.execPath === 'string' && additionalData.execPath) ||
+    (Array.isArray(commandLine) && typeof commandLine[0] === 'string' ? commandLine[0] : '');
+
+  const runtimeRoot = resolveRuntimeRoot();
+  const runtimeIntact = fs.existsSync(path.join(runtimeRoot, 'dist-server', 'server.mjs'));
+  const isDifferentExecutable =
+    incomingExecPath &&
+    path.resolve(incomingExecPath).toLowerCase() !== path.resolve(process.execPath).toLowerCase();
+
+  // If user launched a newly built Portable/Installed executable from a different path (or current temp folder was cleaned),
+  // hand off the single-instance lock cleanly so the new executable starts instead of waking a stale instance.
+  if (isDifferentExecutable || !runtimeIntact) {
+    try {
+      app.releaseSingleInstanceLock();
+    } catch {
+      // Ignore
+    }
+    performFullQuit();
+    return;
+  }
+
   if (!dispatchJumpListArgs(commandLine)) {
     showAndFocusMainWindow();
   }
@@ -512,6 +571,7 @@ function stopBackend() {
     }
     logFd = null;
   }
+  unlockCriticalRuntimeFiles();
 }
 
 async function waitForServer(url, timeoutMs = 15000) {
@@ -1126,6 +1186,14 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
 app
   .whenReady()
   .then(async () => {
+    const gotLock = await acquireSingleInstanceLockWithHandoff();
+    if (!gotLock) {
+      app.quit();
+      process.exit(0);
+      return;
+    }
+    lockCriticalRuntimeFiles(resolveRuntimeRoot());
+
     const prefs = readWindowPrefs(app.getPath('userData'));
     activeCloseBehavior = prefs.closeBehavior;
     activeLaunchAtStartup = prefs.launchAtStartup;

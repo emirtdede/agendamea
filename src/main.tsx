@@ -7,8 +7,20 @@ import './index.css';
 const isDesktopShell =
   typeof window !== 'undefined' && Boolean(window.agendameaWindow);
 
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !isDesktopShell) {
-  registerSW({ immediate: true });
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  if (!isDesktopShell) {
+    registerSW({ immediate: true });
+  } else {
+    // Ensure no stale Service Worker caches old chunk hashes on localhost desktop ports
+    void navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => {
+        for (const reg of registrations) {
+          void reg.unregister();
+        }
+      })
+      .catch(() => {});
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

@@ -1,5 +1,4 @@
 import React, {
-  Suspense,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -85,8 +84,7 @@ import {
   moveIdRelative,
   sortCategoriesWithPin,
 } from './utils/todoLogic';
-
-const SettingsModal = React.lazy(() => import('./components/SettingsModal'));
+import { SettingsModal } from './components/SettingsModal';
 
 function readInitialTheme(): {
   mode: ThemeMode;
@@ -2298,55 +2296,53 @@ export default function App() {
           onClearInfo={clearInfoToast}
         />
 
-        {/* Lazy-Loaded Settings Modal */}
+        {/* Settings Modal (Statically bundled to prevent runtime temp/chunk load errors in Portable mode) */}
         {isSettingsOpen && (
-          <Suspense fallback={null}>
-            <SettingsModal
-              onClose={handleCloseSettings}
-              themeMode={themeMode}
-              themeId={themeId}
-              customThemeColor={customThemeColor}
-              appIconId={appIconId}
-              customIconColor={customIconColor}
-              zoomPercent={zoomPercent}
-              highContrast={highContrast}
-              reducedMotion={reducedMotion}
-              closeBehavior={closeBehavior}
-              launchAtStartup={launchAtStartup}
-              globalQuickAddShortcut={globalQuickAddShortcut}
-              dragLocked={dragLocked}
-              onChangeMode={handleModeChange}
-              onChangeTheme={handleThemeChange}
-              onChangeCustomThemeColor={handleCustomThemeColorChange}
-              onChangeAppIcon={handleAppIconChange}
-              onChangeCustomIconColor={handleCustomIconColorChange}
-              onChangeZoomPercent={handleZoomPercentChange}
-              onToggleHighContrast={handleToggleHighContrast}
-              onToggleReducedMotion={handleToggleReducedMotion}
-              onChangeCloseBehavior={handleCloseBehaviorChange}
-              onToggleLaunchAtStartup={handleToggleLaunchAtStartup}
-              onToggleGlobalQuickAddShortcut={handleToggleGlobalQuickAddShortcut}
-              onToggleDragLock={handleToggleDragLock}
-              autoUpdateCheck={autoUpdateCheck}
-              onToggleAutoUpdateCheck={handleToggleAutoUpdateCheck}
-              updateState={updateState}
-              onCheckForUpdates={handleManualCheckForUpdates}
-              onDownloadAndInstall={handleDownloadAndInstallUpdate}
-              totalTodoCount={todos.length}
-              completedTodoCount={counts.smart.completed}
-              onClearAllCompleted={handleClearAllCompleted}
-              onImportBackup={handleImportBackup}
-              onApplyRestoredBootstrap={handleApplyRestoredBootstrap}
-              trashedCategories={trashedCategories}
-              trashedTodos={trashedTodos}
-              onRestoreTodo={handleRestoreTodo}
-              onPermanentDeleteTodo={handlePermanentDeleteTodo}
-              onRestoreCategory={handleRestoreCategory}
-              onPermanentDeleteCategory={handlePermanentDeleteCategory}
-              onEmptyTrash={handleEmptyTrash}
-              onOpenWelcomeGuide={handleOpenWelcomeGuide}
-            />
-          </Suspense>
+          <SettingsModal
+            onClose={handleCloseSettings}
+            themeMode={themeMode}
+            themeId={themeId}
+            customThemeColor={customThemeColor}
+            appIconId={appIconId}
+            customIconColor={customIconColor}
+            zoomPercent={zoomPercent}
+            highContrast={highContrast}
+            reducedMotion={reducedMotion}
+            closeBehavior={closeBehavior}
+            launchAtStartup={launchAtStartup}
+            globalQuickAddShortcut={globalQuickAddShortcut}
+            dragLocked={dragLocked}
+            onChangeMode={handleModeChange}
+            onChangeTheme={handleThemeChange}
+            onChangeCustomThemeColor={handleCustomThemeColorChange}
+            onChangeAppIcon={handleAppIconChange}
+            onChangeCustomIconColor={handleCustomIconColorChange}
+            onChangeZoomPercent={handleZoomPercentChange}
+            onToggleHighContrast={handleToggleHighContrast}
+            onToggleReducedMotion={handleToggleReducedMotion}
+            onChangeCloseBehavior={handleCloseBehaviorChange}
+            onToggleLaunchAtStartup={handleToggleLaunchAtStartup}
+            onToggleGlobalQuickAddShortcut={handleToggleGlobalQuickAddShortcut}
+            onToggleDragLock={handleToggleDragLock}
+            autoUpdateCheck={autoUpdateCheck}
+            onToggleAutoUpdateCheck={handleToggleAutoUpdateCheck}
+            updateState={updateState}
+            onCheckForUpdates={handleManualCheckForUpdates}
+            onDownloadAndInstall={handleDownloadAndInstallUpdate}
+            totalTodoCount={todos.length}
+            completedTodoCount={counts.smart.completed}
+            onClearAllCompleted={handleClearAllCompleted}
+            onImportBackup={handleImportBackup}
+            onApplyRestoredBootstrap={handleApplyRestoredBootstrap}
+            trashedCategories={trashedCategories}
+            trashedTodos={trashedTodos}
+            onRestoreTodo={handleRestoreTodo}
+            onPermanentDeleteTodo={handlePermanentDeleteTodo}
+            onRestoreCategory={handleRestoreCategory}
+            onPermanentDeleteCategory={handlePermanentDeleteCategory}
+            onEmptyTrash={handleEmptyTrash}
+            onOpenWelcomeGuide={handleOpenWelcomeGuide}
+          />
         )}
 
         {/* PowerPilot-Style Close Action Modal (Minimize to Tray vs Quit Completely) */}

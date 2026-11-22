@@ -1016,85 +1016,139 @@ async function startServer() {
   let viteServer: { close: () => Promise<void> } | null = null;
 
   if (isProd) {
-    const gzipAssetCache = new Map<string, { buf: Buffer; contentType: string; immutable: boolean }>();
-    const GZIP_MIME_MAP: Record<string, string> = {
+    interface InMemoryAsset {
+      raw: Buffer;
+      gzip: Buffer | null;
+      contentType: string;
+      immutable: boolean;
+    }
+
+    const MIME_BY_EXT: Record<string, string> = {
+      '.html': 'text/html; charset=utf-8',
       '.js': 'application/javascript; charset=utf-8',
       '.mjs': 'application/javascript; charset=utf-8',
       '.css': 'text/css; charset=utf-8',
-      '.html': 'text/html; charset=utf-8',
       '.svg': 'image/svg+xml',
       '.json': 'application/json; charset=utf-8',
       '.webmanifest': 'application/manifest+json; charset=utf-8',
+      '.xml': 'application/xml; charset=utf-8',
+      '.png': 'image/png',
+      '.ico': 'image/x-icon',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+      '.woff2': 'font/woff2',
+      '.woff': 'font/woff',
+      '.txt': 'text/plain; charset=utf-8',
+    };
+
+    const COMPRESSIBLE_EXT = new Set([
+      '.html',
+      '.js',
+      '.mjs',
+      '.css',
+      '.svg',
+      '.json',
+      '.webmanifest',
+      '.xml',
+      '.txt',
+    ]);
+
+    // Preload all dist assets into RAM at startup so Windows Portable %TEMP% cleanup
+    // can never cause ENOENT on index.html or JS/CSS bundles while the app is running
+    const inMemoryAssets = new Map<string, InMemoryAsset>();
+    const preloadDir = (dir: string, prefix = '') => {
+      try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const fullPath = path.join(dir, entry.name);
+          const relKey = prefix ? `${prefix}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) {
+            preloadDir(fullPath, relKey);
+          } else if (entry.isFile()) {
+            const ext = path.extname(entry.name).toLowerCase();
+            const contentType = MIME_BY_EXT[ext] ?? 'application/octet-stream';
+            const raw = fs.readFileSync(fullPath);
+            const shouldGzip = COMPRESSIBLE_EXT.has(ext) && raw.length >= 512;
+            inMemoryAssets.set(relKey, {
+              raw,
+              gzip: shouldGzip ? zlib.gzipSync(raw, { level: 6 }) : null,
+              contentType,
+              immutable:
+                relKey.startsWith('assets/') &&
+                !relKey.endsWith('index.html') &&
+                !relKey.endsWith('sw.js'),
+            });
+          }
+        }
+      } catch {
+        // Ignore directory read errors
+      }
+    };
+    preloadDir(distDir);
+
+    const serveInMemoryEntry = (
+      req: express.Request,
+      res: express.Response,
+      entry: InMemoryAsset,
+    ) => {
+      res.setHeader('Content-Type', entry.contentType);
+      res.setHeader(
+        'Cache-Control',
+        entry.immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+      );
+      const acceptEnc = String(req.headers['accept-encoding'] ?? '');
+      if (entry.gzip && acceptEnc.includes('gzip')) {
+        res.setHeader('Content-Encoding', 'gzip');
+        res.setHeader('Vary', 'Accept-Encoding');
+        res.send(entry.gzip);
+        return;
+      }
+      res.send(entry.raw);
     };
 
     app.use((req, res, next) => {
-      if (req.method !== 'GET' || req.path.startsWith('/api/')) {
+      if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path.startsWith('/api/')) {
         next();
         return;
       }
-      const acceptEnc = String(req.headers['accept-encoding'] ?? '');
-      if (!acceptEnc.includes('gzip')) {
-        next();
+      const relKey = req.path === '/' ? 'index.html' : req.path.replace(/^\/+/, '');
+      const memEntry = inMemoryAssets.get(relKey);
+      if (memEntry) {
+        serveInMemoryEntry(req, res, memEntry);
         return;
       }
-      const relPath = req.path === '/' ? 'index.html' : req.path.replace(/^\/+/, '');
-      const ext = path.extname(relPath).toLowerCase();
-      const contentType = GZIP_MIME_MAP[ext];
-      if (!contentType) {
-        next();
-        return;
-      }
-      const resolvedPath = path.resolve(distDir, relPath);
-      if (!resolvedPath.startsWith(distDir + path.sep) && resolvedPath !== distDir) {
-        next();
-        return;
-      }
-      let cached = gzipAssetCache.get(resolvedPath);
-      if (!cached) {
-        if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+      // If request is for a static asset path (e.g. /assets/* or has a file extension), return 404 cleanly
+      if (relKey.startsWith('assets/') || /\.[a-z0-9]{2,12}$/i.test(relKey)) {
+        const diskPath = path.resolve(distDir, relKey);
+        if (
+          diskPath.startsWith(distDir + path.sep) &&
+          fs.existsSync(diskPath) &&
+          fs.statSync(diskPath).isFile()
+        ) {
           next();
           return;
         }
-        const raw = fs.readFileSync(resolvedPath);
-        if (raw.length < 1024) {
-          next();
-          return;
-        }
-        cached = {
-          buf: zlib.gzipSync(raw, { level: 6 }),
-          contentType,
-          immutable: resolvedPath.includes(`${path.sep}assets${path.sep}`),
-        };
-        gzipAssetCache.set(resolvedPath, cached);
+        res.status(404).end();
+        return;
       }
-      res.setHeader('Content-Type', cached.contentType);
-      res.setHeader('Content-Encoding', 'gzip');
-      res.setHeader('Vary', 'Accept-Encoding');
-      res.setHeader(
-        'Cache-Control',
-        cached.immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
-      );
-      res.send(cached.buf);
+      next();
     });
 
-    app.use(
-      express.static(distDir, {
-        setHeaders(res, filePath) {
-          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
-            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-          } else if (filePath.endsWith('index.html') || filePath.endsWith('sw.js')) {
-            res.setHeader('Cache-Control', 'no-cache');
-          } else if (filePath.endsWith('.webmanifest')) {
-            res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
-          } else if (filePath.endsWith('browserconfig.xml')) {
-            res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-          }
-        },
-      }),
-    );
-    app.get('*', (_req, res) => {
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(path.join(distDir, 'index.html'));
+    app.use(express.static(distDir));
+
+    app.get('*', (req, res) => {
+      const indexEntry = inMemoryAssets.get('index.html');
+      if (indexEntry) {
+        serveInMemoryEntry(req, res, indexEntry);
+        return;
+      }
+      const indexPath = path.join(distDir, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.setHeader('Cache-Control', 'no-cache');
+        res.sendFile(indexPath);
+        return;
+      }
+      res.status(503).type('html').send('<!doctype html><html><body>Agendamea</body></html>');
     });
   } else {
     // Dynamic import keeps devDependency 'vite' out of production/Electron startup path
