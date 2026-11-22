@@ -3,6 +3,7 @@ import { Check, ChevronRight, Copy, FileText, Scale, Shield, Sparkles } from 'lu
 import { useI18n } from '../../i18n/I18nContext';
 import type { LegalDocId } from '../../i18n/translations';
 import type { AppIconId, CloseBehavior, OneDriveStatus, ThemeId, ThemeMode } from '../../types';
+import { APP_VERSION } from '../../utils/appVersion';
 import { resolveAppIconColors } from '../../utils/themes';
 import { BrandMark } from '../BrandMark';
 import { UpdatesSection, type AppUpdateState } from '../UpdateSettingsSection';
@@ -62,11 +63,16 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
   const { lang, meta, t } = useI18n();
   const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const isMountedRef = useRef(true);
+  const diagnosticsTimerRef = useRef<number | null>(null);
 
   React.useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      if (diagnosticsTimerRef.current !== null) {
+        window.clearTimeout(diagnosticsTimerRef.current);
+        diagnosticsTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -99,7 +105,7 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
     try {
       const diag = await window.agendameaWindow?.getDiagnostics?.();
       const lines = [
-        `Agendamea v${diag?.appVersion || '1.0.0'} (Vellium)`,
+        `Agendamea v${diag?.appVersion || APP_VERSION} (Vellium)`,
         `OS: ${diag ? `${diag.platform} ${diag.arch} (${diag.osRelease})` : navigator.userAgent}`,
         diag?.electronVersion
           ? `Runtime: Electron ${diag.electronVersion} / Chrome ${diag.chromeVersion} / Node ${diag.nodeVersion}`
@@ -114,8 +120,12 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
       ];
       await navigator.clipboard.writeText(lines.join('\n'));
       if (isMountedRef.current) {
+        if (diagnosticsTimerRef.current !== null) {
+          window.clearTimeout(diagnosticsTimerRef.current);
+        }
         setDiagnosticsCopied(true);
-        window.setTimeout(() => {
+        diagnosticsTimerRef.current = window.setTimeout(() => {
+          diagnosticsTimerRef.current = null;
           if (isMountedRef.current) setDiagnosticsCopied(false);
         }, 3000);
       }
@@ -181,7 +191,7 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
                   Agendamea
                 </span>
                 <span className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-1.5 py-0.5 font-mono-tabular text-[11px] text-[var(--text-muted)]">
-                  v1.0.0
+                  v{APP_VERSION}
                 </span>
               </div>
               <p className="mt-0.5 text-xs text-[var(--text-muted)] truncate">

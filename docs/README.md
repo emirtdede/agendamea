@@ -1,6 +1,6 @@
 # Agendamea Documentation
 
-This directory collects the architecture, keyboard accessibility, localization, release, and Microsoft Store packaging references for **Agendamea v1.0.0**. Only product entry files (`README.md`, `CHANGELOG.md`, `LICENSE`) and source configuration stay in the repository root.
+This directory collects the architecture, keyboard accessibility, localization, release, and Microsoft Store packaging references for **Agendamea v1.1.0**. Only product entry files (`README.md`, `CHANGELOG.md`, `LICENSE`) and source configuration stay in the repository root.
 
 ## Quick Access
 

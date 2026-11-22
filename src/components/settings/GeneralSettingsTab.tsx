@@ -1,18 +1,30 @@
 import React from 'react';
-import { ArrowDownToLine, Keyboard, Lock, Power, Sparkles, Unlock } from 'lucide-react';
+import { ArrowDownToLine, Keyboard, Lock, Power, RotateCcw, Sparkles, Unlock } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { CloseBehavior } from '../../types';
+import {
+  DEFAULT_CUSTOM_SHORTCUTS,
+  type CustomShortcutsMap,
+  type ShortcutActionId,
+} from '../../utils/shortcuts';
+import { ShortcutRecorder } from '../ShortcutRecorder';
 import { LanguageSelectorSection } from '../UpdateSettingsSection';
 
 export interface GeneralSettingsTabProps {
   closeBehavior: CloseBehavior;
   launchAtStartup: boolean;
   globalQuickAddShortcut: boolean;
+  globalQuickAddShortcutKey: string;
+  voiceShortcut: string;
+  customShortcuts: CustomShortcutsMap;
   dragLocked: boolean;
-  shortcuts: Array<{ keys: string; label: string }>;
   onChangeCloseBehavior: (behavior: CloseBehavior) => void;
   onToggleLaunchAtStartup?: (enabled: boolean) => void;
   onToggleGlobalQuickAddShortcut?: (enabled: boolean) => void;
+  onChangeGlobalQuickAddShortcutKey?: (shortcut: string) => void;
+  onVoiceShortcutChange?: (shortcut: string) => void;
+  onChangeCustomShortcut?: (action: ShortcutActionId, shortcut: string) => void;
+  onResetAllShortcuts?: () => void;
   onToggleDragLock: (locked: boolean) => void;
 }
 
@@ -20,14 +32,32 @@ export const GeneralSettingsTab = React.memo(function GeneralSettingsTab({
   closeBehavior,
   launchAtStartup,
   globalQuickAddShortcut,
+  globalQuickAddShortcutKey,
+  voiceShortcut,
+  customShortcuts,
   dragLocked,
-  shortcuts,
   onChangeCloseBehavior,
   onToggleLaunchAtStartup,
   onToggleGlobalQuickAddShortcut,
+  onChangeGlobalQuickAddShortcutKey,
+  onVoiceShortcutChange,
+  onChangeCustomShortcut,
+  onResetAllShortcuts,
   onToggleDragLock,
 }: GeneralSettingsTabProps) {
   const { t } = useI18n();
+
+  const inAppShortcutRows: Array<{ id: ShortcutActionId; label: string }> = [
+    { id: 'newTask', label: t.shortcutNewTask },
+    { id: 'search', label: t.shortcutSearch },
+    { id: 'openSettings', label: t.shortcutOpenSettings },
+    { id: 'reorderUp', label: t.shortcutReorderUp },
+    { id: 'reorderDown', label: t.shortcutReorderDown },
+    { id: 'viewList', label: t.shortcutViewList },
+    { id: 'viewKanban', label: t.shortcutViewKanban },
+    { id: 'viewCalendar', label: t.shortcutViewCalendar },
+    { id: 'viewMatrix', label: t.shortcutViewMatrix },
+  ];
 
   return (
     <>
@@ -158,26 +188,87 @@ export const GeneralSettingsTab = React.memo(function GeneralSettingsTab({
         </div>
       </section>
 
-      {/* Keyboard Shortcuts */}
-      <section aria-label={t.keyboardShortcutsTitle} className="space-y-2.5">
-        <div className="flex items-center gap-1.5">
-          <Keyboard className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-            {t.keyboardShortcutsTitle}
-          </h3>
+      {/* Fully Customizable Keyboard Shortcuts (Global + All In-App) */}
+      <section aria-label={t.keyboardShortcutsTitle} data-testid="custom-shortcuts-section" className="space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <Keyboard className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+            <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+              {t.keyboardShortcutsTitle}
+            </h3>
+          </div>
+          {onResetAllShortcuts && (
+            <button
+              type="button"
+              data-testid="shortcuts-reset-all-btn"
+              onClick={onResetAllShortcuts}
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            >
+              <RotateCcw className="h-3 w-3" />
+              <span>{t.shortcutResetDefaults}</span>
+            </button>
+          )}
         </div>
+
         <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          {shortcuts.map((item) => (
+          {/* Global Quick Add */}
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+            <span className="font-medium text-[var(--text-primary)]">{t.shortcutGlobalQuickAdd}</span>
+            <ShortcutRecorder
+              testId="shortcut-recorder-global-quick-add"
+              value={globalQuickAddShortcutKey}
+              defaultValue="CommandOrControl+Alt+N"
+              requireModifier
+              electronFormat
+              disabled={!globalQuickAddShortcut}
+              recordPrompt={t.shortcutRecordPrompt}
+              resetLabel={t.shortcutResetDefaults}
+              modifierHint={t.shortcutRequireModifierHint}
+              onChange={(next) => onChangeGlobalQuickAddShortcutKey?.(next)}
+            />
+          </div>
+
+          {/* Global Voice Dictation */}
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+            <span className="font-medium text-[var(--text-primary)]">{t.shortcutGlobalVoice}</span>
+            <ShortcutRecorder
+              testId="shortcut-recorder-global-voice"
+              value={voiceShortcut}
+              defaultValue="CommandOrControl+Alt+Space"
+              requireModifier
+              electronFormat
+              recordPrompt={t.shortcutRecordPrompt}
+              resetLabel={t.shortcutResetDefaults}
+              modifierHint={t.shortcutRequireModifierHint}
+              onChange={(next) => onVoiceShortcutChange?.(next)}
+            />
+          </div>
+
+          {/* In-App Shortcuts */}
+          {inAppShortcutRows.map((row) => (
             <div
-              key={item.keys}
+              key={row.id}
               className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs"
             >
-              <span className="text-[var(--text-secondary)]">{item.label}</span>
-              <kbd className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 font-mono-tabular text-[11px] text-[var(--text-primary)] whitespace-nowrap">
-                {item.keys}
-              </kbd>
+              <span className="text-[var(--text-secondary)]">{row.label}</span>
+              <ShortcutRecorder
+                testId={`shortcut-recorder-${row.id}`}
+                value={customShortcuts[row.id] || DEFAULT_CUSTOM_SHORTCUTS[row.id]}
+                defaultValue={DEFAULT_CUSTOM_SHORTCUTS[row.id]}
+                recordPrompt={t.shortcutRecordPrompt}
+                resetLabel={t.shortcutResetDefaults}
+                onChange={(next) => onChangeCustomShortcut?.(row.id, next)}
+              />
             </div>
           ))}
+
+          {/* Escape (built-in standard) */}
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+            <span className="text-[var(--text-secondary)]">{t.shortcutEscape}</span>
+            <kbd className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 font-mono-tabular text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+              Esc
+            </kbd>
+          </div>
         </div>
       </section>
     </>

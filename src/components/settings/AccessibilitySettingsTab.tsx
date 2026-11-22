@@ -1,7 +1,7 @@
 import React from 'react';
 import { Contrast, Minus, Plus } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
-import { ZOOM_PRESETS } from '../../utils/themes';
+import { getNextZoomPreset, getPrevZoomPreset, ZOOM_PRESETS } from '../../utils/themes';
 
 export interface AccessibilitySettingsTabProps {
   zoomPercent: number;
@@ -39,10 +39,8 @@ export const AccessibilitySettingsTab = React.memo(function AccessibilitySetting
                 disabled={zoomPercent <= ZOOM_PRESETS[0]}
                 aria-label="-"
                 onClick={() => {
-                  const idx = ZOOM_PRESETS.indexOf(
-                    zoomPercent as (typeof ZOOM_PRESETS)[number],
-                  );
-                  if (idx > 0) onChangeZoomPercent(ZOOM_PRESETS[idx - 1]);
+                  const prev = getPrevZoomPreset(zoomPercent);
+                  if (prev !== zoomPercent) onChangeZoomPercent(prev);
                 }}
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
               >
@@ -60,12 +58,8 @@ export const AccessibilitySettingsTab = React.memo(function AccessibilitySetting
                 disabled={zoomPercent >= ZOOM_PRESETS[ZOOM_PRESETS.length - 1]}
                 aria-label="+"
                 onClick={() => {
-                  const idx = ZOOM_PRESETS.indexOf(
-                    zoomPercent as (typeof ZOOM_PRESETS)[number],
-                  );
-                  if (idx >= 0 && idx < ZOOM_PRESETS.length - 1) {
-                    onChangeZoomPercent(ZOOM_PRESETS[idx + 1]);
-                  }
+                  const next = getNextZoomPreset(zoomPercent);
+                  if (next !== zoomPercent) onChangeZoomPercent(next);
                 }}
                 className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
               >

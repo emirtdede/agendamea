@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { RotateCcw, Search, Trash2, X } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { Category, Todo } from '../../types';
 import {
@@ -8,6 +8,8 @@ import {
   type TrashTypeFilter,
 } from '../../utils/todoLogic';
 import { ColorDot } from '../ColorDot';
+import { ContextMenu } from '../ContextMenu';
+import { SelectField } from '../SelectField';
 
 export interface TrashSettingsTabProps {
   trashedCategories: Category[];
@@ -39,6 +41,12 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
   const [trashSortBy, setTrashSortBy] = useState<TrashSortOption>('newest');
   const [trashDateFrom, setTrashDateFrom] = useState('');
   const [trashDateTo, setTrashDateTo] = useState('');
+  const [trashCtxMenu, setTrashCtxMenu] = useState<{
+    x: number;
+    y: number;
+    kind: 'todo' | 'category';
+    id: string;
+  } | null>(null);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -192,24 +200,18 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                 )}
               </div>
 
-              <div className="relative inline-flex items-center">
-                <select
-                  data-testid="trash-sort-select"
-                  value={trashSortBy}
-                  onChange={(e) => setTrashSortBy(e.target.value as TrashSortOption)}
-                  aria-label={t.trashSortNewest}
-                  className="h-8 appearance-none rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-2.5 pr-7 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:border-[var(--border-strong)] focus:outline-none cursor-pointer transition-colors"
-                >
-                  <option value="newest">{t.trashSortNewest}</option>
-                  <option value="oldest">{t.trashSortOldest}</option>
-                  <option value="az">{t.trashSortAZ}</option>
-                  <option value="za">{t.trashSortZA}</option>
-                </select>
-                <ChevronDown
-                  aria-hidden="true"
-                  className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-[var(--text-muted)]"
-                />
-              </div>
+              <SelectField
+                data-testid="trash-sort-select"
+                value={trashSortBy}
+                onChange={(e) => setTrashSortBy(e.target.value as TrashSortOption)}
+                aria-label={t.trashSortNewest}
+                selectClassName="h-8 font-medium hover:bg-[var(--surface-hover)] cursor-pointer"
+              >
+                <option value="newest">{t.trashSortNewest}</option>
+                <option value="oldest">{t.trashSortOldest}</option>
+                <option value="az">{t.trashSortAZ}</option>
+                <option value="za">{t.trashSortZA}</option>
+              </SelectField>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -313,7 +315,11 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                     {filteredTrash.categories.map((cat) => (
                       <div
                         key={cat.id}
-                        className="flex items-center justify-between gap-3 px-4 py-3"
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setTrashCtxMenu({ x: e.clientX, y: e.clientY, kind: 'category', id: cat.id });
+                        }}
+                        className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--surface-hover)]/50 transition-colors"
                       >
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 min-w-0">
@@ -374,7 +380,11 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                     {filteredTrash.todos.map((todo) => (
                       <div
                         key={todo.id}
-                        className="flex items-center justify-between gap-3 px-4 py-3"
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setTrashCtxMenu({ x: e.clientX, y: e.clientY, kind: 'todo', id: todo.id });
+                        }}
+                        className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--surface-hover)]/50 transition-colors"
                       >
                         <div className="min-w-0">
                           <p
@@ -429,6 +439,57 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
             </>
           )}
         </>
+      )}
+
+      {trashCtxMenu && (
+        <ContextMenu
+          testId="trash-context-menu"
+          x={trashCtxMenu.x}
+          y={trashCtxMenu.y}
+          onClose={() => setTrashCtxMenu(null)}
+          items={[
+            {
+              id: 'restore',
+              label: t.restoreItemButton,
+              icon: <RotateCcw className="h-3.5 w-3.5" />,
+              disabled:
+                isEmptyingTrash ||
+                busyTrashIds.has(`${trashCtxMenu.kind === 'category' ? 'cat' : 'todo'}:${trashCtxMenu.id}`),
+              onSelect: () => {
+                if (trashCtxMenu.kind === 'category') {
+                  void runTrashItemOp(`cat:${trashCtxMenu.id}`, () =>
+                    onRestoreCategory(trashCtxMenu.id),
+                  );
+                } else {
+                  void runTrashItemOp(`todo:${trashCtxMenu.id}`, () =>
+                    onRestoreTodo(trashCtxMenu.id),
+                  );
+                }
+              },
+            },
+            { id: 'div-1', divider: true },
+            {
+              id: 'permanent-delete',
+              label: t.permanentDeleteTitle,
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              danger: true,
+              disabled:
+                isEmptyingTrash ||
+                busyTrashIds.has(`${trashCtxMenu.kind === 'category' ? 'cat' : 'todo'}:${trashCtxMenu.id}`),
+              onSelect: () => {
+                if (trashCtxMenu.kind === 'category') {
+                  void runTrashItemOp(`cat:${trashCtxMenu.id}`, () =>
+                    onPermanentDeleteCategory(trashCtxMenu.id),
+                  );
+                } else {
+                  void runTrashItemOp(`todo:${trashCtxMenu.id}`, () =>
+                    onPermanentDeleteTodo(trashCtxMenu.id),
+                  );
+                }
+              },
+            },
+          ]}
+        />
       )}
     </div>
   );

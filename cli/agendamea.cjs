@@ -102,7 +102,10 @@ Günlük Hızlı Komutlar (tırnak gerekmez):
 Otomasyon ve Tam Arayüzsüz Kontrol:
   ag serve [start|stop|status]       Arayüz açmadan yerel API + Gelen Webhook sunucusunu başlatır
   ag hook [logs|set <url>|events]    Webhook test, kayıt geçmişi ve olay filtresi
-  ag mcp                             20 araçlı yapay zeka MCP sunucusunu başlatır
+  ag ai [status|models|download|delete] Yerel AI donanım profili ve model yöneticisi
+  ag ask "<komut/soru>" [--read-only] Doğal dil görev ekleme veya RAG not okuma
+  ag rag "<sorgu>"                   Parçalı hibrit FTS5 + vektör RAG araması
+  ag mcp                             22 araçlı yapay zeka MCP sunucusunu başlatır
   ag install                         ag / agenda / agendamea komutlarını PATH'e kurar
   ag help all                        Tüm komutlar (edit, sub, cat, cop, cal, kanban, matris, move, sync, config, reset)`,
     fullHelp: `Agendamea CLI v${store.APP_VERSION} - %100 Arayüzsüz Tam Kontrol
@@ -155,7 +158,7 @@ YEDEKLEME, BULUT, SUNUCU, WEBHOOK, AYARLAR & MCP:
   ag hook [set <url1,url2> [secret]|events <..>|logs [clear]|on|off] Webhook ve teslimat günlüğü
   ag install / ag uninstall          Arayüz açmadan PATH kurulumu ve kaldırma
   ag update                          Yeni sürüm denetimi
-  ag mcp                             20 araçlı tam MCP sunucusunu başlatır
+  ag mcp                             22 araçlı tam MCP sunucusunu başlatır
   -j, --json                         Her komutta ham JSON çıktı verir`,
   },
   en: {
@@ -240,7 +243,10 @@ Daily Short Commands (no quotes needed):
 Automation & Full Headless Control:
   ag serve [start|stop|status]       Start headless local API + Incoming Webhook server without GUI
   ag hook [logs|set <url>|events]    Test webhooks, view delivery logs, and filter events
-  ag mcp                             Start full 20-tool MCP server over stdio
+  ag ai [status|models|download|delete] Local AI hardware profile and model manager
+  ag ask "<command/question>" [--read-only] Natural language task action or RAG read
+  ag rag "<query>"                   Chunked hybrid FTS5 + vector RAG search
+  ag mcp                             Start full 22-tool MCP server over stdio
   ag install                         Install ag / agenda / agendamea to user PATH without GUI
   ag help all                        All commands (edit, sub, cat, trash, cal, kanban, matrix, move, sync, config, reset)`,
     fullHelp: `Agendamea CLI v${store.APP_VERSION} - 100% Headless Full Control
@@ -293,7 +299,7 @@ BACKUP, CLOUD, SERVER, WEBHOOKS, SETTINGS & MCP:
   ag hook [set <url1,url2> [secret]|events <..>|logs [clear]|on|off] Webhooks & delivery logs
   ag install / ag uninstall          Zero-GUI PATH installation & removal
   ag update                          Check GitHub Releases for updates
-  ag mcp                             Start full 20-tool MCP server over stdio
+  ag mcp                             Start full 22-tool MCP server over stdio
   -j, --json                         Output raw JSON for any command`,
   },
 };
@@ -1347,6 +1353,102 @@ async function main() {
     } else {
       const statusText = updated.pinned ? c.magenta(msg.pinned) : c.dim(msg.unpinned);
       console.log(`${statusText}: ${c.bold(updated.title)}`);
+    }
+    return;
+  }
+
+  if (cmd === 'ai') {
+    const sub = String(rest[0] || 'status').toLowerCase();
+    if (sub === 'status' || sub === 'durum') {
+      const force = hasAnyFlag(rest, ['--force', '-f']);
+      const st = await store.getAiStatus({ force });
+      if (asJson) {
+        console.log(JSON.stringify(st, null, 2));
+      } else {
+        console.log(
+          `${c.bold('Agendamea Local AI')} | RAM: ${st.hardware.ramGb} GB | GPU: ${st.hardware.gpuName} (${st.hardware.vramGb} GB VRAM) | Recommended: ${c.green(st.recommendation.primaryOptionId)} | RAG Chunks: ${st.ragIndexedChunks}`,
+        );
+      }
+      return;
+    }
+    if (sub === 'models' || sub === 'modeller') {
+      const list = await store.listAiModels();
+      if (asJson) {
+        console.log(JSON.stringify(list, null, 2));
+      } else {
+        for (const m of list.models) {
+          const badge = m.verified ? c.green('[OK]') : c.dim('[--]');
+          console.log(`${badge} ${c.bold(m.id)} (${m.role}, ${m.license}, ${Math.round(m.expectedBytes / 1048576)} MB)`);
+        }
+      }
+      return;
+    }
+    if (sub === 'download' || sub === 'indir') {
+      const target = stripOptions(rest.slice(1))[0];
+      if (!target) {
+        console.error('Model ID or tier required (e.g. ag ai download tier-light).');
+        process.exit(1);
+      }
+      const res = await store.downloadAiModel(target);
+      if (asJson) console.log(JSON.stringify(res, null, 2));
+      else console.log(res.ok ? c.green(`Downloaded: ${target}`) : c.red(res.error || 'Download failed.'));
+      if (!res.ok) process.exit(1);
+      return;
+    }
+    if (sub === 'delete' || sub === 'sil' || sub === 'rm') {
+      const target = stripOptions(rest.slice(1))[0];
+      if (!target) {
+        console.error('Model ID or "all" required (e.g. ag ai delete all).');
+        process.exit(1);
+      }
+      const res = await store.deleteAiModel(target);
+      if (asJson) console.log(JSON.stringify(res, null, 2));
+      else console.log(c.green(`Deleted: ${target}`));
+      return;
+    }
+    console.error(`Unknown ai subcommand: "${sub}". Use: status | models | download <id|tier> | delete <id|all>`);
+    process.exit(1);
+  }
+
+  if (cmd === 'rag') {
+    const topKRaw = getOptionValue(rest, ['--top', '-k']);
+    const minScoreRaw = getOptionValue(rest, ['--min-score']);
+    const query = stripOptions(rest).join(' ').trim();
+    if (!query) {
+      console.error(msg.searchRequired);
+      process.exit(1);
+    }
+    const result = await store.semanticSearchRag(query, {
+      topK: topKRaw ? Number(topKRaw) : 5,
+      minScore: minScoreRaw !== null ? Number(minScoreRaw) : 0.35,
+    });
+    if (asJson) {
+      console.log(JSON.stringify(result, null, 2));
+    } else if (!result.hits || result.hits.length === 0) {
+      console.log(c.dim(msg.noTasks));
+    } else {
+      result.hits.forEach((h, i) => {
+        console.log(`${c.bold(String(i + 1))}. ${c.cyan(`[${h.score.toFixed(2)}]`)} ${c.bold(h.title)}`);
+        if (h.matchedChunkText && h.matchedChunkText !== h.title) {
+          console.log(`   ${c.dim(h.matchedChunkText.slice(0, 180))}`);
+        }
+      });
+    }
+    return;
+  }
+
+  if (cmd === 'ask' || cmd === 'sor') {
+    const readOnly = hasAnyFlag(rest, ['--read-only', '-r']);
+    const text = stripOptions(rest).join(' ').trim();
+    if (!text) {
+      console.error('Prompt text is required. Example: ag ask "yarin 10:00 demo ekle"');
+      process.exit(1);
+    }
+    const res = await store.askAiAssistant(text, { readOnly, language: lang });
+    if (asJson) {
+      console.log(JSON.stringify(res, null, 2));
+    } else {
+      console.log(res.displayText || res.spokenText || '');
     }
     return;
   }

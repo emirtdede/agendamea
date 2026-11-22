@@ -11,10 +11,40 @@ import { TodoDatabase, ValidationError } from './src/db/database.ts';
 import type { CloudProviderId, DetectedCloudProvider, OneDriveStatus } from './src/types.ts';
 import { getLocalDateString } from './src/utils/todoLogic.ts';
 import releaseUtils from './shared/releaseUtils.cjs';
+import hardwareProfiler from './shared/hardwareProfiler.cjs';
+import aiCatalog from './shared/aiCatalog.cjs';
+import modelManagerMod from './shared/modelManager.cjs';
+import embeddingWorkerMod from './electron/ai/embeddingWorker.cjs';
+import sttServiceMod from './electron/ai/sttService.cjs';
+import llmServiceMod from './electron/ai/llmService.cjs';
+import voiceOrchestratorMod from './electron/ai/voiceOrchestrator.cjs';
+import versionMod from './shared/version.cjs';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = versionMod.APP_VERSION;
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/emirtdede/agendamea/releases/latest';
 const GITHUB_RELEASES_HTML = 'https://github.com/emirtdede/agendamea/releases/latest';
+
+function assertSafeLocalSyncFolder(rawPath: string): string {
+  const trimmed = rawPath.trim();
+  if (!trimmed || trimmed.startsWith('\\\\') || trimmed.includes('\0')) {
+    throw new ValidationError('Geçersiz bulut eşitleme klasör yolu.');
+  }
+  const resolved = path.resolve(trimmed);
+  const root = path.parse(resolved).root;
+  if (resolved.toLowerCase() === root.toLowerCase()) {
+    throw new ValidationError('Kök dizin eşitleme klasörü olarak seçilemez.');
+  }
+  if (process.platform === 'win32') {
+    const winDir = (process.env.SystemRoot || 'C:\\Windows').toLowerCase();
+    if (
+      resolved.toLowerCase() === winDir ||
+      resolved.toLowerCase().startsWith(`${winDir}${path.sep}`)
+    ) {
+      throw new ValidationError('Sistem klasörü eşitleme hedefi olamaz.');
+    }
+  }
+  return resolved;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -62,6 +92,7 @@ async function startServer() {
   const httpServer = http.createServer(app);
   const db = new TodoDatabase();
   const PORT = Number(process.env.PORT) || 3000;
+  let activeListenPort = PORT;
 
   function findFirstExistingDir(candidates: Array<string | undefined>): string | null {
     for (const candidate of candidates) {
@@ -385,11 +416,11 @@ async function startServer() {
 
   let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Lightweight SSE subscribers so external CLI / MCP / Webhook mutations refresh open UI live
+  // Lightweight SSE subscribers so external CLI / MCP / Webhook mutations & AI downloads refresh open UI live
   const sseClients = new Set<express.Response>();
-  function broadcastExternalChange(reason: string): void {
+  function broadcastSseEvent(eventPayload: Record<string, unknown>): void {
     if (sseClients.size === 0) return;
-    const payload = `data: ${JSON.stringify({ type: 'changed', reason, at: Date.now() })}\n\n`;
+    const payload = `data: ${JSON.stringify({ ...eventPayload, at: Date.now() })}\n\n`;
     for (const client of sseClients) {
       try {
         client.write(payload);
@@ -399,10 +430,25 @@ async function startServer() {
     }
   }
 
+  function broadcastExternalChange(reason: string): void {
+    broadcastSseEvent({ type: 'changed', reason });
+  }
+
   function isValidWebhookTargetUrl(rawUrl: string): boolean {
     try {
       const parsed = new URL(rawUrl.trim());
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+      const host = parsed.hostname.toLowerCase();
+      // Block cloud metadata SSRF endpoints
+      if (host === '169.254.169.254' || host === 'metadata.google.internal' || host === '[fd00:ec2::254]') {
+        return false;
+      }
+      // Block self-recursive webhook loops targeting this running Agendamea server port
+      const targetPort = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+      if (isLoopbackHostname(host) && activeListenPort > 0 && targetPort === activeListenPort) {
+        return false;
+      }
+      return true;
     } catch {
       return false;
     }
@@ -613,11 +659,11 @@ async function startServer() {
       res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     }
     res.setHeader('Referrer-Policy', 'no-referrer');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
     if (process.env.NODE_ENV === 'production' && !process.env.CSP_HEADER_VALUE) {
       res.setHeader(
         'Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
       );
     }
     next();
@@ -677,13 +723,23 @@ async function startServer() {
       isMutation &&
       !req.path.startsWith('/onedrive/') &&
       !req.path.startsWith('/window/') &&
-      !req.path.startsWith('/webhooks/')
+      !req.path.startsWith('/webhooks/') &&
+      !req.path.startsWith('/ai/')
     ) {
       const sourceHeader = String(req.headers['x-agendamea-source'] ?? '').toLowerCase();
       res.on('finish', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           if (req.path !== '/reset') {
             triggerOneDriveAutoSync();
+          }
+          if (
+            req.path.startsWith('/todos') ||
+            req.path.startsWith('/subtasks') ||
+            req.path === '/webhook/incoming' ||
+            req.path === '/import' ||
+            req.path === '/reset'
+          ) {
+            scheduleBackgroundRagSync();
           }
           if (sourceHeader !== 'ui') {
             broadcastExternalChange(`${req.method} ${req.path}`);
@@ -696,7 +752,22 @@ async function startServer() {
 
   // Lightweight health probe for Electron / Windows launcher startup checks
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true });
+    res.json({
+      ok: true,
+      app: 'Agendamea',
+      version: APP_VERSION,
+      pid: process.pid,
+      headless: process.env.AGENDAMEA_HEADLESS_DAEMON === '1',
+    });
+  });
+
+  // Lightweight settings-only read endpoint (avoids full /api/bootstrap download in Voice Overlay)
+  app.get('/api/settings', (_req, res) => {
+    try {
+      res.json(db.getSettings());
+    } catch (err) {
+      sendRouteError(res, 'GET /api/settings', err, 'Ayarlar yüklenemedi.');
+    }
   });
 
   // Live change notification stream for external CLI / MCP / Webhook mutations
@@ -704,6 +775,7 @@ async function startServer() {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
     res.write(': connected\n\n');
     sseClients.add(res);
@@ -1121,8 +1193,33 @@ async function startServer() {
     };
 
     try {
+      // Prevent self-recursive webhook loops (e.g., outgoing webhook pointed back at incoming endpoint)
+      if (req.headers['x-agendamea-event']) {
+        recordIncoming('incoming.loop_blocked', 400, false, 'Self-loop blocked');
+        res.status(400).json({ error: 'Döngüsel webhook isteği engellendi.' });
+        return;
+      }
+
       const settings = db.getSettings();
       const configuredSecret = (settings.webhookSecret ?? '').trim();
+      const isLocalCaller = isLoopbackAddress(req.socket.remoteAddress);
+
+      if (!isLocalCaller && !configuredSecret) {
+        recordIncoming('incoming.secret_required', 403, false, 'Secret required for remote access');
+        res.status(403).json({
+          error: 'Uzak gelen webhook istekleri için gizli anahtar (webhookSecret) zorunludur.',
+        });
+        return;
+      }
+
+      if (!settings.webhookEnabled && !configuredSecret) {
+        recordIncoming('incoming.disabled', 403, false, 'Webhook disabled');
+        res.status(403).json({
+          error: 'Gelen webhook erişimi için Webhook otomasyonunu etkinleştirin veya gizli anahtar tanımlayın.',
+        });
+        return;
+      }
+
       if (configuredSecret) {
         const providedSecret = String(
           req.headers['x-agendamea-secret'] ?? req.body?.secret ?? '',
@@ -1162,16 +1259,7 @@ async function startServer() {
           null
         );
       };
-      const findTodoBySelector = (selector: string) => {
-        const todos = db.getTodos();
-        const q = normText(selector);
-        return (
-          todos.find((t) => t.id === selector) ??
-          todos.find((t) => t.id.startsWith(selector)) ??
-          todos.find((t) => normText(t.title).includes(q)) ??
-          null
-        );
-      };
+      const findTodoBySelector = (selector: string) => db.findTodoBySelector(selector);
 
       if (action === 'add' || action === 'create') {
         const title = typeof body.title === 'string' ? body.title.trim() : '';
@@ -1620,10 +1708,14 @@ async function startServer() {
 
   app.post('/api/onedrive/connect', (req, res) => {
     try {
+      if (!isLoopbackAddress(req.socket.remoteAddress)) {
+        res.status(403).json({ error: 'Yalnızca yerel erişime izin verilir.' });
+        return;
+      }
       const body = req.body ?? {};
       const requestedPath =
         typeof body.folderPath === 'string' && body.folderPath.trim().length > 0
-          ? path.resolve(body.folderPath.trim())
+          ? assertSafeLocalSyncFolder(body.folderPath)
           : detectDefaultOneDriveRoot();
       const autoSync = typeof body.autoSync === 'boolean' ? body.autoSync : true;
       db.updateSettings({
@@ -1666,8 +1758,12 @@ async function startServer() {
     }
   });
 
-  app.post('/api/onedrive/disconnect', (_req, res) => {
+  app.post('/api/onedrive/disconnect', (req, res) => {
     try {
+      if (!isLoopbackAddress(req.socket.remoteAddress)) {
+        res.status(403).json({ error: 'Yalnızca yerel erişime izin verilir.' });
+        return;
+      }
       db.updateSettings({
         onedriveCustomPath: '',
         onedriveAutoSync: false,
@@ -1678,8 +1774,12 @@ async function startServer() {
     }
   });
 
-  app.post('/api/onedrive/sync-push', (_req, res) => {
+  app.post('/api/onedrive/sync-push', (req, res) => {
     try {
+      if (!isLoopbackAddress(req.socket.remoteAddress)) {
+        res.status(403).json({ error: 'Yalnızca yerel erişime izin verilir.' });
+        return;
+      }
       const current = resolveOneDriveStatus();
       if (!current.connected && current.folderPath) {
         db.updateSettings({ onedriveCustomPath: current.folderPath, onedriveAutoSync: true });
@@ -1691,8 +1791,12 @@ async function startServer() {
     }
   });
 
-  app.post('/api/onedrive/sync-pull', (_req, res) => {
+  app.post('/api/onedrive/sync-pull', (req, res) => {
     try {
+      if (!isLoopbackAddress(req.socket.remoteAddress)) {
+        res.status(403).json({ error: 'Yalnızca yerel erişime izin verilir.' });
+        return;
+      }
       const current = resolveOneDriveStatus();
       const folder = current.folderPath ?? detectDefaultOneDriveRoot();
       const validBackup = readValidOneDriveBackup(folder);
@@ -1730,6 +1834,454 @@ async function startServer() {
       res.json({ ok: true, path: folder });
     } catch (err) {
       sendRouteError(res, 'POST /api/onedrive/open-folder', err, 'OneDrive klasörü açılamadı.');
+    }
+  });
+
+  // Local AI, Model Manager, Chunked Hybrid RAG & Voice Orchestrator Endpoints (v1.1.0)
+  const aiDataDir = process.env.AGENDAMEA_DATA_DIR
+    ? path.resolve(process.env.AGENDAMEA_DATA_DIR)
+    : path.join(process.cwd(), 'data');
+  const aiModelsDir = path.join(aiDataDir, 'models');
+  const modelManager = new modelManagerMod.ModelManager({
+    modelsDir: aiModelsDir,
+    onProgressEvent: (prog: Record<string, unknown>) => {
+      broadcastSseEvent({ type: 'ai.download.progress', ...prog });
+    },
+  });
+  const embeddingService = new embeddingWorkerMod.EmbeddingService();
+  const sttService = new sttServiceMod.SttService();
+  const llmService = new llmServiceMod.LlmService();
+  const voiceOrchestrator = new voiceOrchestratorMod.VoiceOrchestrator();
+
+  let cachedHardwareProfile: Record<string, unknown> | null = null;
+  let cachedHardwareAt = 0;
+  let cachedExternalBackends: Record<string, unknown> | null = null;
+  let cachedExternalAt = 0;
+  let ragSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function scheduleBackgroundRagSync() {
+    if (ragSyncTimer) clearTimeout(ragSyncTimer);
+    ragSyncTimer = setTimeout(() => {
+      ragSyncTimer = null;
+      try {
+        syncAiRuntimeFromSettings();
+        if (embeddingService.isAvailable()) {
+          void embeddingService.syncTodosIndex(db.getRawDb(), db.getTodos()).catch(() => {});
+        }
+      } catch {
+        // Non-blocking background RAG sync
+      }
+    }, 1500);
+    if (typeof ragSyncTimer.unref === 'function') ragSyncTimer.unref();
+  }
+
+  async function getHardwareProfileCached(force = false) {
+    if (!force && cachedHardwareProfile && Date.now() - cachedHardwareAt < 60_000) {
+      return cachedHardwareProfile;
+    }
+    const profile = await hardwareProfiler.profileHardware({ targetDir: aiDataDir });
+    cachedHardwareProfile = profile;
+    cachedHardwareAt = Date.now();
+    return profile;
+  }
+
+  async function getExternalBackendsCached(force = false) {
+    if (!force && cachedExternalBackends && Date.now() - cachedExternalAt < 30_000) {
+      return cachedExternalBackends;
+    }
+    const external = await aiCatalog.detectExternalBackends();
+    cachedExternalBackends = external;
+    cachedExternalAt = Date.now();
+    return external;
+  }
+
+  function syncAiRuntimeFromSettings(defaultTier = 'tier-light') {
+    const s = db.getSettings();
+    const tier = s.aiTier || defaultTier || 'tier-light';
+    const bundle = aiCatalog.getTierBundle(
+      tier === 'tier-light' || tier === 'tier-medium' || tier === 'tier-strong'
+        ? tier
+        : 'tier-light',
+    );
+    const sttId = s.aiSttModelId || bundle.sttModelId;
+    const llmId = s.aiLlmModelId || bundle.llmModelId;
+    const embedId = s.aiEmbedModelId || bundle.embedModelId;
+
+    const sttStatus = aiCatalog.MODELS_BY_ID[sttId] ? modelManager.getModelStatus(sttId) : null;
+    const llmStatus = aiCatalog.MODELS_BY_ID[llmId] ? modelManager.getModelStatus(llmId) : null;
+    const embedStatus = aiCatalog.MODELS_BY_ID[embedId] ? modelManager.getModelStatus(embedId) : null;
+
+    sttService.configureModel({
+      modelId: sttId,
+      modelPath: sttStatus?.present ? sttStatus.modelPath : null,
+    });
+    embeddingService.configureModel({
+      modelId: embedId,
+      modelPath: embedStatus?.present ? embedStatus.modelPath : null,
+    });
+    const useExternal = Boolean(
+      s.aiUseExternalOllama || tier === 'external-ollama' || tier === 'external-lmstudio',
+    );
+    const externalKind = tier === 'external-lmstudio' ? 'lmstudio' : 'ollama';
+    const extCache = cachedExternalBackends as {
+      externalOllama?: { models?: string[] };
+      externalLmStudio?: { models?: string[] };
+    } | null;
+    const fallbackExternalModel =
+      externalKind === 'lmstudio'
+        ? extCache?.externalLmStudio?.models?.[0] || ''
+        : extCache?.externalOllama?.models?.[0] || '';
+    const resolvedExternalModel = s.aiOllamaModel || fallbackExternalModel || '';
+
+    llmService.configure({
+      modelId: llmId,
+      modelPath: llmStatus?.present ? llmStatus.modelPath : null,
+      useExternalOllama: useExternal,
+      externalKind,
+      externalBaseUrl:
+        externalKind === 'lmstudio'
+          ? String(process.env.AGENDAMEA_LMSTUDIO_URL || 'http://127.0.0.1:1234').replace(/\/+$/, '')
+          : String(process.env.AGENDAMEA_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/+$/, ''),
+      externalModel: resolvedExternalModel,
+    });
+
+    return {
+      aiEnabled: s.aiEnabled !== false,
+      aiTier: tier,
+      aiLlmModelId: llmId,
+      aiSttModelId: sttId,
+      aiEmbedModelId: embedId,
+      aiUseExternalOllama: useExternal,
+      aiOllamaModel: resolvedExternalModel,
+      voiceShortcut: s.voiceShortcut || 'CommandOrControl+Alt+Space',
+      voiceAutoStopMs: s.voiceAutoStopMs ?? 1500,
+      voiceTtsEnabled: s.voiceTtsEnabled !== false,
+      voiceTtsVoice: s.voiceTtsVoice || '',
+      voiceMicDeviceId: s.voiceMicDeviceId || '',
+      voiceNoiseSuppression: s.voiceNoiseSuppression !== false,
+      voiceSensitivity: s.voiceSensitivity || 'auto',
+    };
+  }
+
+  function resolveTodoByVoiceSelector(selector: string) {
+    return db.resolveTodoByVoiceSelector(selector);
+  }
+
+  function createVoiceStoreAdapter() {
+    return {
+      getTodoById: (id: string) => db.getTodoById(id),
+      listToday: () => {
+        const today = getLocalDateString();
+        return db
+          .getTodos()
+          .filter(
+            (t) =>
+              !t.completed &&
+              ((t.dueDate && t.dueDate <= today) ||
+                (t.startDate && t.startDate <= today && (!t.dueDate || t.dueDate >= today))),
+          );
+      },
+      addTask: (input: Record<string, unknown>) => {
+        let categoryId: string | null = null;
+        if (typeof input.category === 'string' && input.category.trim()) {
+          const wanted = input.category.trim().toLocaleLowerCase('tr-TR');
+          const foundCat = db
+            .getCategories()
+            .find((c) => c.name.toLocaleLowerCase('tr-TR') === wanted);
+          if (foundCat) categoryId = foundCat.id;
+        }
+        const created = db.createTodo({
+          title: String(input.title || ''),
+          notes: typeof input.notes === 'string' ? input.notes : '',
+          dueDate: typeof input.dueDate === 'string' ? input.dueDate : null,
+          dueTime: typeof input.dueTime === 'string' ? input.dueTime : null,
+          priority:
+            input.priority === 'high' || input.priority === 'low' || input.priority === 'normal'
+              ? input.priority
+              : 'normal',
+          important: Boolean(input.important),
+          pinned: Boolean(input.pinned),
+          tags: Array.isArray(input.tags)
+            ? input.tags.filter((x): x is string => typeof x === 'string')
+            : [],
+          categoryId,
+        });
+        dispatchConfiguredWebhook('todo.created', created);
+        return created;
+      },
+      completeTask: (selector: string, completed = true) => {
+        const target = resolveTodoByVoiceSelector(selector);
+        if (!target) throw new Error('Gorev bulunamadi.');
+        const updated = db.updateTodo(target.id, { completed });
+        if (!updated) throw new Error('Gorev bulunamadi.');
+        dispatchConfiguredWebhook('todo.updated', updated);
+        return updated;
+      },
+      deleteTask: (selector: string) => {
+        const target = resolveTodoByVoiceSelector(selector);
+        if (!target) throw new Error('Gorev bulunamadi.');
+        const trashed = db.softDeleteTodo(target.id);
+        if (trashed) dispatchConfiguredWebhook('todo.deleted', trashed);
+        return trashed;
+      },
+      undoTrash: () => {
+        const trashedTodos = db.getTrashedTodos();
+        if (trashedTodos.length > 0) {
+          const restored = db.restoreTodo(trashedTodos[0].id);
+          return { kind: 'todo', item: restored };
+        }
+        const trashedCats = db.getTrashedCategories();
+        if (trashedCats.length > 0) {
+          const restored = db.restoreCategory(trashedCats[0].id);
+          return { kind: 'category', item: restored };
+        }
+        throw new Error('Trash is empty.');
+      },
+      clearCompleted: () => db.clearCompleted(),
+      emptyTrash: () => db.emptyTrash(),
+    };
+  }
+
+  async function runHybridRagQuery(query: string, opts?: { topK?: number; minScore?: number }) {
+    syncAiRuntimeFromSettings();
+    let vectorHits: Array<{ todoId: string; chunkIndex: number; chunkText: string; cosine: number }> = [];
+    if (embeddingService.isAvailable()) {
+      try {
+        vectorHits = await embeddingService.searchVectors(db.getRawDb(), query, {
+          topK: Math.max(10, Number(opts?.topK) || 5),
+        });
+      } catch {
+        vectorHits = [];
+      }
+    }
+    return db.searchHybridRag(query, {
+      topK: opts?.topK ?? 5,
+      minScore: opts?.minScore ?? 0.35,
+      vectorHits,
+    });
+  }
+
+  app.get('/api/ai/hardware', async (req, res) => {
+    try {
+      const force = req.query.force === '1' || req.query.force === 'true';
+      const hardware = await getHardwareProfileCached(force);
+      res.json(hardware);
+    } catch (err) {
+      sendRouteError(res, 'GET /api/ai/hardware', err, 'Donanım profili alınamadı.');
+    }
+  });
+
+  app.get('/api/ai/status', async (req, res) => {
+    try {
+      const force = req.query.force === '1' || req.query.force === 'true';
+      const [hardware, external] = await Promise.all([
+        getHardwareProfileCached(force),
+        getExternalBackendsCached(force),
+      ]);
+      const recommendation = aiCatalog.selectTierRecommendation(hardware, external);
+      const settings = syncAiRuntimeFromSettings(recommendation.primaryOptionId);
+      const fitMap = new Map(recommendation.models.map((m: { id: string; fitsHardware: boolean; warningCode: string | null }) => [m.id, m]));
+      const models = modelManager.listModelsStatus().map((st: { id: string }) => {
+        const fit = fitMap.get(st.id) as { fitsHardware?: boolean; warningCode?: string | null } | undefined;
+        return {
+          ...st,
+          fitsHardware: fit?.fitsHardware ?? true,
+          warningCode: fit?.warningCode ?? null,
+        };
+      });
+      res.json({
+        hardware,
+        recommendation,
+        models,
+        installedDiskBytes: modelManager.getInstalledDiskUsageBytes(),
+        ragIndexedChunks: db.getRagChunkCount(),
+        engines: {
+          stt: sttService.getStatus(),
+          llm: llmService.getStatus(),
+          embedding: embeddingService.getStatus(),
+        },
+        settings,
+      });
+    } catch (err) {
+      sendRouteError(res, 'GET /api/ai/status', err, 'Yapay zeka durumu alınamadı.');
+    }
+  });
+
+  app.get('/api/ai/models', (_req, res) => {
+    try {
+      res.json({
+        modelsDir: aiModelsDir,
+        installedDiskBytes: modelManager.getInstalledDiskUsageBytes(),
+        models: modelManager.listModelsStatus(),
+      });
+    } catch (err) {
+      sendRouteError(res, 'GET /api/ai/models', err, 'Model listesi alınamadı.');
+    }
+  });
+
+  app.post('/api/ai/models/:id/download', async (req, res) => {
+    try {
+      const modelId = req.params.id;
+      if (!aiCatalog.MODELS_BY_ID[modelId]) {
+        res.status(404).json({ ok: false, code: 'UNKNOWN_MODEL', error: 'Model bulunamadı.' });
+        return;
+      }
+      const syncWait = req.query.sync === '1' || Boolean(req.body?.sync);
+      if (syncWait) {
+        const result = await modelManager.downloadModel(modelId);
+        res.status(result.ok ? 200 : 400).json(result);
+        return;
+      }
+      void modelManager.downloadModel(modelId).catch(() => {});
+      res.status(202).json({
+        ok: true,
+        started: true,
+        modelId,
+        status: modelManager.getModelStatus(modelId),
+      });
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/models/:id/download', err, 'Model indirilemedi.');
+    }
+  });
+
+  app.post('/api/ai/models/:id/cancel', (req, res) => {
+    try {
+      const result = modelManager.cancelDownload(req.params.id, {
+        cleanPart: Boolean(req.body?.cleanPart),
+      });
+      res.json(result);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/models/:id/cancel', err, 'İndirme iptal edilemedi.');
+    }
+  });
+
+  app.delete('/api/ai/models/:id', async (req, res) => {
+    try {
+      const targetId = req.params.id;
+      if (targetId === 'all') {
+        await Promise.all([
+          sttService.unload().catch(() => {}),
+          llmService.unload().catch(() => {}),
+          embeddingService.unload().catch(() => {}),
+        ]);
+        res.json(modelManager.deleteAllModels());
+        return;
+      }
+      if (!aiCatalog.MODELS_BY_ID[targetId]) {
+        res.status(404).json({ ok: false, error: 'Model bulunamadı.' });
+        return;
+      }
+      if (sttService.modelId === targetId) await sttService.unload().catch(() => {});
+      if (llmService.modelId === targetId) await llmService.unload().catch(() => {});
+      if (embeddingService.modelId === targetId) await embeddingService.unload().catch(() => {});
+      res.json(modelManager.deleteModel(targetId));
+    } catch (err) {
+      sendRouteError(res, 'DELETE /api/ai/models/:id', err, 'Model silinemedi.');
+    }
+  });
+
+  app.post('/api/ai/rag/reindex', async (_req, res) => {
+    try {
+      syncAiRuntimeFromSettings();
+      db.rebuildSearchIndex();
+      const result = await embeddingService.syncTodosIndex(db.getRawDb(), db.getTodos());
+      res.json(result);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/rag/reindex', err, 'RAG indeksi güncellenemedi.');
+    }
+  });
+
+  app.get('/api/ai/rag/search', async (req, res) => {
+    try {
+      const q = typeof req.query.q === 'string' ? req.query.q : '';
+      const topK = Number(req.query.topK) || 5;
+      const minScore = req.query.minScore !== undefined ? Number(req.query.minScore) : 0.35;
+      const result = await runHybridRagQuery(q, { topK, minScore });
+      res.json(result);
+    } catch (err) {
+      sendRouteError(res, 'GET /api/ai/rag/search', err, 'RAG araması yapılamadı.');
+    }
+  });
+
+  app.post('/api/ai/rag/search', async (req, res) => {
+    try {
+      const q = typeof req.body?.query === 'string' ? req.body.query : '';
+      const topK = Number(req.body?.topK) || 5;
+      const minScore = req.body?.minScore !== undefined ? Number(req.body.minScore) : 0.35;
+      const result = await runHybridRagQuery(q, { topK, minScore });
+      res.json(result);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/rag/search', err, 'RAG araması yapılamadı.');
+    }
+  });
+
+  app.post('/api/ai/ask', async (req, res) => {
+    try {
+      const body = req.body ?? {};
+      const text = typeof body.text === 'string' ? body.text : '';
+      const language =
+        typeof body.language === 'string' && body.language.trim()
+          ? body.language.trim()
+          : db.getSettings().language || 'tr';
+      const readOnly = Boolean(body.readOnly);
+      const confirmToken = typeof body.confirmToken === 'string' ? body.confirmToken : null;
+      const selectedTodoId = typeof body.selectedTodoId === 'string' ? body.selectedTodoId : null;
+
+      const aiRuntime = syncAiRuntimeFromSettings();
+      // If Ollama / LM Studio mode is active but no model was saved yet (e.g. Ollama was started after selecting the card),
+      // probe live external backends once and auto-select the first available model!
+      if (aiRuntime.aiUseExternalOllama && !aiRuntime.aiOllamaModel) {
+        await getExternalBackendsCached(true);
+        syncAiRuntimeFromSettings();
+      }
+      const result = await voiceOrchestrator.handleUtterance({
+        text,
+        language,
+        readOnly,
+        confirmToken,
+        selectedTodoId,
+        storeAdapter: createVoiceStoreAdapter(),
+        ragSearchFn: (q: string, opts?: { topK?: number; minScore?: number }) =>
+          runHybridRagQuery(q, opts),
+        llmService,
+      });
+
+      if (result.mutated) {
+        broadcastExternalChange('POST /api/ai/ask');
+        triggerOneDriveAutoSync();
+        scheduleBackgroundRagSync();
+      }
+      res.json(result);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/ask', err, 'Sesli/metin komutu işlenemedi.');
+    }
+  });
+
+  app.post('/api/ai/transcribe', async (req, res) => {
+    try {
+      const body = req.body ?? {};
+      const language =
+        typeof body.language === 'string' && body.language.trim()
+          ? body.language.trim()
+          : db.getSettings().language || 'tr';
+
+      let samples: Float32Array | null = null;
+      if (typeof body.pcmBase64 === 'string' && body.pcmBase64.length > 0) {
+        const rawBuf = Buffer.from(body.pcmBase64, 'base64');
+        samples = sttServiceMod.toFloat32Array(rawBuf);
+      } else if (Array.isArray(body.pcm)) {
+        samples = sttServiceMod.toFloat32Array(body.pcm);
+      }
+      if (!samples) {
+        res.status(400).json({ ok: false, code: 'INVALID_AUDIO', error: 'Geçersiz ses verisi.' });
+        return;
+      }
+
+      syncAiRuntimeFromSettings();
+      const sttRes = await sttService.transcribePcm(samples, language);
+      res.json(sttRes);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/transcribe', err, 'Ses deşifre edilemedi.');
     }
   });
 
@@ -2025,6 +2577,7 @@ async function startServer() {
   const server = httpServer.listen(PORT, HOST, () => {
     const addr = server.address();
     const actualPort = typeof addr === 'object' && addr ? addr.port : PORT;
+    activeListenPort = actualPort;
     if (isHeadlessDaemon) {
       try {
         fs.mkdirSync(daemonDataDir, { recursive: true });
@@ -2053,6 +2606,18 @@ async function startServer() {
   const shutdown = () => {
     if (shuttingDown) return;
     shuttingDown = true;
+    if (ragSyncTimer) {
+      clearTimeout(ragSyncTimer);
+      ragSyncTimer = null;
+    }
+    for (const activeId of Array.from(modelManager.activeControllers.keys())) {
+      modelManager.cancelDownload(activeId, { cleanPart: false });
+    }
+    const unloadPromise = Promise.allSettled([
+      sttService.unload(),
+      llmService.unload(),
+      embeddingService.unload(),
+    ]);
     flushOneDriveAutoSync();
     removeDaemonPortFileIfOwned();
 
@@ -2077,11 +2642,13 @@ async function startServer() {
         }
         process.exit(0);
       };
-      if (viteServer) {
-        void viteServer.close().catch(() => {}).finally(finish);
-      } else {
-        finish();
-      }
+      void unloadPromise.finally(() => {
+        if (viteServer) {
+          void viteServer.close().catch(() => {}).finally(finish);
+        } else {
+          finish();
+        }
+      });
     });
   };
 

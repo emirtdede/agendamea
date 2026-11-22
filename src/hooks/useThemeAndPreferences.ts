@@ -170,19 +170,28 @@ export function useThemeAndPreferences() {
       ?.updateTrayLabels?.({
         openLabel: t.trayOpenApp,
         newTaskLabel: t.addFirstTaskButton,
+        dictateLabel: t.overlayTrayMenuDictate,
         todayLabel: t.today,
         importantLabel: t.important,
         quitLabel: t.closeActionQuitTitle,
       })
       ?.catch(() => {});
-  }, [t.trayOpenApp, t.addFirstTaskButton, t.today, t.important, t.closeActionQuitTitle]);
+  }, [
+    t.trayOpenApp,
+    t.addFirstTaskButton,
+    t.overlayTrayMenuDictate,
+    t.today,
+    t.important,
+    t.closeActionQuitTitle,
+  ]);
 
   useEffect(() => {
     void window.agendameaWindow?.setCloseBehavior?.(closeBehavior)?.catch(() => {});
   }, [closeBehavior]);
 
   const syncFromBootstrapSettings = useCallback(
-    async (settings: AppSettings) => {
+    async (settings: AppSettings, options?: { fromExternalSse?: boolean }) => {
+      const fromExternalSse = Boolean(options?.fromExternalSse);
       if (settings.customThemeColor) {
         const norm = normalizeHexColor(settings.customThemeColor);
         if (norm) setCustomThemeColor(norm);
@@ -222,8 +231,29 @@ export function useThemeAndPreferences() {
           ?.setGlobalQuickAddShortcut?.(settings.globalQuickAddShortcut)
           ?.catch(() => {});
       }
+      if (typeof settings.voiceShortcut === 'string' && settings.voiceShortcut.trim()) {
+        void window.agendameaWindow
+          ?.setVoiceShortcut?.(settings.voiceShortcut.trim())
+          ?.catch(() => {});
+      }
+      if (
+        typeof settings.globalQuickAddShortcutKey === 'string' &&
+        settings.globalQuickAddShortcutKey.trim()
+      ) {
+        void window.agendameaWindow
+          ?.setGlobalQuickAddShortcutKey?.(settings.globalQuickAddShortcutKey.trim())
+          ?.catch(() => {});
+      }
 
-      if (!langDirtyRef.current && settings.language && isValidLanguageCode(settings.language)) {
+      if (fromExternalSse && settings.language && isValidLanguageCode(settings.language)) {
+        langDirtyRef.current = false;
+        setLanguage(settings.language);
+        try {
+          localStorage.setItem('agendamea-language-customized', 'true');
+        } catch {
+          // Ignore storage write errors
+        }
+      } else if (!langDirtyRef.current && settings.language && isValidLanguageCode(settings.language)) {
         let hasCustomLang = false;
         try {
           hasCustomLang = localStorage.getItem('agendamea-language-customized') === 'true';
@@ -273,7 +303,8 @@ export function useThemeAndPreferences() {
         }
       }
 
-      if (!sidebarDirtyRef.current) {
+      if (fromExternalSse || !sidebarDirtyRef.current) {
+        if (fromExternalSse) sidebarDirtyRef.current = false;
         const dbCollapsed = Boolean(settings.sidebarCollapsed);
         setSidebarCollapsed(dbCollapsed);
         try {
@@ -283,7 +314,11 @@ export function useThemeAndPreferences() {
         }
       }
 
-      if (!themeDirtyRef.current) {
+      if (fromExternalSse) {
+        themeDirtyRef.current = false;
+        setThemeMode(settings.themeMode);
+        setThemeId(settings.themeId);
+      } else if (!themeDirtyRef.current) {
         const storedTheme = readInitialTheme();
         if (!settings.themeCustomized && storedTheme.hasStoredPreference) {
           setThemeMode(storedTheme.mode);
@@ -343,6 +378,17 @@ export function useThemeAndPreferences() {
         : Boolean(settings.globalQuickAddShortcut);
     setGlobalQuickAddShortcut(nextGlobalQuickAdd);
     void window.agendameaWindow?.setGlobalQuickAddShortcut?.(nextGlobalQuickAdd)?.catch(() => {});
+    const nextVoiceShortcut =
+      typeof settings.voiceShortcut === 'string' && settings.voiceShortcut.trim()
+        ? settings.voiceShortcut.trim()
+        : 'CommandOrControl+Alt+Space';
+    void window.agendameaWindow?.setVoiceShortcut?.(nextVoiceShortcut)?.catch(() => {});
+    const nextQuickAddKey =
+      typeof settings.globalQuickAddShortcutKey === 'string' &&
+      settings.globalQuickAddShortcutKey.trim()
+        ? settings.globalQuickAddShortcutKey.trim()
+        : 'CommandOrControl+Alt+N';
+    void window.agendameaWindow?.setGlobalQuickAddShortcutKey?.(nextQuickAddKey)?.catch(() => {});
     if (settings.language && isValidLanguageCode(settings.language)) {
       setLanguage(settings.language);
     }

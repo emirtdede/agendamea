@@ -6,6 +6,7 @@ const {
   ipcMain,
   Menu,
   nativeImage,
+  Notification,
   session,
   shell,
   Tray,
@@ -23,6 +24,14 @@ const {
 } = require('./iconGenerator.cjs');
 const { compareSemver, parseGitHubRelease } = require('../shared/releaseUtils.cjs');
 const cliInstaller = require('../shared/cliInstaller.cjs');
+const { VoiceOverlayManager } = require('./voiceOverlay.cjs');
+const PKG_VERSION = (() => {
+  try {
+    return String(require('../package.json')?.version || '1.1.0');
+  } catch {
+    return '1.1.0';
+  }
+})();
 
 // Windows 11 Taskbar & Jump List AppUserModelID (matches electron-builder appId)
 if (process.platform === 'win32') {
@@ -44,9 +53,14 @@ let backendRestartCount = 0;
 let activeCloseBehavior = 'ask';
 let activeLaunchAtStartup = false;
 let activeGlobalQuickAdd = true;
+let activeGlobalQuickAddKey = 'CommandOrControl+Alt+N';
+let activeVoiceShortcut = 'CommandOrControl+Alt+Space';
+let voiceOverlayManager = null;
+let reusedExternalDaemon = false;
 let trayLabels = {
   openLabel: 'Open Agendamea',
   newTaskLabel: 'New Task',
+  dictateLabel: 'Voice Dictation (Ctrl+Alt+Space)',
   todayLabel: 'Today',
   importantLabel: 'Important',
   quitLabel: 'Quit',
@@ -67,12 +81,26 @@ function readWindowPrefs(userDataDir) {
       const launchAtStartup = Boolean(parsed?.launchAtStartup);
       const globalQuickAdd =
         parsed?.globalQuickAdd === undefined ? true : Boolean(parsed.globalQuickAdd);
-      return { closeBehavior, launchAtStartup, globalQuickAdd };
+      const globalQuickAddKey =
+        typeof parsed?.globalQuickAddKey === 'string' && parsed.globalQuickAddKey.trim()
+          ? parsed.globalQuickAddKey.trim()
+          : 'CommandOrControl+Alt+N';
+      const voiceShortcut =
+        typeof parsed?.voiceShortcut === 'string' && parsed.voiceShortcut.trim()
+          ? parsed.voiceShortcut.trim()
+          : 'CommandOrControl+Alt+Space';
+      return { closeBehavior, launchAtStartup, globalQuickAdd, globalQuickAddKey, voiceShortcut };
     }
   } catch {
     // Ignore unreadable prefs
   }
-  return { closeBehavior: 'ask', launchAtStartup: false, globalQuickAdd: true };
+  return {
+    closeBehavior: 'ask',
+    launchAtStartup: false,
+    globalQuickAdd: true,
+    globalQuickAddKey: 'CommandOrControl+Alt+N',
+    voiceShortcut: 'CommandOrControl+Alt+Space',
+  };
 }
 
 function saveWindowPrefs(userDataDir) {
@@ -85,6 +113,8 @@ function saveWindowPrefs(userDataDir) {
           closeBehavior: activeCloseBehavior,
           launchAtStartup: activeLaunchAtStartup,
           globalQuickAdd: activeGlobalQuickAdd,
+          globalQuickAddKey: activeGlobalQuickAddKey,
+          voiceShortcut: activeVoiceShortcut,
         },
         null,
         2,
@@ -111,20 +141,65 @@ function applyLoginItemSetting(enabled) {
   }
 }
 
-function syncGlobalQuickAddShortcut(enabled) {
+function syncGlobalQuickAddShortcut(enabled, nextKey) {
+  const prevKey = activeGlobalQuickAddKey;
   activeGlobalQuickAdd = Boolean(enabled);
+  if (typeof nextKey === 'string' && nextKey.trim()) {
+    activeGlobalQuickAddKey = nextKey.trim();
+  }
   try {
-    globalShortcut.unregister('CommandOrControl+Alt+N');
-    if (activeGlobalQuickAdd) {
-      globalShortcut.register('CommandOrControl+Alt+N', () => {
-        showAndFocusMainWindow();
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('app:focus-quick-add');
-        }
-      });
+    if (prevKey) globalShortcut.unregister(prevKey);
+    if (activeGlobalQuickAddKey && activeGlobalQuickAddKey !== prevKey) {
+      globalShortcut.unregister(activeGlobalQuickAddKey);
     }
+    if (activeGlobalQuickAdd && activeGlobalQuickAddKey) {
+      return Boolean(
+        globalShortcut.register(activeGlobalQuickAddKey, () => {
+          showAndFocusMainWindow();
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('app:focus-quick-add');
+          }
+        }),
+      );
+    }
+    return true;
   } catch {
-    // Ignore global shortcut registration conflicts
+    return false;
+  }
+}
+
+function ensureVoiceOverlayManager() {
+  if (!voiceOverlayManager) {
+    voiceOverlayManager = new VoiceOverlayManager({
+      preloadPath: path.join(__dirname, 'preload.cjs'),
+    });
+  }
+  return voiceOverlayManager;
+}
+
+function syncVoiceDictationShortcut(nextShortcut) {
+  const prev = activeVoiceShortcut;
+  const target =
+    typeof nextShortcut === 'string' && nextShortcut.trim()
+      ? nextShortcut.trim()
+      : 'CommandOrControl+Alt+Space';
+  try {
+    if (prev) globalShortcut.unregister(prev);
+  } catch {
+    // Ignore previous unregister error
+  }
+  activeVoiceShortcut = target;
+  try {
+    return Boolean(
+      globalShortcut.register(activeVoiceShortcut, () => {
+        // NEVER open mainWindow; toggle only the taskbar floating voice overlay!
+        if (activePort) {
+          void ensureVoiceOverlayManager().toggle(activePort);
+        }
+      }),
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -439,6 +514,14 @@ function rebuildTrayMenu() {
         }
       },
     },
+    {
+      label: trayLabels.dictateLabel || 'Voice Dictation (Ctrl+Alt+Space)',
+      click: () => {
+        if (activePort) {
+          void ensureVoiceOverlayManager().toggle(activePort);
+        }
+      },
+    },
     { type: 'separator' },
     {
       label: trayLabels.quitLabel || 'Quit',
@@ -475,6 +558,10 @@ function ensureTray(runtimeRoot) {
 
 function performFullQuit() {
   isQuitting = true;
+  if (voiceOverlayManager) {
+    voiceOverlayManager.destroy();
+    voiceOverlayManager = null;
+  }
   if (tray) {
     try {
       tray.destroy();
@@ -504,6 +591,9 @@ function isAllowedExternalUrl(targetUrl) {
       parsed.protocol === 'mailto:' &&
       parsed.pathname.toLowerCase().endsWith('@vellium.dev')
     ) {
+      return true;
+    }
+    if (String(targetUrl).toLowerCase() === 'ms-settings:speech') {
       return true;
     }
     return false;
@@ -569,6 +659,11 @@ function startBackend(port) {
 }
 
 function stopBackend() {
+  if (reusedExternalDaemon) {
+    reusedExternalDaemon = false;
+    unlockCriticalRuntimeFiles();
+    return;
+  }
   const proc = serverProcess;
   serverProcess = null;
   if (proc && !proc.killed) {
@@ -871,6 +966,84 @@ ipcMain.handle('shortcut:set-global-quick-add', (_event, enabled) => {
   return { ok: true, globalQuickAddShortcut: activeGlobalQuickAdd };
 });
 
+ipcMain.handle('shortcut:set-global-quick-add-key', (_event, shortcutKey) => {
+  const registered = syncGlobalQuickAddShortcut(activeGlobalQuickAdd, shortcutKey);
+  saveWindowPrefs(app.getPath('userData'));
+  return { ok: registered, globalQuickAddShortcutKey: activeGlobalQuickAddKey };
+});
+
+ipcMain.handle('notification:show', (_event, payload) => {
+  try {
+    if (!Notification || typeof Notification.isSupported !== 'function' || !Notification.isSupported()) {
+      return { ok: false, supported: false };
+    }
+    const title = typeof payload?.title === 'string' && payload.title.trim()
+      ? payload.title.trim().slice(0, 120)
+      : 'Agendamea';
+    const body = typeof payload?.body === 'string'
+      ? payload.body.trim().slice(0, 260)
+      : '';
+    const todoId = typeof payload?.todoId === 'string' ? payload.todoId : null;
+    const { icoPath } = resolveStartupIcons(resolveRuntimeRoot());
+    const notif = new Notification({
+      title,
+      body,
+      icon: icoPath && fs.existsSync(icoPath) ? icoPath : undefined,
+      silent: Boolean(payload?.silent),
+    });
+    notif.on('click', () => {
+      showAndFocusMainWindow();
+      if (todoId && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app:focus-todo', todoId);
+      }
+    });
+    notif.show();
+    return { ok: true, supported: true };
+  } catch {
+    return { ok: false };
+  }
+});
+
+ipcMain.handle('voice:set-shortcut', (_event, shortcut) => {
+  const registered = syncVoiceDictationShortcut(shortcut);
+  saveWindowPrefs(app.getPath('userData'));
+  return { ok: registered, voiceShortcut: activeVoiceShortcut };
+});
+
+ipcMain.handle('voice:toggle-overlay', async () => {
+  if (!activePort) return { ok: false };
+  return ensureVoiceOverlayManager().toggle(activePort);
+});
+
+ipcMain.handle('voice:hide-overlay', () => {
+  if (!voiceOverlayManager) return { ok: true, visible: false };
+  return voiceOverlayManager.hide();
+});
+
+ipcMain.handle('voice:set-focusable', (_event, focusable) => {
+  if (!voiceOverlayManager) return { ok: false };
+  return voiceOverlayManager.setFocusable(Boolean(focusable));
+});
+
+ipcMain.handle('voice:set-listening', (_event, listening) => {
+  if (!voiceOverlayManager) return { ok: false };
+  return voiceOverlayManager.setListeningState(Boolean(listening));
+});
+
+ipcMain.handle('voice:get-overlay-bounds', () => {
+  if (!voiceOverlayManager) return null;
+  return voiceOverlayManager.getBounds();
+});
+
+ipcMain.handle('voice:open-speech-settings', async () => {
+  try {
+    await shell.openExternal('ms-settings:speech');
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+});
+
 function getCliBinDir() {
   return cliInstaller.getCliBinDir();
 }
@@ -912,7 +1085,8 @@ ipcMain.handle('cli:install-shims', async () => {
   try {
     return await installCliShims();
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'CLI install failed' };
+    console.error('CLI shim install error:', err);
+    return { ok: false, error: 'CLI install failed' };
   }
 });
 
@@ -932,7 +1106,8 @@ ipcMain.handle('cli:open-terminal', async () => {
     child.unref();
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'Terminal launch failed' };
+    console.error('Terminal launch error:', err);
+    return { ok: false, error: 'Terminal launch failed' };
   }
 });
 
@@ -941,7 +1116,7 @@ ipcMain.handle('app:get-diagnostics', () => {
   const cliPath = path.join(runtimeRoot, 'cli', 'agendamea.cjs');
   const mcpPath = path.join(runtimeRoot, 'mcp', 'server.cjs');
   return {
-    appVersion: app.getVersion() || '1.0.0',
+    appVersion: app.getVersion() || PKG_VERSION,
     electronVersion: process.versions.electron || '',
     chromeVersion: process.versions.chrome || '',
     nodeVersion: process.versions.node || '',
@@ -979,6 +1154,7 @@ ipcMain.handle('tray:update-labels', (_event, labels) => {
     trayLabels = {
       openLabel: typeof labels.openLabel === 'string' && labels.openLabel.trim() ? labels.openLabel.trim() : trayLabels.openLabel,
       newTaskLabel: typeof labels.newTaskLabel === 'string' && labels.newTaskLabel.trim() ? labels.newTaskLabel.trim() : trayLabels.newTaskLabel,
+      dictateLabel: typeof labels.dictateLabel === 'string' && labels.dictateLabel.trim() ? labels.dictateLabel.trim() : trayLabels.dictateLabel,
       todayLabel: typeof labels.todayLabel === 'string' && labels.todayLabel.trim() ? labels.todayLabel.trim() : trayLabels.todayLabel,
       importantLabel: typeof labels.importantLabel === 'string' && labels.importantLabel.trim() ? labels.importantLabel.trim() : trayLabels.importantLabel,
       quitLabel: typeof labels.quitLabel === 'string' && labels.quitLabel.trim() ? labels.quitLabel.trim() : trayLabels.quitLabel,
@@ -1043,9 +1219,10 @@ ipcMain.handle('icon:apply', (event, payload) => {
       updatedShortcuts: shortcuts.updated.length,
     };
   } catch (err) {
+    console.error('Icon update error:', err);
     return {
       ok: false,
-      error: err instanceof Error ? err.message : 'Icon update failed',
+      error: 'Icon update failed',
     };
   }
 });
@@ -1095,11 +1272,9 @@ function getNativeAutoUpdater() {
     });
 
     autoUpdater.on('error', (err) => {
+      console.error('AutoUpdater error:', err);
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(
-          'updater:error',
-          err instanceof Error ? err.message : 'Update error',
-        );
+        mainWindow.webContents.send('updater:error', 'Update error');
       }
     });
 
@@ -1171,14 +1346,28 @@ ipcMain.handle('onedrive:open-folder', async (_event, customFolderPath) => {
     const defaultFolder = detectDefaultOneDriveFolder();
     let targetFolder = defaultFolder;
     if (typeof customFolderPath === 'string' && customFolderPath.trim().length > 0) {
-      const candidate = path.resolve(customFolderPath.trim());
-      const parentDir = path.dirname(candidate);
-      if (
-        candidate === defaultFolder ||
-        (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) ||
-        (fs.existsSync(parentDir) && fs.statSync(parentDir).isDirectory())
-      ) {
-        targetFolder = candidate;
+      const raw = customFolderPath.trim();
+      if (!raw.startsWith('\\\\') && !raw.startsWith('//') && !raw.includes('\0')) {
+        const candidate = path.resolve(raw);
+        if (candidate.startsWith('\\\\')) {
+          return { ok: false };
+        }
+        const root = path.parse(candidate).root.toLowerCase();
+        const winDir = (process.env.SystemRoot || 'C:\\Windows').toLowerCase();
+        const lower = candidate.toLowerCase();
+        const isSafe =
+          lower !== root &&
+          lower !== winDir &&
+          !lower.startsWith(`${winDir}${path.sep}`);
+        const parentDir = path.dirname(candidate);
+        if (
+          isSafe &&
+          (candidate === defaultFolder ||
+            (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) ||
+            (fs.existsSync(parentDir) && fs.statSync(parentDir).isDirectory()))
+        ) {
+          targetFolder = candidate;
+        }
       }
     }
     fs.mkdirSync(targetFolder, { recursive: true });
@@ -1190,7 +1379,7 @@ ipcMain.handle('onedrive:open-folder', async (_event, customFolderPath) => {
 });
 
 ipcMain.handle('updater:check', async () => {
-  const currentVersion = app.getVersion() || '1.0.0';
+  const currentVersion = app.getVersion() || PKG_VERSION;
   const checkedAt = new Date().toISOString();
 
   // Microsoft Store handles updates exclusively (Policy 10.2.7)
@@ -1347,10 +1536,11 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
     : lowerUrl.endsWith('.appx')
       ? '.appx'
       : '.exe';
-  const tempFilePath = path.join(app.getPath('temp'), `Agendamea-Update${ext}`);
+  const tempFilePath = path.join(app.getPath('temp'), `Agendamea-Update-${process.pid}${ext}`);
+  let fileStream = null;
   try {
     const res = await fetch(downloadUrl, {
-      headers: { 'User-Agent': `Agendamea/${app.getVersion() || '1.0.0'} (Vellium)` },
+      headers: { 'User-Agent': `Agendamea/${app.getVersion() || PKG_VERSION} (Vellium)` },
     });
     if (!res.ok || !res.body) {
       void shell.openExternal(downloadUrl);
@@ -1359,15 +1549,33 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
 
     const totalBytes = Number(res.headers.get('content-length') || 0);
     let receivedBytes = 0;
-    const fileStream = fs.createWriteStream(tempFilePath);
+    let writeErr = null;
+    fileStream = fs.createWriteStream(tempFilePath);
+    fileStream.on('error', (err) => {
+      writeErr = err;
+    });
     const reader = res.body.getReader();
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (writeErr) throw writeErr;
       if (value) {
         receivedBytes += value.byteLength;
-        fileStream.write(Buffer.from(value));
+        if (!fileStream.write(Buffer.from(value))) {
+          await new Promise((resolve, reject) => {
+            const onDrain = () => {
+              fileStream.off('error', onErr);
+              resolve();
+            };
+            const onErr = (e) => {
+              fileStream.off('drain', onDrain);
+              reject(e);
+            };
+            fileStream.once('drain', onDrain);
+            fileStream.once('error', onErr);
+          });
+        }
         if (totalBytes > 0 && win && !win.isDestroyed()) {
           const pct = Math.min(100, Math.round((receivedBytes / totalBytes) * 100));
           win.webContents.send('updater:progress', pct);
@@ -1378,6 +1586,10 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
     await new Promise((resolve, reject) => {
       fileStream.end((err) => (err ? reject(err) : resolve()));
     });
+    if (writeErr) throw writeErr;
+    if (totalBytes > 0 && receivedBytes !== totalBytes) {
+      throw new Error('INCOMPLETE_UPDATE_DOWNLOAD');
+    }
 
     if (ext === '.msix' || ext === '.appx') {
       await shell.openPath(tempFilePath);
@@ -1390,7 +1602,20 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
     }
     performFullQuit();
     return { ok: true, launchedInstaller: true };
-  } catch {
+  } catch (err) {
+    console.error('Fallback update download failed:', err);
+    if (fileStream) {
+      try {
+        fileStream.destroy();
+      } catch {
+        // Ignore stream destroy error
+      }
+    }
+    try {
+      if (fs.existsSync(tempFilePath)) fs.rmSync(tempFilePath, { force: true });
+    } catch {
+      // Ignore partial file cleanup error
+    }
     void shell.openExternal(downloadUrl);
     return { ok: true, launchedExternal: true };
   }
@@ -1405,6 +1630,10 @@ ipcMain.handle('updater:quit-and-install', () => {
     return { ok: false };
   }
   isQuitting = true;
+  if (voiceOverlayManager) {
+    voiceOverlayManager.destroy();
+    voiceOverlayManager = null;
+  }
   if (tray) {
     try {
       tray.destroy();
@@ -1435,19 +1664,77 @@ app
     activeCloseBehavior = prefs.closeBehavior;
     activeLaunchAtStartup = prefs.launchAtStartup;
     activeGlobalQuickAdd = prefs.globalQuickAdd;
-    syncGlobalQuickAddShortcut(activeGlobalQuickAdd);
+    activeGlobalQuickAddKey = prefs.globalQuickAddKey || 'CommandOrControl+Alt+N';
+    activeVoiceShortcut = prefs.voiceShortcut || 'CommandOrControl+Alt+Space';
+    syncGlobalQuickAddShortcut(activeGlobalQuickAdd, activeGlobalQuickAddKey);
+    syncVoiceDictationShortcut(activeVoiceShortcut);
     rebuildWindowsJumpList();
     syncExistingCliShimsOnStartup();
 
-    // Deny unexpected browser permission prompts (camera, microphone, geolocation, notifications)
-    session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
-      callback(false);
-    });
-    session.defaultSession.setPermissionCheckHandler(() => false);
+    // WBS-5.2: Handshake with an already-running `ag serve` headless daemon in the same userData dir
+    // so Electron and CLI share a single loopback server + single GPU/embedding worker (zero SQLITE_BUSY!).
+    let port = null;
+    try {
+      const existingPortFile = path.join(app.getPath('userData'), 'runtime-port.json');
+      if (fs.existsSync(existingPortFile)) {
+        const meta = JSON.parse(fs.readFileSync(existingPortFile, 'utf8'));
+        const existingPort = Number(meta?.port);
+        if (Number.isInteger(existingPort) && existingPort > 0 && existingPort < 65536) {
+          const probeRes = await fetch(`http://127.0.0.1:${existingPort}/api/health`, {
+            signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(700) : undefined,
+          });
+          if (probeRes.ok) {
+            const health = await probeRes.json().catch(() => null);
+            if (
+              health &&
+              health.ok === true &&
+              typeof health.version === 'string' &&
+              (health.app === 'Agendamea' || health.headless === true)
+            ) {
+              port = existingPort;
+              activePort = existingPort;
+              reusedExternalDaemon = true;
+            }
+          }
+        }
+      }
+    } catch {
+      // No live daemon; launch our managed backend below
+    }
 
-    const port = process.env.PORT ? Number(process.env.PORT) : await getAvailablePort();
+    if (!port) {
+      port = process.env.PORT ? Number(process.env.PORT) : await getAvailablePort();
+    }
     const appUrl = `http://127.0.0.1:${port}`;
-    startBackend(port);
+    const allowedOrigin = new URL(appUrl).origin;
+
+    // WBS-3.1: Secure Context microphone-only permission bridge (same-origin loopback only; camera/geo always denied)
+    session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) => {
+      try {
+        const origin = new URL(wc.getURL() || '').origin;
+        const isMicOnly =
+          (permission === 'media' || permission === 'audioCapture') &&
+          (!Array.isArray(details?.mediaTypes) ||
+            (details.mediaTypes.includes('audio') && !details.mediaTypes.includes('video')));
+        callback(origin === allowedOrigin && isMicOnly);
+      } catch {
+        callback(false);
+      }
+    });
+    session.defaultSession.setPermissionCheckHandler((wc, permission, requestingOrigin) => {
+      try {
+        const origin = requestingOrigin
+          ? new URL(requestingOrigin).origin
+          : new URL(wc?.getURL?.() || '').origin;
+        return origin === allowedOrigin && (permission === 'media' || permission === 'audioCapture');
+      } catch {
+        return false;
+      }
+    });
+
+    if (!reusedExternalDaemon) {
+      startBackend(port);
+    }
     await createWindow(appUrl);
   })
   .catch((err) => {
@@ -1458,6 +1745,10 @@ app
 
 app.on('before-quit', () => {
   isQuitting = true;
+  if (voiceOverlayManager) {
+    voiceOverlayManager.destroy();
+    voiceOverlayManager = null;
+  }
   try {
     globalShortcut.unregisterAll();
   } catch {

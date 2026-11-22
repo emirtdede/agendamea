@@ -261,6 +261,39 @@ html.high-contrast select:focus-visible {
   }
 }
 
+@keyframes agContextMenuPop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes agSlideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes agAccordionOpen {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .animate-fade-in {
   animation: agFadeIn 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -275,6 +308,19 @@ html.high-contrast select:focus-visible {
 
 .animate-slide-in-right {
   animation: agSlideInRight 210ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-slide-in-left {
+  animation: agSlideInLeft 210ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-context-menu {
+  animation: agContextMenuPop 130ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top left;
+}
+
+.animate-accordion {
+  animation: agAccordionOpen 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .animate-toast-up {

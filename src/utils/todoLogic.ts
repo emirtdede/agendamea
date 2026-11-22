@@ -500,10 +500,16 @@ export function getVerticalDropPosition(
 }
 
 export function compareSemver(a: string, b: string): number {
-  const cleanA = a.trim().replace(/^v/i, '').split('-')[0];
-  const cleanB = b.trim().replace(/^v/i, '').split('-')[0];
-  const partsA = cleanA.split('.').map((n) => Number.parseInt(n, 10) || 0);
-  const partsB = cleanB.split('.').map((n) => Number.parseInt(n, 10) || 0);
+  const [coreA, preA] = String(a || '')
+    .trim()
+    .replace(/^v/i, '')
+    .split('-', 2);
+  const [coreB, preB] = String(b || '')
+    .trim()
+    .replace(/^v/i, '')
+    .split('-', 2);
+  const partsA = coreA.split('.').map((n) => Number.parseInt(n, 10) || 0);
+  const partsB = coreB.split('.').map((n) => Number.parseInt(n, 10) || 0);
   const len = Math.max(partsA.length, partsB.length, 3);
   for (let i = 0; i < len; i += 1) {
     const va = partsA[i] ?? 0;
@@ -511,6 +517,9 @@ export function compareSemver(a: string, b: string): number {
     if (va > vb) return 1;
     if (va < vb) return -1;
   }
+  if (!preA && preB) return 1;
+  if (preA && !preB) return -1;
+  if (preA && preB) return preA.localeCompare(preB);
   return 0;
 }
 

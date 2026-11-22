@@ -65,11 +65,21 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isMountedRef = useRef(true);
+  const backupBadgeTimerRef = useRef<number | null>(null);
+  const revokeUrlTimerRef = useRef<number | null>(null);
 
   React.useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      if (backupBadgeTimerRef.current !== null) {
+        window.clearTimeout(backupBadgeTimerRef.current);
+        backupBadgeTimerRef.current = null;
+      }
+      if (revokeUrlTimerRef.current !== null) {
+        window.clearTimeout(revokeUrlTimerRef.current);
+        revokeUrlTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -187,12 +197,15 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   const handleOneDriveToggleAutoSync = async () => {
     if (isOneDriveBusy || !oneDriveStatus) return;
     setIsOneDriveBusy(true);
+    setImportError(null);
     try {
       await api.updateSettings({ onedriveAutoSync: !oneDriveStatus.autoSync });
       const refreshed = await api.getOneDriveStatus();
       if (isMountedRef.current) onOneDriveStatusChange(refreshed);
-    } catch {
-      // Ignore toggle error
+    } catch (err) {
+      if (isMountedRef.current) {
+        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
+      }
     } finally {
       if (isMountedRef.current) setIsOneDriveBusy(false);
     }
@@ -201,11 +214,14 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   const handleOneDriveDisconnect = async () => {
     if (isOneDriveBusy) return;
     setIsOneDriveBusy(true);
+    setImportError(null);
     try {
       const next = await api.disconnectOneDrive();
       if (isMountedRef.current) onOneDriveStatusChange(next);
-    } catch {
-      // Ignore disconnect error
+    } catch (err) {
+      if (isMountedRef.current) {
+        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
+      }
     } finally {
       if (isMountedRef.current) setIsOneDriveBusy(false);
     }
@@ -230,10 +246,20 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      if (revokeUrlTimerRef.current !== null) {
+        window.clearTimeout(revokeUrlTimerRef.current);
+      }
+      revokeUrlTimerRef.current = window.setTimeout(() => {
+        revokeUrlTimerRef.current = null;
+        URL.revokeObjectURL(objectUrl);
+      }, 1000);
       if (isMountedRef.current) {
+        if (backupBadgeTimerRef.current !== null) {
+          window.clearTimeout(backupBadgeTimerRef.current);
+        }
         setBackupDownloaded(true);
-        window.setTimeout(() => {
+        backupBadgeTimerRef.current = window.setTimeout(() => {
+          backupBadgeTimerRef.current = null;
           if (isMountedRef.current) setBackupDownloaded(false);
         }, 4000);
       }
@@ -267,6 +293,18 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         return;
       }
       const record = parsed as Record<string, unknown>;
+      const hasValidBackupKeys =
+        Array.isArray(record.todos) ||
+        Array.isArray(record.categories) ||
+        Array.isArray(record.trashedTodos) ||
+        Array.isArray(record.trashedCategories) ||
+        (Boolean(record.settings) &&
+          typeof record.settings === 'object' &&
+          !Array.isArray(record.settings));
+      if (!hasValidBackupKeys) {
+        setImportError(t.importInvalidBackupError);
+        return;
+      }
       const todoCount = Array.isArray(record.todos) ? record.todos.length : 0;
       const catCount = Array.isArray(record.categories) ? record.categories.length : 0;
       const trashCountInFile =
@@ -437,7 +475,21 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
               {t.cloudSyncProvidersTitle}
             </p>
             <div className="grid grid-cols-2 gap-2" data-testid="cloud-providers-grid">
-              {cloudProviders.map((provider) => {
+              {oneDriveStatus === null
+                ? [0, 1, 2, 3].map((idx) => (
+                    <div
+                      key={idx}
+                      data-testid="cloud-provider-skeleton"
+                      className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 animate-pulse"
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="h-3 w-20 rounded bg-[var(--surface-subtle)]" />
+                        <div className="h-2.5 w-28 rounded bg-[var(--surface-subtle)]" />
+                      </div>
+                      <div className="h-3.5 w-3.5 rounded-full bg-[var(--surface-subtle)]" />
+                    </div>
+                  ))
+                : cloudProviders.map((provider) => {
                 const isActive =
                   Boolean(oneDriveStatus?.connected) &&
                   oneDriveStatus?.activeProvider === provider.id;

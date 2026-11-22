@@ -267,7 +267,7 @@ export const QuickAddBar = React.memo(function QuickAddBar({
             <div
               role="dialog"
               aria-label={`${t.startDateLabel} - ${t.dueDateLabel}`}
-              className="absolute left-0 top-7 z-30 w-64 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-3 shadow-lg space-y-2.5"
+              className="animate-context-menu absolute left-0 top-7 z-30 w-64 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-3 shadow-lg space-y-2.5"
             >
               <div className="flex items-center justify-between">
                 <span className="font-display text-xs font-semibold text-[var(--text-primary)]">

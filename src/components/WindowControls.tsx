@@ -26,6 +26,16 @@ interface NativeWindowBridge {
   setGlobalQuickAddShortcut?: (
     enabled: boolean,
   ) => Promise<{ ok: boolean; globalQuickAddShortcut?: boolean }>;
+  setGlobalQuickAddShortcutKey?: (
+    shortcut: string,
+  ) => Promise<{ ok: boolean; globalQuickAddShortcutKey?: string }>;
+  showDesktopNotification?: (payload: {
+    title: string;
+    body: string;
+    todoId?: string;
+    silent?: boolean;
+  }) => Promise<{ ok: boolean; supported?: boolean }>;
+  onFocusTodo?: (cb: (todoId: string) => void) => (() => void) | void;
   getDiagnostics?: () => Promise<{
     appVersion: string;
     electronVersion: string;
@@ -54,6 +64,7 @@ interface NativeWindowBridge {
   updateTrayLabels?: (labels: {
     openLabel: string;
     newTaskLabel: string;
+    dictateLabel?: string;
     todayLabel?: string;
     importantLabel?: string;
     quitLabel: string;
@@ -90,6 +101,14 @@ interface NativeWindowBridge {
   onUpdateProgress?: (cb: (percent: number) => void) => (() => void) | void;
   onUpdateDownloaded?: (cb: (info: { version: string }) => void) => (() => void) | void;
   onUpdateError?: (cb: (message: string) => void) => (() => void) | void;
+  setVoiceShortcut?: (shortcut: string) => Promise<{ ok: boolean; voiceShortcut?: string }>;
+  toggleVoiceOverlay?: () => Promise<{ ok: boolean; visible?: boolean; listening?: boolean }>;
+  hideVoiceOverlay?: () => Promise<{ ok: boolean }>;
+  setOverlayFocusable?: (focusable: boolean) => Promise<{ ok: boolean }>;
+  notifyOverlayListening?: (listening: boolean) => Promise<{ ok: boolean; listening?: boolean }>;
+  getOverlayBounds?: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
+  openWindowsSpeechSettings?: () => Promise<{ ok: boolean }>;
+  onOverlayCommand?: (cb: (payload: { action?: string }) => void) => (() => void) | void;
 }
 
 declare global {

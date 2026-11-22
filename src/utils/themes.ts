@@ -591,6 +591,20 @@ export function normalizeHexColor(value: string): string | null {
 
 export const ZOOM_PRESETS = [80, 90, 100, 110, 125, 150] as const;
 
+export function getNextZoomPreset(current: number): number {
+  for (const preset of ZOOM_PRESETS) {
+    if (preset > current) return preset;
+  }
+  return ZOOM_PRESETS[ZOOM_PRESETS.length - 1];
+}
+
+export function getPrevZoomPreset(current: number): number {
+  for (let i = ZOOM_PRESETS.length - 1; i >= 0; i -= 1) {
+    if (ZOOM_PRESETS[i] < current) return ZOOM_PRESETS[i];
+  }
+  return ZOOM_PRESETS[0];
+}
+
 export const VALID_APP_ICON_IDS: readonly AppIconId[] = [
   'match-theme',
   'obsidian',

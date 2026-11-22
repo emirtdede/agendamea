@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CheckCircle2,
@@ -48,6 +48,8 @@ const MCP_TOOLS = [
   'agendamea_update_settings',
   'agendamea_backup_and_sync',
   'agendamea_webhook_and_server',
+  'agendamea_semantic_search',
+  'agendamea_ai_status',
 ] as const;
 
 export const DocsSettingsSection = React.memo(function DocsSettingsSection({
@@ -60,21 +62,41 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
   const { t } = useI18n();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showAllCli, setShowAllCli] = useState<boolean>(false);
-  const [execPath, setExecPath] = useState<string>('C:\\Program Files\\Agendamea\\Agendamea.exe');
+  const isNonWindowsClient =
+    typeof navigator !== 'undefined' &&
+    !/win/i.test(navigator.platform || navigator.userAgent || '');
+  const [execPath, setExecPath] = useState<string>(
+    isNonWindowsClient
+      ? '/Applications/Agendamea.app/Contents/MacOS/Agendamea'
+      : 'C:\\Program Files\\Agendamea\\Agendamea.exe',
+  );
   const [mcpPath, setMcpPath] = useState<string>(
-    'C:\\Program Files\\Agendamea\\resources\\app.asar.unpacked\\mcp\\server.cjs',
+    isNonWindowsClient
+      ? '/Applications/Agendamea.app/Contents/Resources/app.asar.unpacked/mcp/server.cjs'
+      : 'C:\\Program Files\\Agendamea\\resources\\app.asar.unpacked\\mcp\\server.cjs',
   );
   const [runtimePort, setRuntimePort] = useState<number>(38721);
   const [cliInstalled, setCliInstalled] = useState<boolean>(false);
   const [isInstallingCli, setIsInstallingCli] = useState<boolean>(false);
+  const [cliInstallError, setCliInstallError] = useState<string | null>(null);
 
   const [enabledDraft, setEnabledDraft] = useState<boolean>(webhookEnabled);
   const [urlDraft, setUrlDraft] = useState<string>(webhookUrl);
   const [secretDraft, setSecretDraft] = useState<string>(webhookSecret);
   const [isSavingWebhook, setIsSavingWebhook] = useState<boolean>(false);
   const [webhookSaved, setWebhookSaved] = useState<boolean>(false);
+  const [lastSavedWebhookUrl, setLastSavedWebhookUrl] = useState<string>('');
   const [isTestingWebhook, setIsTestingWebhook] = useState<boolean>(false);
   const [webhookTestResult, setWebhookTestResult] = useState<WebhookTestResult | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
+  const webhookSavedTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+      if (webhookSavedTimerRef.current !== null) window.clearTimeout(webhookSavedTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     setEnabledDraft(webhookEnabled);
@@ -144,6 +166,9 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
       { id: 'backup', cmd: t.docsCmdBackupExample, desc: t.docsCmdBackupDesc },
       { id: 'config', cmd: t.docsCmdConfigExample, desc: t.docsCmdConfigDesc },
       { id: 'serve', cmd: t.docsCmdServeExample, desc: t.docsCmdServeDesc },
+      { id: 'ai', cmd: 'ag ai status', desc: t.aiHardwareCardTitle },
+      { id: 'rag', cmd: 'ag rag "q4"', desc: `${t.settingsTabAi} (${t.aiRagChunksLabel})` },
+      { id: 'ask', cmd: 'ag ask "..."', desc: t.aiSectionSubtitle },
     ],
     [
       t.docsCmdShowExample,
@@ -164,6 +189,10 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
       t.docsCmdConfigDesc,
       t.docsCmdServeExample,
       t.docsCmdServeDesc,
+      t.aiHardwareCardTitle,
+      t.settingsTabAi,
+      t.aiRagChunksLabel,
+      t.aiSectionSubtitle,
     ],
   );
 
@@ -203,8 +232,10 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
   const handleCopy = async (id: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
       setCopiedId(id);
-      window.setTimeout(() => {
+      copyTimerRef.current = window.setTimeout(() => {
+        copyTimerRef.current = null;
         setCopiedId((prev) => (prev === id ? null : prev));
       }, 2200);
     } catch {
@@ -215,13 +246,16 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
   const handleInstallCli = async () => {
     if (isInstallingCli || !window.agendameaWindow?.installCliShims) return;
     setIsInstallingCli(true);
+    setCliInstallError(null);
     try {
       const res = await window.agendameaWindow.installCliShims();
       if (res?.ok) {
         setCliInstalled(true);
+      } else {
+        setCliInstallError(t.operationFailedToast);
       }
     } catch {
-      // Ignore shim install errors
+      setCliInstallError(t.operationFailedToast);
     } finally {
       setIsInstallingCli(false);
     }
@@ -231,14 +265,21 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
     if (isSavingWebhook) return;
     setIsSavingWebhook(true);
     setWebhookTestResult(null);
+    const trimmedUrl = urlDraft.trim();
+    const trimmedSecret = secretDraft.trim();
     try {
       await onSaveWebhook({
         webhookEnabled: enabledDraft,
-        webhookUrl: urlDraft.trim(),
-        webhookSecret: secretDraft.trim(),
+        webhookUrl: trimmedUrl,
+        webhookSecret: trimmedSecret,
       });
+      setLastSavedWebhookUrl(trimmedUrl);
       setWebhookSaved(true);
-      window.setTimeout(() => setWebhookSaved(false), 2400);
+      if (webhookSavedTimerRef.current !== null) window.clearTimeout(webhookSavedTimerRef.current);
+      webhookSavedTimerRef.current = window.setTimeout(() => {
+        webhookSavedTimerRef.current = null;
+        setWebhookSaved(false);
+      }, 6000);
     } finally {
       setIsSavingWebhook(false);
     }
@@ -362,7 +403,7 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
             {showAllCli && (
               <div
                 data-testid="docs-all-commands-panel"
-                className="divide-y divide-[var(--border)] border-t border-[var(--border)] bg-[var(--canvas)]/60"
+                className="animate-accordion divide-y divide-[var(--border)] border-t border-[var(--border)] bg-[var(--canvas)]/60"
               >
                 <div className="px-4 py-2 text-[11px] text-[var(--text-muted)]">
                   {t.docsCliAllCommandsHint}
@@ -403,6 +444,11 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
           <div className="bg-[var(--surface-subtle)]/60 px-4 py-2 text-[11px] text-[var(--text-muted)]">
             {t.docsCliInstallHint}
           </div>
+          {cliInstallError && (
+            <p role="alert" className="px-4 py-2 text-xs font-medium text-red-500">
+              {cliInstallError}
+            </p>
+          )}
         </div>
       </section>
 
@@ -520,7 +566,7 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
                 style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 {webhookSaved ? <Check className="h-3.5 w-3.5" /> : null}
-                <span>{webhookSaved ? t.docsCopiedLabel : t.docsWebhookSaveButton}</span>
+                <span>{t.docsWebhookSaveButton}</span>
               </button>
               <button
                 type="button"
@@ -533,6 +579,21 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
                 <span>{t.docsWebhookTestButton}</span>
               </button>
             </div>
+
+            {webhookSaved && (
+              <div
+                role="status"
+                data-testid="docs-webhook-saved-status"
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {lastSavedWebhookUrl
+                    ? `${t.docsWebhookSaveButton}: ${lastSavedWebhookUrl}`
+                    : `${t.docsWebhookSaveButton}: OK`}
+                </span>
+              </div>
+            )}
 
             {webhookTestResult && (
               <div

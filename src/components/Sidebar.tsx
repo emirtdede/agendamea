@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle2,
-  FolderPlus,
   Heart,
   Inbox,
   PanelLeftClose,
@@ -25,6 +24,7 @@ import { getVerticalDropPosition, moveIdRelative } from '../utils/todoLogic';
 import { BrandMark } from './BrandMark';
 import { CategoryColorPicker } from './CategoryColorPicker';
 import { ColorDot } from './ColorDot';
+import { ContextMenu } from './ContextMenu';
 
 const GITHUB_URL = 'https://github.com/emirtdede/agendamea';
 const SPONSOR_URL = 'https://github.com/sponsors/emirtdede';
@@ -102,6 +102,11 @@ export const Sidebar = React.memo(function Sidebar({
   const [catDropTarget, setCatDropTarget] = useState<{
     id: string;
     position: 'before' | 'after';
+  } | null>(null);
+  const [catContextMenu, setCatContextMenu] = useState<{
+    x: number;
+    y: number;
+    category: Category;
   } | null>(null);
 
   const addInputRef = useRef<HTMLInputElement>(null);
@@ -348,6 +353,12 @@ export const Sidebar = React.memo(function Sidebar({
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && searchQuery) {
+                  e.preventDefault();
+                  onSearchChange('');
+                }
+              }}
               aria-label={t.searchPlaceholder}
               placeholder={t.searchPlaceholder}
               className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-7 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
@@ -477,6 +488,10 @@ export const Sidebar = React.memo(function Sidebar({
                     data-category-id={cat.id}
                     data-pinned={cat.pinned ? 'true' : 'false'}
                     onClick={() => handleSelectAndClose({ type: 'category', id: cat.id })}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setCatContextMenu({ x: e.clientX, y: e.clientY, category: cat });
+                    }}
                     aria-label={cat.name}
                     aria-current={isActive ? 'page' : undefined}
                     title={
@@ -594,6 +609,10 @@ export const Sidebar = React.memo(function Sidebar({
                   data-category-id={cat.id}
                   data-pinned={cat.pinned ? 'true' : 'false'}
                   draggable={canDragCat}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setCatContextMenu({ x: e.clientX, y: e.clientY, category: cat });
+                  }}
                   onDragStart={(e) => {
                     if (!canDragCat) return;
                     setDraggedCatId(cat.id);
@@ -812,15 +831,6 @@ export const Sidebar = React.memo(function Sidebar({
                 </button>
               </div>
             </form>
-          ) : categories.length === 0 ? (
-            <button
-              type="button"
-              onClick={() => openAddCategoryForm(false)}
-              className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
-            >
-              <FolderPlus className="h-4 w-4 shrink-0" />
-              <span className="whitespace-nowrap">{t.newCategory}</span>
-            </button>
           ) : null}
         </section>
       </div>
@@ -938,10 +948,51 @@ export const Sidebar = React.memo(function Sidebar({
             type="button"
             aria-label={t.closeMenu}
             onClick={onCloseMobile}
-            className="fixed inset-0 bg-black/45"
+            className="animate-fade-in fixed inset-0 bg-black/45"
           />
-          <div className="relative z-10 flex h-full">{renderSidebar(false)}</div>
+          <div className="animate-slide-in-left relative z-10 flex h-full">{renderSidebar(false)}</div>
         </div>
+      )}
+
+      {catContextMenu && (
+        <ContextMenu
+          testId="category-context-menu"
+          x={catContextMenu.x}
+          y={catContextMenu.y}
+          onClose={() => setCatContextMenu(null)}
+          items={[
+            {
+              id: 'rename',
+              label: t.ctxRename,
+              icon: <Pencil className="h-3.5 w-3.5" />,
+              onSelect: () => {
+                if (isCollapsed) onToggleCollapse();
+                startEditingCategory(catContextMenu.category);
+              },
+            },
+            {
+              id: 'pin',
+              label: catContextMenu.category.pinned ? t.unpinLabel : t.pinLabel,
+              icon: <Pin className="h-3.5 w-3.5" />,
+              onSelect: () =>
+                void onTogglePinCategory(
+                  catContextMenu.category.id,
+                  !catContextMenu.category.pinned,
+                ),
+            },
+            { id: 'div-1', divider: true },
+            {
+              id: 'delete',
+              label: t.deleteToTrashButton,
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              danger: true,
+              onSelect: () => {
+                if (isCollapsed) onToggleCollapse();
+                setConfirmDeleteId(catContextMenu.category.id);
+              },
+            },
+          ]}
+        />
       )}
     </>
   );

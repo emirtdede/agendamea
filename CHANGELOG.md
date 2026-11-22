@@ -2,6 +2,27 @@
 
 All notable changes to **Agendamea** are documented in this file.
 
+## [1.1.0] - 2026-11-22
+
+### Added
+- **On-Device Local AI, Hybrid RAG & Taskbar Voice Dictation:**
+  - Hardware auto-profiling (64-bit VRAM detection, RAM, CPU cores, free disk) with 3 local model tiers (Light / Medium / Strong - 100% Apache 2.0 / MIT: Whisper.cpp, Qwen3, Multilingual-E5) plus zero-download **External Local Engine (Ollama / LM Studio)** model picker and automatic runtime server detection.
+  - Upgraded voice dictation pipeline with selectable microphone device + live test level meter, Web Audio highpass/lowpass noise suppression filter, continuous EMA adaptive noise-floor VAD with sensitivity presets (`Auto`, `Low`, `Medium`, `High`), and automatic no-speech timeout so room noise never keeps dictation stuck.
+  - Redesigned taskbar voice overlay pill with clean centered 7-bar audio equalizer, live elapsed timer, noise-gate indicator, confirmation lock for destructive actions, multi-match disambiguation, Windows OneCore TTS read-aloud, and keyboard command fallback.
+  - Chunked hybrid FTS5 + vector RAG search (`ag rag`, `ag ask`, `ag ai status`) and 22-tool MCP server (`agendamea_semantic_search`, `agendamea_ai_status`).
+- **Notification Center, Due/Upcoming Task Reminders & Profiles:**
+  - Dedicated **Settings > Notifications** tab with one-click preset profiles (**Balanced**, **All Enabled**, **Focus Mode** [silences all channels], **In-App Only**, plus automatic **Custom**), configurable upcoming lead time (`5 / 10 / 15 / 30 / 60 min`), and per-event 4-way channel controls (**Both**, **In-App**, **Desktop**, **Off**) across 6 event categories.
+  - Live background due/upcoming task reminder engine dispatching in-app toasts and native Windows desktop notifications with click-to-focus task support.
+- **Fully Customizable Keyboard Shortcuts:**
+  - Interactive keybind recorder in **Settings > General** and **Settings > AI & Dictation** for ALL global OS shortcuts (Quick Add, Voice Dictation) and ALL in-app shortcuts (New Task, Search, Open Settings, Reorder Up/Down, List/Kanban/Calendar/Matrix views) with one-click reset to defaults.
+- **Universal Right-Click Context Menus:**
+  - Viewport-clamped context menus across Task List rows, Kanban & Matrix cards, Calendar task pills & Calendar day cells (quick add on date), Sidebar categories, Detail Panel subtasks, and Trash items.
+- **Modern Frameless Monochrome Windows Setup & Uninstaller (`Agendamea.Setup`):**
+  - Native .NET 10 WPF single-card frameless `640x420` monochrome setup and uninstaller replacing the legacy Win32 NSIS wizard: 30 FPS ambient `SoftBackdrop`, draggable 42px title bar, animated sliding **Options Sheet** with 73-language live switching (including RTL), folder picker, shortcut/startup/CLI PATH toggles, animated `ShimmerBar` progress, `CheckBurst` completion, bundled `uninstall.exe` with optional user data removal, and full silent headless CLI flags (`/S`, `/SILENT`, `/VERYSILENT`, `/P`, `/DIR="..."`, `--uninstall`, `--delete-data`).
+- **UI Polish, SelectField Unification, Smooth Animations & 1:1 Skeletons:**
+  - Unified `SelectField` dropdown component fixing right-edge-sticking chevrons across the entire application.
+  - Added GPU-accelerated micro-transitions (`.animate-context-menu`, `.animate-accordion`, `.animate-slide-in-left`) respecting Reduced Motion, plus 1:1 layout-matched loading skeletons for Calendar (7x6 grid), AI Hardware & Models, and Cloud Sync providers.
+
 ## [1.0.0] - 2026-11-22
 
 ### Added

@@ -384,6 +384,131 @@ export interface UiDictionary {
   resetDataIncludeSettingsLabel: string;
   resetDataConfirmButton: string;
   resetDataDoneToast: string;
+  // v1.1.0 Local AI, Hybrid RAG & Taskbar Voice Dictation
+  settingsTabAi: string;
+  aiSectionSubtitle: string;
+  aiHardwareCardTitle: string;
+  aiHardwareRescanButton: string;
+  aiTierRecommendedBadge: string;
+  aiTierLightTitle: string;
+  aiTierLightDesc: string;
+  aiTierMediumTitle: string;
+  aiTierMediumDesc: string;
+  aiTierStrongTitle: string;
+  aiTierStrongDesc: string;
+  aiExternalOllamaTitle: string;
+  aiExternalOllamaDesc: string;
+  aiExternalDetectedBadge: string;
+  aiModelsSectionTitle: string;
+  aiModelDownloadButton: string;
+  aiModelCancelButton: string;
+  aiModelDeleteButton: string;
+  aiDeleteAllModelsButton: string;
+  aiModelInstalledBadge: string;
+  aiModelNotInstalledBadge: string;
+  aiModelDownloadingLabel: string;
+  aiVoiceControlsTitle: string;
+  aiVoiceShortcutLabel: string;
+  aiVoiceAutoStopLabel: string;
+  aiVoiceTtsToggleLabel: string;
+  aiVoiceTtsVoiceLabel: string;
+  aiVoiceTestOverlayButton: string;
+  aiVoiceTrayGuideTitle: string;
+  aiVoiceTrayGuideDesc: string;
+  aiVoiceEnableTrayButton: string;
+  aiPrivacyBadgeText: string;
+  aiRagReindexButton: string;
+  aiRagChunksLabel: string;
+  overlayPreparingLabel: string;
+  overlayListeningLabel: string;
+  overlayProcessingLabel: string;
+  overlaySpeakingLabel: string;
+  overlayConfirmButton: string;
+  overlayCancelButton: string;
+  overlayStopButton: string;
+  overlayKeyboardPlaceholder: string;
+  overlaySendButton: string;
+  overlaySpeechPackHint: string;
+  overlayTryAgainLabel: string;
+  overlayTrayMenuDictate: string;
+  // v1.1.0 Audio/Mic, Ollama picker, Custom Shortcuts, Notifications & Context Menus
+  aiVoiceMicLabel: string;
+  aiVoiceMicDefaultOption: string;
+  aiVoiceMicRefreshButton: string;
+  aiVoiceMicTestButton: string;
+  aiVoiceMicStopTestButton: string;
+  aiVoiceNoiseSuppressionLabel: string;
+  aiVoiceNoiseSuppressionDesc: string;
+  aiVoiceSensitivityLabel: string;
+  aiVoiceSensitivityAuto: string;
+  aiVoiceSensitivityLow: string;
+  aiVoiceSensitivityMedium: string;
+  aiVoiceSensitivityHigh: string;
+  aiExternalModelLabel: string;
+  aiExternalModelAutoOption: string;
+  aiExternalModelCustomPlaceholder: string;
+  aiExternalOfflineHint: string;
+  overlayNoSpeechHint: string;
+  shortcutRecordPrompt: string;
+  shortcutResetDefaults: string;
+  shortcutGlobalQuickAdd: string;
+  shortcutGlobalVoice: string;
+  shortcutOpenSettings: string;
+  shortcutReorderUp: string;
+  shortcutReorderDown: string;
+  shortcutViewList: string;
+  shortcutViewKanban: string;
+  shortcutViewCalendar: string;
+  shortcutViewMatrix: string;
+  shortcutRequireModifierHint: string;
+  settingsTabNotifications: string;
+  notificationsSubtitle: string;
+  notificationsProfilesTitle: string;
+  notificationsProfileBalanced: string;
+  notificationsProfileBalancedDesc: string;
+  notificationsProfileAll: string;
+  notificationsProfileAllDesc: string;
+  notificationsProfileFocus: string;
+  notificationsProfileFocusDesc: string;
+  notificationsProfileSilent: string;
+  notificationsProfileSilentDesc: string;
+  notificationsProfileCustom: string;
+  notificationsLeadTimeTitle: string;
+  notificationsLeadTimeDesc: string;
+  notificationsChannelsTitle: string;
+  notificationsChannelBoth: string;
+  notificationsChannelInApp: string;
+  notificationsChannelDesktop: string;
+  notificationsChannelOff: string;
+  notificationsEventUpcoming: string;
+  notificationsEventUpcomingDesc: string;
+  notificationsEventDue: string;
+  notificationsEventDueDesc: string;
+  notificationsEventCompleted: string;
+  notificationsEventCompletedDesc: string;
+  notificationsEventVoice: string;
+  notificationsEventVoiceDesc: string;
+  notificationsEventCloud: string;
+  notificationsEventCloudDesc: string;
+  notificationsEventUpdates: string;
+  notificationsEventUpdatesDesc: string;
+  notificationsTestButton: string;
+  notificationsTestTitle: string;
+  notificationsTestBody: string;
+  notificationTaskUpcomingTitle: string;
+  notificationTaskDueTitle: string;
+  ctxOpenDetails: string;
+  ctxMarkImportant: string;
+  ctxRemoveImportant: string;
+  ctxSetToday: string;
+  ctxSetTomorrow: string;
+  ctxClearSchedule: string;
+  ctxMoveCategory: string;
+  ctxCopyTitle: string;
+  ctxAddTaskHere: string;
+  ctxRename: string;
+  ctxDeleteSubtask: string;
+  ctxCopiedToast: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -759,6 +884,137 @@ export const TR_DICTIONARY: UiDictionary = {
   resetDataIncludeSettingsLabel: 'Uygulama ayarlarını da varsayılana döndür (tema, ikon, bulut, webhook)',
   resetDataConfirmButton: 'Evet, Tümünü Sıfırla',
   resetDataDoneToast: 'Tüm veriler sıfırlandı. Temiz başlangıç hazır.',
+  settingsTabAi: 'Yapay Zeka ve Dikte',
+  aiSectionSubtitle: 'Cihaz içi yerel modeller (Apache 2.0 / MIT), hibrit RAG arama ve görev çubuğu üstü sesli dikte.',
+  aiHardwareCardTitle: 'Sistem Donanım Profili',
+  aiHardwareRescanButton: 'Yeniden Tara',
+  aiTierRecommendedBadge: 'Sisteminiz için önerilen',
+  aiTierLightTitle: 'Hafif (Zayıf / CPU)',
+  aiTierLightDesc: '4-8 GB RAM veya iGPU için hızlı Whisper Base + Qwen3 0.6B + E5 Small.',
+  aiTierMediumTitle: 'Orta (Dengeli)',
+  aiTierMediumDesc: '12-16 GB RAM veya 4-6 GB VRAM için Whisper Small + Qwen3 4B + E5 Small.',
+  aiTierStrongTitle: 'Güçlü (GPU / RTX / RX)',
+  aiTierStrongDesc: '16+ GB RAM ve 8+ GB VRAM için Whisper Large v3 Turbo + Qwen3 8B + Qwen3 Embed.',
+  aiExternalOllamaTitle: 'Harici Yerel Sunucu (Ollama / LM Studio)',
+  aiExternalOllamaDesc: 'Bilgisayarınızdaki mevcut Ollama veya LM Studio modellerini 0 MB ek indirmeyle kullanın.',
+  aiExternalDetectedBadge: '0 MB · Algılandı',
+  aiModelsSectionTitle: 'Yerel Modeller (İsteğe Bağlı İndirme)',
+  aiModelDownloadButton: 'İndir',
+  aiModelCancelButton: 'İptal',
+  aiModelDeleteButton: 'Sil',
+  aiDeleteAllModelsButton: 'Tüm Modelleri Sil',
+  aiModelInstalledBadge: 'Doğrulandı',
+  aiModelNotInstalledBadge: 'İndirilmedi',
+  aiModelDownloadingLabel: 'İndiriliyor',
+  aiVoiceControlsTitle: 'Sesli Dikte, VAD ve Sesli Okuma',
+  aiVoiceShortcutLabel: 'Global Dikte Kısayolu',
+  aiVoiceAutoStopLabel: 'Sessizlikte Otomatik Durdurma (VAD)',
+  aiVoiceTtsToggleLabel: 'Notları Sesli Oku (Windows OneCore TTS)',
+  aiVoiceTtsVoiceLabel: 'Ses Paketi',
+  aiVoiceTestOverlayButton: 'Dikte Balonunu Test Et',
+  aiVoiceTrayGuideTitle: 'Arka Planda Kesintisiz Dikte',
+  aiVoiceTrayGuideDesc: 'Pencereyi kapattığınızda kısayolun çalışması için Sistem Tepsisinde Bekle + Başlangıçta Aç modunu tek tıkla etkinleştirin.',
+  aiVoiceEnableTrayButton: 'Tepsi + Başlangıç Modunu Aç',
+  aiPrivacyBadgeText: '%100 cihaz içi · 0 bulut API · 0 maliyet · Ses kayıtları yalnızca RAM içinde işlenir.',
+  aiRagReindexButton: 'RAG İndeksini Yenile',
+  aiRagChunksLabel: 'İndeksli Parça',
+  overlayPreparingLabel: 'Mikrofon hazırlanıyor...',
+  overlayListeningLabel: 'Dinliyorum...',
+  overlayProcessingLabel: 'İşleniyor...',
+  overlaySpeakingLabel: 'Okunuyor...',
+  overlayConfirmButton: 'Onayla',
+  overlayCancelButton: 'Vazgeç',
+  overlayStopButton: 'Durdur',
+  overlayKeyboardPlaceholder: 'Komut veya soru yazın (ör. yarin 15:00 sunum ekle)...',
+  overlaySendButton: 'Gönder',
+  overlaySpeechPackHint: 'Windows ses paketi ayarlarını aç (ms-settings:speech)',
+  overlayTryAgainLabel: 'Tekrar Dinle',
+  overlayTrayMenuDictate: 'Sesli Dikte (Ctrl+Alt+Space)',
+  aiVoiceMicLabel: 'Mikrofon',
+  aiVoiceMicDefaultOption: 'Sistem Varsayılanı',
+  aiVoiceMicRefreshButton: 'Yenile',
+  aiVoiceMicTestButton: 'Mikrofonu Test Et',
+  aiVoiceMicStopTestButton: 'Testi Durdur',
+  aiVoiceNoiseSuppressionLabel: 'Gürültü Engelleme ve Ses Filtresi',
+  aiVoiceNoiseSuppressionDesc:
+    'Arka plan fan, klavye ve ortam gürültüsünü filtreleyerek diktenin sessizlikte güvenilir şekilde durmasını sağlar.',
+  aiVoiceSensitivityLabel: 'Ses Algılama Hassasiyeti',
+  aiVoiceSensitivityAuto: 'Otomatik (Uyarlanabilir)',
+  aiVoiceSensitivityLow: 'Düşük (Gürültülü Ortam)',
+  aiVoiceSensitivityMedium: 'Orta (Dengeli)',
+  aiVoiceSensitivityHigh: 'Yüksek (Sessiz Ortam)',
+  aiExternalModelLabel: 'Aktif Sunucu Modeli',
+  aiExternalModelAutoOption: 'Otomatik (İlk algılanan model)',
+  aiExternalModelCustomPlaceholder: 'Özel model adı (ör. qwen3:8b)...',
+  aiExternalOfflineHint:
+    'Ollama (11434) veya LM Studio (1234) şu an kapalı görünüyor. Sunucuyu başlattığınızda Agendamea modeli otomatik algılar.',
+  overlayNoSpeechHint:
+    'Ses algılanmadı. Mikrofon seçiminizi veya gürültü filtresini kontrol edip tekrar deneyin.',
+  shortcutRecordPrompt: 'Tuşlara basın...',
+  shortcutResetDefaults: 'Varsayılana Sıfırla',
+  shortcutGlobalQuickAdd: 'Global hızlı görev ekleme',
+  shortcutGlobalVoice: 'Global sesli dikte',
+  shortcutOpenSettings: 'Ayarları aç',
+  shortcutReorderUp: 'Seçili görevi yukarı taşı',
+  shortcutReorderDown: 'Seçili görevi aşağı taşı',
+  shortcutViewList: 'Liste görünümü',
+  shortcutViewKanban: 'Kanban görünümü',
+  shortcutViewCalendar: 'Takvim görünümü',
+  shortcutViewMatrix: 'Matris görünümü',
+  shortcutRequireModifierHint: 'Global kısayollar için en az bir yardımcı tuş (Ctrl/Alt/Shift) gerekir.',
+  settingsTabNotifications: 'Bildirimler',
+  notificationsSubtitle: 'Uygulama içi uyarılar, Windows masaüstü bildirimleri ve odak profilleri.',
+  notificationsProfilesTitle: 'Hazır Bildirim Profilleri',
+  notificationsProfileBalanced: 'Dengeli',
+  notificationsProfileBalancedDesc:
+    'Yaklaşan ve dolan görevler her iki kanaldan, sistem olayları uygulama içinden gelir.',
+  notificationsProfileAll: 'Tümü Açık',
+  notificationsProfileAllDesc:
+    'Tüm görev ve sistem bildirimleri hem uygulama içi hem Windows masaüstünde gösterilir.',
+  notificationsProfileFocus: 'Odak Modu',
+  notificationsProfileFocusDesc:
+    'Kesintisiz çalışma için tüm uygulama içi ve Windows masaüstü bildirimlerini susturur.',
+  notificationsProfileSilent: 'Yalnızca Uygulama İçi',
+  notificationsProfileSilentDesc:
+    'Windows masaüstü bildirimlerini kapatır, uyarıları yalnızca uygulama içinde gösterir.',
+  notificationsProfileCustom: 'Özel',
+  notificationsLeadTimeTitle: 'Yaklaşan Görev Hatırlatma Süresi',
+  notificationsLeadTimeDesc:
+    'Saatli görevlerin bitiş vaktinden kaç dakika önce hatırlatma gönderileceğini seçin.',
+  notificationsChannelsTitle: 'Bildirim Türleri ve Kanallar',
+  notificationsChannelBoth: 'Her İkisi',
+  notificationsChannelInApp: 'Uygulama İçi',
+  notificationsChannelDesktop: 'Masaüstü',
+  notificationsChannelOff: 'Kapalı',
+  notificationsEventUpcoming: 'Vakti Yaklaşan Görevler',
+  notificationsEventUpcomingDesc: 'Saatli bir görevin vakti yaklaşırken hatırlatma al.',
+  notificationsEventDue: 'Vakti Dolan / Geciken Görevler',
+  notificationsEventDueDesc: 'Görevin zamanı geldiğinde veya geciktiğinde uyar.',
+  notificationsEventCompleted: 'Görev Tamamlama',
+  notificationsEventCompletedDesc: 'Görev tamamlandığında veya toplu işlemlerde onay bildirimi.',
+  notificationsEventVoice: 'Sesli Dikte ve Yapay Zeka',
+  notificationsEventVoiceDesc: 'Dikte, yerel model indirme ve AI işlem bildirimleri.',
+  notificationsEventCloud: 'Bulut Klasör Eşitleme',
+  notificationsEventCloudDesc: 'Bulut eşitleme tamamlandığında veya yedek algılandığında bildir.',
+  notificationsEventUpdates: 'Uygulama Güncellemeleri',
+  notificationsEventUpdatesDesc: 'Yeni sürüm bulunduğunda veya kuruluma hazır olduğunda bildir.',
+  notificationsTestButton: 'Test Bildirimi Gönder',
+  notificationsTestTitle: 'Agendamea Bildirim Testi',
+  notificationsTestBody: 'Bildirim kanallarınız başarıyla çalışıyor.',
+  notificationTaskUpcomingTitle: 'Görevin vakti yaklaşıyor',
+  notificationTaskDueTitle: 'Görevin vakti doldu',
+  ctxOpenDetails: 'Ayrıntıları Aç',
+  ctxMarkImportant: 'Önemli İşaretle',
+  ctxRemoveImportant: 'Önemliden Çıkar',
+  ctxSetToday: 'Bugüne Planla',
+  ctxSetTomorrow: 'Yarına Planla',
+  ctxClearSchedule: 'Tarihi Temizle',
+  ctxMoveCategory: 'Kategoriye Taşı',
+  ctxCopyTitle: 'Başlığı Kopyala',
+  ctxAddTaskHere: 'Bu Güne Görev Ekle',
+  ctxRename: 'Yeniden Adlandır',
+  ctxDeleteSubtask: 'Alt Görevi Sil',
+  ctxCopiedToast: 'Panoya kopyalandı.',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -1134,6 +1390,137 @@ export const EN_DICTIONARY: UiDictionary = {
   resetDataIncludeSettingsLabel: 'Also reset app preferences to defaults (theme, icon, cloud, webhook)',
   resetDataConfirmButton: 'Yes, Reset Everything',
   resetDataDoneToast: 'All data cleared. Clean start ready.',
+  settingsTabAi: 'Local AI & Dictation',
+  aiSectionSubtitle: 'On-device local models (Apache 2.0 / MIT), chunked hybrid RAG search, and taskbar voice dictation.',
+  aiHardwareCardTitle: 'Hardware Profile',
+  aiHardwareRescanButton: 'Rescan',
+  aiTierRecommendedBadge: 'Recommended for your PC',
+  aiTierLightTitle: 'Light (CPU / Low RAM)',
+  aiTierLightDesc: 'For 4-8 GB RAM or iGPU: fast Whisper Base + Qwen3 0.6B + E5 Small.',
+  aiTierMediumTitle: 'Medium (Balanced)',
+  aiTierMediumDesc: 'For 12-16 GB RAM or 4-6 GB VRAM: Whisper Small + Qwen3 4B + E5 Small.',
+  aiTierStrongTitle: 'Strong (GPU / RTX / RX)',
+  aiTierStrongDesc: 'For 16+ GB RAM and 8+ GB VRAM: Whisper Large v3 Turbo + Qwen3 8B + Qwen3 Embed.',
+  aiExternalOllamaTitle: 'External Local Engine (Ollama / LM Studio)',
+  aiExternalOllamaDesc: 'Reuse existing Ollama or LM Studio models already installed on this PC with 0 MB extra download.',
+  aiExternalDetectedBadge: '0 MB · Detected',
+  aiModelsSectionTitle: 'Local Models (Optional Downloads)',
+  aiModelDownloadButton: 'Download',
+  aiModelCancelButton: 'Cancel',
+  aiModelDeleteButton: 'Delete',
+  aiDeleteAllModelsButton: 'Delete All Models',
+  aiModelInstalledBadge: 'Verified',
+  aiModelNotInstalledBadge: 'Not Downloaded',
+  aiModelDownloadingLabel: 'Downloading',
+  aiVoiceControlsTitle: 'Voice Dictation, VAD & Read-Aloud',
+  aiVoiceShortcutLabel: 'Global Dictation Shortcut',
+  aiVoiceAutoStopLabel: 'VAD Silence Auto-Stop',
+  aiVoiceTtsToggleLabel: 'Read Notes Aloud (Windows OneCore TTS)',
+  aiVoiceTtsVoiceLabel: 'System Voice',
+  aiVoiceTestOverlayButton: 'Test Dictation Overlay',
+  aiVoiceTrayGuideTitle: 'Background Dictation Ready',
+  aiVoiceTrayGuideDesc: 'Enable Minimize to Tray + Launch at Startup in one click so dictation works even when the main window is closed.',
+  aiVoiceEnableTrayButton: 'Enable Tray + Startup',
+  aiPrivacyBadgeText: '100% on-device · $0 API cost · Audio stays strictly in local RAM and is never uploaded.',
+  aiRagReindexButton: 'Rebuild RAG Index',
+  aiRagChunksLabel: 'Indexed Chunks',
+  overlayPreparingLabel: 'Preparing microphone...',
+  overlayListeningLabel: 'Listening...',
+  overlayProcessingLabel: 'Processing...',
+  overlaySpeakingLabel: 'Speaking...',
+  overlayConfirmButton: 'Confirm',
+  overlayCancelButton: 'Cancel',
+  overlayStopButton: 'Stop',
+  overlayKeyboardPlaceholder: 'Type a command or question (e.g. add deck tomorrow 15:00)...',
+  overlaySendButton: 'Send',
+  overlaySpeechPackHint: 'Open Windows Speech settings (ms-settings:speech)',
+  overlayTryAgainLabel: 'Listen Again',
+  overlayTrayMenuDictate: 'Voice Dictation (Ctrl+Alt+Space)',
+  aiVoiceMicLabel: 'Microphone',
+  aiVoiceMicDefaultOption: 'System Default',
+  aiVoiceMicRefreshButton: 'Refresh',
+  aiVoiceMicTestButton: 'Test Mic',
+  aiVoiceMicStopTestButton: 'Stop Test',
+  aiVoiceNoiseSuppressionLabel: 'Noise Suppression & Voice Filter',
+  aiVoiceNoiseSuppressionDesc:
+    'Filters fan, keyboard, and ambient room noise so dictation stops reliably when you finish speaking.',
+  aiVoiceSensitivityLabel: 'Voice Sensitivity',
+  aiVoiceSensitivityAuto: 'Auto (Adaptive)',
+  aiVoiceSensitivityLow: 'Low (Noisy Room)',
+  aiVoiceSensitivityMedium: 'Medium (Balanced)',
+  aiVoiceSensitivityHigh: 'High (Quiet Room)',
+  aiExternalModelLabel: 'Active Server Model',
+  aiExternalModelAutoOption: 'Auto (First detected model)',
+  aiExternalModelCustomPlaceholder: 'Custom model name (e.g. qwen3:8b)...',
+  aiExternalOfflineHint:
+    'Ollama (11434) or LM Studio (1234) appears offline. Agendamea will auto-detect the model once you start the server.',
+  overlayNoSpeechHint:
+    'No speech detected. Check your microphone selection or noise filter and try again.',
+  shortcutRecordPrompt: 'Press keys...',
+  shortcutResetDefaults: 'Reset Defaults',
+  shortcutGlobalQuickAdd: 'Global quick task add',
+  shortcutGlobalVoice: 'Global voice dictation',
+  shortcutOpenSettings: 'Open settings',
+  shortcutReorderUp: 'Move selected task up',
+  shortcutReorderDown: 'Move selected task down',
+  shortcutViewList: 'List view',
+  shortcutViewKanban: 'Kanban view',
+  shortcutViewCalendar: 'Calendar view',
+  shortcutViewMatrix: 'Matrix view',
+  shortcutRequireModifierHint: 'Global shortcuts require at least one modifier key (Ctrl/Alt/Shift).',
+  settingsTabNotifications: 'Notifications',
+  notificationsSubtitle: 'In-app alerts, Windows desktop notifications, and focus profiles.',
+  notificationsProfilesTitle: 'Notification Presets',
+  notificationsProfileBalanced: 'Balanced',
+  notificationsProfileBalancedDesc:
+    'Upcoming and due tasks via both channels; system events stay in-app.',
+  notificationsProfileAll: 'All Enabled',
+  notificationsProfileAllDesc:
+    'All task and system notifications appear both in-app and on Windows desktop.',
+  notificationsProfileFocus: 'Focus Mode',
+  notificationsProfileFocusDesc:
+    'Silences all in-app and Windows desktop notifications for deep focus.',
+  notificationsProfileSilent: 'In-App Only',
+  notificationsProfileSilentDesc:
+    'Disables Windows desktop notifications and shows alerts only inside the app.',
+  notificationsProfileCustom: 'Custom',
+  notificationsLeadTimeTitle: 'Upcoming Task Reminder Lead Time',
+  notificationsLeadTimeDesc:
+    'Choose how many minutes before a timed task is due to send a reminder.',
+  notificationsChannelsTitle: 'Notification Types & Channels',
+  notificationsChannelBoth: 'Both',
+  notificationsChannelInApp: 'In-App',
+  notificationsChannelDesktop: 'Desktop',
+  notificationsChannelOff: 'Off',
+  notificationsEventUpcoming: 'Upcoming Tasks',
+  notificationsEventUpcomingDesc: 'Get reminded before a scheduled task time arrives.',
+  notificationsEventDue: 'Due & Overdue Tasks',
+  notificationsEventDueDesc: 'Alert when a task reaches its due time or becomes overdue.',
+  notificationsEventCompleted: 'Task Completed',
+  notificationsEventCompletedDesc: 'Confirmation alerts when completing tasks or running bulk actions.',
+  notificationsEventVoice: 'Voice Dictation & AI',
+  notificationsEventVoiceDesc: 'Alerts for dictation, local model downloads, and AI actions.',
+  notificationsEventCloud: 'Cloud Folder Sync',
+  notificationsEventCloudDesc: 'Notify when cloud sync completes or a backup is detected.',
+  notificationsEventUpdates: 'App Updates',
+  notificationsEventUpdatesDesc: 'Notify when a new version is available or ready to install.',
+  notificationsTestButton: 'Send Test Notification',
+  notificationsTestTitle: 'Agendamea Notification Test',
+  notificationsTestBody: 'Your notification channels are working properly.',
+  notificationTaskUpcomingTitle: 'Task coming up soon',
+  notificationTaskDueTitle: 'Task is due now',
+  ctxOpenDetails: 'Open Details',
+  ctxMarkImportant: 'Mark Important',
+  ctxRemoveImportant: 'Remove Important',
+  ctxSetToday: 'Schedule for Today',
+  ctxSetTomorrow: 'Schedule for Tomorrow',
+  ctxClearSchedule: 'Clear Schedule',
+  ctxMoveCategory: 'Move to Category',
+  ctxCopyTitle: 'Copy Title',
+  ctxAddTaskHere: 'Add Task on This Day',
+  ctxRename: 'Rename',
+  ctxDeleteSubtask: 'Delete Subtask',
+  ctxCopiedToast: 'Copied to clipboard.',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {
@@ -1238,6 +1625,8 @@ export const TR_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
         paragraphs: [
           'Agendamea, Vellium (vellium.dev) tarafından gizlilik öncelikli olarak geliştirilmiştir. Oluşturduğunuz tüm görevler, başlangıç ve bitiş tarihleri, alt görevler, notlar, kategoriler ve tema tercihleri yalnızca kendi bilgisayarınızda (%APPDATA%\\Agendamea dizininde) yerel olarak saklanır.',
           'Hiçbir görev veriniz uzak bir bulut sunucusuna gönderilmez, üçüncü taraflarla paylaşılmaz veya reklam/profilleme amacıyla işlenmez.',
+          'İsteğe bağlı Sesli Dikte ve Yerel Yapay Zeka (v1.1.0) etkinleştirildiğinde seçtiğiniz mikrofonun sesi, cihaz içi gürültü filtresi ve uyarlanabilir sessizlik algılaması (VAD) üzerinden yalnızca cihaz belleğinde (RAM) yerel Whisper.cpp motoruyla yazıya çevrilir; hiçbir ses kaydı diske veya harici sunucuya gönderilmez. Harici yerel sunucu (Ollama / LM Studio) yalnızca yerel geri döngü adresinde (127.0.0.1) iletişim kurar. İndirilen Apache 2.0 / MIT modeller yalnızca yerel uygulama veri klasöründe saklanır ve tek tıkla silinebilir.',
+          'Görev hatırlatmaları, Windows masaüstü bildirimleri, Odak Modu profilleri ve özelleştirilebilir klavye kısayolları tamamen cihaz içinde işlenir; bildirim verileri hiçbir bulut bildirim sunucusuna iletilmez.',
         ],
       },
       {
@@ -1322,7 +1711,7 @@ export const TR_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
       {
         heading: '2. Üçüncü Taraf Açık Kaynak Bileşenleri',
         paragraphs: [
-          '• Electron (MIT) · Electron Updater (MIT) · React & React DOM (MIT) · Better-SQLite3 & SQLite (MIT) · Express (MIT) · Tailwind CSS (MIT) · Lucide React (ISC) · Vite & Vite Plugin PWA (MIT) · esbuild (MIT)',
+          '• Electron (MIT) · Electron Updater (MIT) · React & React DOM (MIT) · Better-SQLite3 & SQLite (MIT) · Express (MIT) · Tailwind CSS (MIT) · Lucide React (ISC) · Vite & Vite Plugin PWA (MIT) · esbuild (MIT) · node-llama-cpp (MIT) · @fugood/whisper.node (MIT) · İsteğe Bağlı Yerel Modeller: Qwen3 (Apache 2.0), Whisper.cpp (MIT), Multilingual-E5 (MIT)',
         ],
       },
     ],
@@ -1335,7 +1724,7 @@ export const TR_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
       {
         heading: '1. Klavye, Yakınlaştırma ve Ekran Okuyucu Erişilebilirliği',
         paragraphs: [
-          'Agendamea, WCAG 2.1 AA kontrast hedefleri, Yüksek Kontrast Modu, Azaltılmış Hareket, %80-%150 Yakınlaştırma (Ctrl + / - / 0) ve tam klavye navigasyonu gözetilerek tasarlanmıştır: N (yeni görev), Ctrl+Alt+N (global hızlı görev), / veya Ctrl+K (arama), Alt+Yukarı/Aşağı (sıralama) ve Esc (kapatma).',
+          'Agendamea, WCAG 2.1 AA kontrast hedefleri, Yüksek Kontrast Modu, Azaltılmış Hareket, %80-%150 Yakınlaştırma (Ctrl + / - / 0), sağ tık bağlam menüleri ve Ayarlar > Genel bölümünden tamamen özelleştirilebilir global ve uygulama içi klavye kısayollarıyla (yeni görev, arama, görünümler, sıralama, ayarlar ve sesli dikte) tasarlanmıştır.',
         ],
       },
       {
@@ -1366,6 +1755,8 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
         paragraphs: [
           'Agendamea is built by Vellium Teknoloji Anonim Şirketi (vellium.dev) with a strict local-first privacy architecture. All tasks, optional start and due dates, subtasks, notes, categories, and theme settings you create are stored exclusively on your own device (%APPDATA%\\Agendamea).',
           'None of your task data is ever transmitted to Vellium servers, sold to third parties, or used for advertising or profiling.',
+          'When optional Local AI & Voice Dictation (v1.1.0) is used, audio from your chosen microphone passes through local noise filtering and adaptive Voice Activity Detection (VAD) and is transcribed strictly in device RAM using on-device Whisper.cpp; zero audio is written to disk or uploaded. Optional external engines (Ollama / LM Studio) connect exclusively over local loopback (127.0.0.1). Optional Apache 2.0 / MIT model weights reside exclusively in your local app data folder and can be deleted in one click.',
+          'Task reminders, Windows desktop notifications, Focus Mode profiles, and custom keyboard shortcuts operate 100% locally on your device without any push notification relay server.',
         ],
       },
       {
@@ -1450,7 +1841,7 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
       {
         heading: '2. Third-Party Open Source Attributions',
         paragraphs: [
-          '• Electron (MIT) · Electron Updater (MIT) · React & React DOM (MIT) · Better-SQLite3 & SQLite (MIT) · Express (MIT) · Tailwind CSS (MIT) · Lucide React (ISC) · Vite & Vite Plugin PWA (MIT) · esbuild (MIT)',
+          '• Electron (MIT) · Electron Updater (MIT) · React & React DOM (MIT) · Better-SQLite3 & SQLite (MIT) · Express (MIT) · Tailwind CSS (MIT) · Lucide React (ISC) · Vite & Vite Plugin PWA (MIT) · esbuild (MIT) · node-llama-cpp (MIT) · @fugood/whisper.node (MIT) · Optional On-Device Models: Qwen3 (Apache 2.0), Whisper.cpp (MIT), Multilingual-E5 (MIT)',
         ],
       },
     ],
@@ -1463,7 +1854,7 @@ export const EN_LEGAL_DOCUMENTS: Record<LegalDocId, LegalDocumentContent> = {
       {
         heading: '1. Keyboard, Zoom & Screen Reader Accessibility',
         paragraphs: [
-          'Agendamea is engineered for WCAG 2.1 AA contrast compliance, High Contrast Mode, Reduced Motion, 80%-150% Zoom (Ctrl + / - / 0), and complete keyboard operation: N (new task), Ctrl+Alt+N (global quick task), / or Ctrl+K (search), Alt+Up/Down (reorder), and Esc (close).',
+          'Agendamea is engineered for WCAG 2.1 AA contrast compliance, High Contrast Mode, Reduced Motion, 80%-150% Zoom (Ctrl + / - / 0), right-click context menus, and fully customizable global and in-app keyboard shortcuts (new task, search, view switching, reordering, settings, and voice dictation) configurable in Settings > General.',
         ],
       },
       {

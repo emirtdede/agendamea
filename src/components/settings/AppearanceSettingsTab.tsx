@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Copy, Monitor, Moon, Palette, Sun } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { AppIconId, ThemeId, ThemeMode } from '../../types';
@@ -38,6 +38,15 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
   const { t, getThemeDisplayName } = useI18n();
   const [isAppIconOpen, setIsAppIconOpen] = useState(true);
   const [copiedHexTarget, setCopiedHexTarget] = useState<'theme' | 'icon' | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
 
   const effectiveMode = resolveEffectiveThemeMode(themeMode);
   const activeThemeItem = COLOR_THEMES.find((item) => item.id === themeId);
@@ -61,8 +70,12 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
   const handleCopyHex = async (target: 'theme' | 'icon', hex: string) => {
     try {
       await navigator.clipboard.writeText(hex);
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+      }
       setCopiedHexTarget(target);
-      window.setTimeout(() => {
+      copyTimerRef.current = window.setTimeout(() => {
+        copyTimerRef.current = null;
         setCopiedHexTarget((prev) => (prev === target ? null : prev));
       }, 1800);
     } catch {
@@ -171,7 +184,6 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {COLOR_THEMES.map((theme) => {
               const isSelected = theme.id === themeId;
-              const effectiveMode = resolveEffectiveThemeMode(themeMode);
               const swatch = effectiveMode === 'dark' ? theme.swatchDark : theme.swatch;
               return (
                 <button

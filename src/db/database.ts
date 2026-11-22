@@ -16,6 +16,12 @@ import type {
   WebhookLogEntry,
 } from '../types.ts';
 import {
+  clampNotificationLeadMinutes,
+  isValidNotificationProfileId,
+  sanitizeNotificationChannels,
+} from '../utils/notifications.ts';
+import { sanitizeCustomShortcuts } from '../utils/shortcuts.ts';
+import {
   clampZoomPercent,
   isValidAppIconId,
   isValidThemeId,
@@ -27,6 +33,8 @@ import {
   sanitizeDueTime,
   sanitizeTags,
 } from '../utils/todoLogic.ts';
+import aiCatalog from '../../shared/aiCatalog.cjs';
+import sqliteCore from '../../shared/sqliteCore.cjs';
 
 export class ValidationError extends Error {
   constructor(message: string) {
@@ -77,10 +85,6 @@ interface SettingRow {
   value: string;
 }
 
-interface TableInfoRow {
-  name: string;
-}
-
 const MAX_CATEGORY_NAME_LEN = 60;
 const MAX_TODO_TITLE_LEN = 300;
 const MAX_TODO_NOTES_LEN = 10000;
@@ -91,7 +95,6 @@ const MAX_IMPORT_CATEGORIES = 500;
 const MAX_IMPORT_TODOS = 10000;
 const MAX_SUBTASKS_PER_TODO = 200;
 const MAX_IMPORT_SUBTASKS = 50000;
-const SCHEMA_VERSION = 3;
 
 function sanitizeId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -189,131 +192,11 @@ export class TodoDatabase {
   }
 
   private initSchema(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS categories (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        color TEXT NOT NULL DEFAULT '#2563eb',
-        pinned INTEGER NOT NULL DEFAULT 0,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        deleted_at TEXT DEFAULT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS todos (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        notes TEXT NOT NULL DEFAULT '',
-        completed INTEGER NOT NULL DEFAULT 0,
-        important INTEGER NOT NULL DEFAULT 0,
-        pinned INTEGER NOT NULL DEFAULT 0,
-        priority TEXT NOT NULL DEFAULT 'normal',
-        start_date TEXT DEFAULT NULL,
-        due_date TEXT,
-        due_time TEXT DEFAULT NULL,
-        tags TEXT NOT NULL DEFAULT '[]',
-        category_id TEXT,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        deleted_at TEXT DEFAULT NULL,
-        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS subtasks (
-        id TEXT PRIMARY KEY,
-        todo_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        completed INTEGER NOT NULL DEFAULT 0,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS webhook_logs (
-        id TEXT PRIMARY KEY,
-        direction TEXT NOT NULL DEFAULT 'outgoing',
-        event TEXT NOT NULL,
-        target_url TEXT NOT NULL DEFAULT '',
-        status_code INTEGER DEFAULT NULL,
-        ok INTEGER NOT NULL DEFAULT 0,
-        attempts INTEGER NOT NULL DEFAULT 1,
-        latency_ms INTEGER NOT NULL DEFAULT 0,
-        error TEXT NOT NULL DEFAULT '',
-        created_at TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_todos_category ON todos(category_id);
-      CREATE INDEX IF NOT EXISTS idx_subtasks_todo ON subtasks(todo_id);
-      CREATE INDEX IF NOT EXISTS idx_webhook_logs_created ON webhook_logs(created_at DESC);
-    `);
-
-    // Versioned schema migration using PRAGMA user_version (also upgrades legacy v0 DBs safely)
-    const currentVersion = Number(this.db.pragma('user_version', { simple: true }) ?? 0);
-    if (currentVersion < SCHEMA_VERSION) {
-      const catCols = this.db.pragma('table_info(categories)') as TableInfoRow[];
-      if (!catCols.some((c) => c.name === 'deleted_at')) {
-        this.db.exec('ALTER TABLE categories ADD COLUMN deleted_at TEXT DEFAULT NULL');
-      }
-      if (!catCols.some((c) => c.name === 'pinned')) {
-        this.db.exec('ALTER TABLE categories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
-      }
-
-      const todoCols = this.db.pragma('table_info(todos)') as TableInfoRow[];
-      if (!todoCols.some((c) => c.name === 'deleted_at')) {
-        this.db.exec('ALTER TABLE todos ADD COLUMN deleted_at TEXT DEFAULT NULL');
-      }
-      if (!todoCols.some((c) => c.name === 'pinned')) {
-        this.db.exec('ALTER TABLE todos ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
-      }
-
-      this.db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_categories_deleted ON categories(deleted_at);
-        CREATE INDEX IF NOT EXISTS idx_todos_deleted ON todos(deleted_at);
-        CREATE INDEX IF NOT EXISTS idx_todos_active_order
-          ON todos(pinned DESC, sort_order ASC, created_at DESC)
-          WHERE deleted_at IS NULL;
-        CREATE INDEX IF NOT EXISTS idx_categories_active_order
-          ON categories(pinned DESC, sort_order ASC, created_at ASC)
-          WHERE deleted_at IS NULL;
-      `);
-      this.db.pragma(`user_version = ${SCHEMA_VERSION}`);
-    }
-
-    // Ensure optional start_date, due_time & tags columns exist on todos across all schema versions
-    const latestTodoCols = this.db.pragma('table_info(todos)') as TableInfoRow[];
-    if (!latestTodoCols.some((c) => c.name === 'start_date')) {
-      this.db.exec('ALTER TABLE todos ADD COLUMN start_date TEXT DEFAULT NULL');
-    }
-    if (!latestTodoCols.some((c) => c.name === 'due_time')) {
-      this.db.exec('ALTER TABLE todos ADD COLUMN due_time TEXT DEFAULT NULL');
-    }
-    if (!latestTodoCols.some((c) => c.name === 'tags')) {
-      this.db.exec("ALTER TABLE todos ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
-    }
+    sqliteCore.applyAgendameaSchema(this.db, { selfHealFts: true });
   }
 
   private ensureDefaultSettings(): void {
-    const stmt = this.db.prepare(
-      'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)',
-    );
-    const tx = this.db.transaction(() => {
-      stmt.run('themeMode', 'light');
-      stmt.run('themeId', 'obsidian');
-      stmt.run('dragLocked', '0');
-      stmt.run('sidebarCollapsed', '0');
-      stmt.run('themeCustomized', '0');
-      stmt.run('language', 'tr');
-      stmt.run('autoUpdateCheck', '1');
-      stmt.run('onedriveAutoSync', '0');
-      stmt.run('onedriveCustomPath', '');
-      stmt.run('onboardingCompleted', '0');
-    });
-    tx();
+    sqliteCore.seedDefaultSettings(this.db);
   }
 
   private mapCategory(row: CategoryRow): Category {
@@ -413,6 +296,25 @@ export class TodoDatabase {
       'webhookUrl',
       'webhookSecret',
       'webhookEvents',
+      'aiEnabled',
+      'aiTier',
+      'aiLlmModelId',
+      'aiSttModelId',
+      'aiEmbedModelId',
+      'aiUseExternalOllama',
+      'aiOllamaModel',
+      'voiceShortcut',
+      'voiceAutoStopMs',
+      'voiceTtsEnabled',
+      'voiceTtsVoice',
+      'voiceMicDeviceId',
+      'voiceNoiseSuppression',
+      'voiceSensitivity',
+      'globalQuickAddShortcutKey',
+      'customShortcuts',
+      'notificationProfile',
+      'notificationLeadMinutes',
+      'notificationChannels',
     ];
     const placeholders = keys.map(() => '?').join(', ');
     const rows = this.db
@@ -508,6 +410,96 @@ export class TodoDatabase {
     if (rawWebhookEvents.length > 0) {
       settings.webhookEvents = rawWebhookEvents;
     }
+    const rawAiEnabled = map.get('aiEnabled');
+    if (rawAiEnabled === '1' || rawAiEnabled === 'true') {
+      settings.aiEnabled = true;
+    } else if (rawAiEnabled === '0' || rawAiEnabled === 'false') {
+      settings.aiEnabled = false;
+    }
+    const rawAiTier = map.get('aiTier');
+    if (
+      rawAiTier === 'tier-light' ||
+      rawAiTier === 'tier-medium' ||
+      rawAiTier === 'tier-strong' ||
+      rawAiTier === 'external-ollama' ||
+      rawAiTier === 'external-lmstudio'
+    ) {
+      settings.aiTier = rawAiTier;
+    }
+    const rawAiLlm = map.get('aiLlmModelId');
+    if (rawAiLlm) settings.aiLlmModelId = rawAiLlm;
+    const rawAiStt = map.get('aiSttModelId');
+    if (rawAiStt) settings.aiSttModelId = rawAiStt;
+    const rawAiEmbed = map.get('aiEmbedModelId');
+    if (rawAiEmbed) settings.aiEmbedModelId = rawAiEmbed;
+    const rawUseOllama = map.get('aiUseExternalOllama');
+    if (rawUseOllama === '1' || rawUseOllama === 'true') {
+      settings.aiUseExternalOllama = true;
+    } else if (rawUseOllama === '0' || rawUseOllama === 'false') {
+      settings.aiUseExternalOllama = false;
+    }
+    const rawOllamaModel = map.get('aiOllamaModel');
+    if (rawOllamaModel) settings.aiOllamaModel = rawOllamaModel;
+    const rawVoiceShortcut = map.get('voiceShortcut');
+    if (rawVoiceShortcut) settings.voiceShortcut = rawVoiceShortcut;
+    const rawVoiceAutoStop = map.get('voiceAutoStopMs');
+    if (rawVoiceAutoStop !== undefined) {
+      const ms = Number(rawVoiceAutoStop);
+      if (Number.isFinite(ms) && ms >= 600 && ms <= 5000) {
+        settings.voiceAutoStopMs = Math.round(ms);
+      }
+    }
+    const rawVoiceTtsEnabled = map.get('voiceTtsEnabled');
+    if (rawVoiceTtsEnabled === '1' || rawVoiceTtsEnabled === 'true') {
+      settings.voiceTtsEnabled = true;
+    } else if (rawVoiceTtsEnabled === '0' || rawVoiceTtsEnabled === 'false') {
+      settings.voiceTtsEnabled = false;
+    }
+    const rawVoiceTtsVoice = map.get('voiceTtsVoice');
+    if (rawVoiceTtsVoice) settings.voiceTtsVoice = rawVoiceTtsVoice;
+    const rawVoiceMicDeviceId = map.get('voiceMicDeviceId');
+    if (rawVoiceMicDeviceId) settings.voiceMicDeviceId = rawVoiceMicDeviceId;
+    const rawVoiceNoiseSuppression = map.get('voiceNoiseSuppression');
+    if (rawVoiceNoiseSuppression === '1' || rawVoiceNoiseSuppression === 'true') {
+      settings.voiceNoiseSuppression = true;
+    } else if (rawVoiceNoiseSuppression === '0' || rawVoiceNoiseSuppression === 'false') {
+      settings.voiceNoiseSuppression = false;
+    }
+    const rawVoiceSensitivity = map.get('voiceSensitivity');
+    if (
+      rawVoiceSensitivity === 'auto' ||
+      rawVoiceSensitivity === 'low' ||
+      rawVoiceSensitivity === 'medium' ||
+      rawVoiceSensitivity === 'high'
+    ) {
+      settings.voiceSensitivity = rawVoiceSensitivity;
+    }
+    const rawGlobalQuickAddKey = map.get('globalQuickAddShortcutKey');
+    if (rawGlobalQuickAddKey) settings.globalQuickAddShortcutKey = rawGlobalQuickAddKey;
+    const rawCustomShortcuts = map.get('customShortcuts');
+    if (rawCustomShortcuts) {
+      try {
+        settings.customShortcuts = sanitizeCustomShortcuts(JSON.parse(rawCustomShortcuts));
+      } catch {
+        // Ignore malformed shortcuts JSON
+      }
+    }
+    const rawNotifProfile = map.get('notificationProfile');
+    if (isValidNotificationProfileId(rawNotifProfile)) {
+      settings.notificationProfile = rawNotifProfile;
+    }
+    const rawNotifLead = map.get('notificationLeadMinutes');
+    if (rawNotifLead !== undefined) {
+      settings.notificationLeadMinutes = clampNotificationLeadMinutes(rawNotifLead);
+    }
+    const rawNotifChannels = map.get('notificationChannels');
+    if (rawNotifChannels) {
+      try {
+        settings.notificationChannels = sanitizeNotificationChannels(JSON.parse(rawNotifChannels));
+      } catch {
+        // Ignore malformed channels JSON
+      }
+    }
     return settings;
   }
 
@@ -601,7 +593,17 @@ export class TodoDatabase {
             if (!u) return false;
             try {
               const parsed = new URL(u);
-              return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+              if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+              const host = parsed.hostname.toLowerCase();
+              if (
+                host === '169.254.169.254' ||
+                host === 'metadata.google.internal' ||
+                host === '[fd00:ec2::254]' ||
+                host.startsWith('169.254.')
+              ) {
+                return false;
+              }
+              return true;
             } catch {
               return false;
             }
@@ -622,6 +624,96 @@ export class TodoDatabase {
         .join(',')
         .slice(0, 500);
       stmt.run('webhookEvents', cleaned);
+    }
+    if (typeof patch.aiEnabled === 'boolean') {
+      stmt.run('aiEnabled', patch.aiEnabled ? '1' : '0');
+    }
+    if (
+      patch.aiTier === 'tier-light' ||
+      patch.aiTier === 'tier-medium' ||
+      patch.aiTier === 'tier-strong' ||
+      patch.aiTier === 'external-ollama' ||
+      patch.aiTier === 'external-lmstudio'
+    ) {
+      stmt.run('aiTier', patch.aiTier);
+    }
+    if (typeof patch.aiLlmModelId === 'string') {
+      const id = patch.aiLlmModelId.trim().slice(0, 120);
+      if (id === '' || aiCatalog.MODELS_BY_ID[id]?.role === 'llm') {
+        stmt.run('aiLlmModelId', id);
+      }
+    }
+    if (typeof patch.aiSttModelId === 'string') {
+      const id = patch.aiSttModelId.trim().slice(0, 120);
+      if (id === '' || aiCatalog.MODELS_BY_ID[id]?.role === 'stt') {
+        stmt.run('aiSttModelId', id);
+      }
+    }
+    if (typeof patch.aiEmbedModelId === 'string') {
+      const id = patch.aiEmbedModelId.trim().slice(0, 120);
+      if (id === '' || aiCatalog.MODELS_BY_ID[id]?.role === 'embed') {
+        stmt.run('aiEmbedModelId', id);
+      }
+    }
+    if (typeof patch.aiUseExternalOllama === 'boolean') {
+      stmt.run('aiUseExternalOllama', patch.aiUseExternalOllama ? '1' : '0');
+    }
+    if (typeof patch.aiOllamaModel === 'string') {
+      stmt.run('aiOllamaModel', patch.aiOllamaModel.trim().slice(0, 160));
+    }
+    if (typeof patch.voiceShortcut === 'string' && patch.voiceShortcut.trim().length > 0) {
+      stmt.run('voiceShortcut', patch.voiceShortcut.trim().slice(0, 64));
+    }
+    if (typeof patch.voiceAutoStopMs === 'number' && Number.isFinite(patch.voiceAutoStopMs)) {
+      const clamped = Math.max(600, Math.min(5000, Math.round(patch.voiceAutoStopMs)));
+      stmt.run('voiceAutoStopMs', String(clamped));
+    }
+    if (typeof patch.voiceTtsEnabled === 'boolean') {
+      stmt.run('voiceTtsEnabled', patch.voiceTtsEnabled ? '1' : '0');
+    }
+    if (typeof patch.voiceTtsVoice === 'string') {
+      stmt.run('voiceTtsVoice', patch.voiceTtsVoice.trim().slice(0, 160));
+    }
+    if (typeof patch.voiceMicDeviceId === 'string') {
+      stmt.run('voiceMicDeviceId', patch.voiceMicDeviceId.trim().slice(0, 160));
+    }
+    if (typeof patch.voiceNoiseSuppression === 'boolean') {
+      stmt.run('voiceNoiseSuppression', patch.voiceNoiseSuppression ? '1' : '0');
+    }
+    if (
+      patch.voiceSensitivity === 'auto' ||
+      patch.voiceSensitivity === 'low' ||
+      patch.voiceSensitivity === 'medium' ||
+      patch.voiceSensitivity === 'high'
+    ) {
+      stmt.run('voiceSensitivity', patch.voiceSensitivity);
+    }
+    if (
+      typeof patch.globalQuickAddShortcutKey === 'string' &&
+      patch.globalQuickAddShortcutKey.trim().length > 0
+    ) {
+      stmt.run('globalQuickAddShortcutKey', patch.globalQuickAddShortcutKey.trim().slice(0, 64));
+    }
+    if (patch.customShortcuts && typeof patch.customShortcuts === 'object') {
+      stmt.run('customShortcuts', JSON.stringify(sanitizeCustomShortcuts(patch.customShortcuts)));
+    }
+    if (isValidNotificationProfileId(patch.notificationProfile)) {
+      stmt.run('notificationProfile', patch.notificationProfile);
+    }
+    if (
+      typeof patch.notificationLeadMinutes === 'number' &&
+      Number.isFinite(patch.notificationLeadMinutes)
+    ) {
+      stmt.run(
+        'notificationLeadMinutes',
+        String(clampNotificationLeadMinutes(patch.notificationLeadMinutes)),
+      );
+    }
+    if (patch.notificationChannels && typeof patch.notificationChannels === 'object') {
+      stmt.run(
+        'notificationChannels',
+        JSON.stringify(sanitizeNotificationChannels(patch.notificationChannels)),
+      );
     }
   }
 
@@ -683,6 +775,48 @@ export class TodoDatabase {
       row,
       subtaskRows.map((s) => this.mapSubtask(s)),
     );
+  }
+
+  findTodoBySelector(selector: string): Todo | null {
+    const clean = String(selector || '').trim();
+    if (!clean) return null;
+    const exactRow = this.db
+      .prepare('SELECT id FROM todos WHERE id = ? AND deleted_at IS NULL')
+      .get(clean) as { id: string } | undefined;
+    if (exactRow) return this.getTodoById(exactRow.id);
+
+    const rows = this.db
+      .prepare(
+        'SELECT id, title FROM todos WHERE deleted_at IS NULL ORDER BY pinned DESC, sort_order ASC, created_at DESC',
+      )
+      .all() as Array<{ id: string; title: string }>;
+    const q = clean.toLocaleLowerCase('tr-TR');
+    const match =
+      rows.find((r) => r.id.startsWith(clean)) ??
+      rows.find((r) => r.title.toLocaleLowerCase('tr-TR').includes(q)) ??
+      null;
+    return match ? this.getTodoById(match.id) : null;
+  }
+
+  resolveTodoByVoiceSelector(selector: string): Todo | null {
+    const clean = String(selector || '').trim().toLocaleLowerCase('tr-TR');
+    if (!clean) return null;
+    const rows = this.db
+      .prepare(
+        'SELECT id, title, notes, completed FROM todos WHERE deleted_at IS NULL ORDER BY pinned DESC, sort_order ASC, created_at DESC',
+      )
+      .all() as Array<{ id: string; title: string; notes: string; completed: number }>;
+    const exact = rows.find((t) => t.id.toLowerCase() === clean);
+    if (exact) return this.getTodoById(exact.id);
+    const matched = rows.filter(
+      (t) =>
+        t.title.toLocaleLowerCase('tr-TR').includes(clean) ||
+        t.notes.toLocaleLowerCase('tr-TR').includes(clean),
+    );
+    if (matched.length === 1) return this.getTodoById(matched[0].id);
+    const activeMatched = matched.filter((t) => !t.completed);
+    const chosen = activeMatched[0] ?? matched[0] ?? null;
+    return chosen ? this.getTodoById(chosen.id) : null;
   }
 
   getCategoryById(id: string): Category | null {
@@ -1463,6 +1597,7 @@ export class TodoDatabase {
     }
 
     const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM todo_embedding_chunks').run();
       this.db.prepare('DELETE FROM subtasks').run();
       this.db.prepare('DELETE FROM todos').run();
       this.db.prepare('DELETE FROM categories').run();
@@ -1510,6 +1645,7 @@ export class TodoDatabase {
       if (payload.settings && typeof payload.settings === 'object' && !Array.isArray(payload.settings)) {
         this.applySettingsPatchInTx(payload.settings);
       }
+      this.db.exec("INSERT INTO todos_fts(todos_fts) VALUES('rebuild')");
     });
 
     tx();
@@ -1521,9 +1657,11 @@ export class TodoDatabase {
     const currentLang = this.getSettings().language ?? 'tr';
 
     const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM todo_embedding_chunks').run();
       this.db.prepare('DELETE FROM subtasks').run();
       this.db.prepare('DELETE FROM todos').run();
       this.db.prepare('DELETE FROM categories').run();
+      this.db.exec("INSERT INTO todos_fts(todos_fts) VALUES('rebuild')");
 
       if (resetSettings) {
         this.db.prepare('DELETE FROM settings').run();
@@ -1633,6 +1771,79 @@ export class TodoDatabase {
 
   clearWebhookLogs(): number {
     return this.db.prepare('DELETE FROM webhook_logs').run().changes;
+  }
+
+  getRawDb(): Database.Database {
+    return this.db;
+  }
+
+  rebuildSearchIndex(): void {
+    try {
+      this.db.exec("INSERT INTO todos_fts(todos_fts) VALUES('rebuild')");
+    } catch {
+      // Ignore rebuild error if FTS table is unavailable
+    }
+  }
+
+  getRagChunkCount(): number {
+    try {
+      const row = this.db
+        .prepare('SELECT COUNT(*) as c FROM todo_embedding_chunks')
+        .get() as { c: number };
+      return Number(row?.c || 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  searchHybridRag(
+    query: string,
+    options?: {
+      topK?: number;
+      minScore?: number;
+      vectorHits?: Array<{
+        todoId: string;
+        chunkIndex: number;
+        chunkText: string;
+        cosine: number;
+      }>;
+    },
+  ): {
+    hits: Array<{
+      todoId: string;
+      title: string;
+      notes: string;
+      dueDate: string | null;
+      dueTime: string | null;
+      priority: Priority;
+      completed: boolean;
+      score: number;
+      matchedChunkText: string;
+      matchedChunkIndex: number;
+    }>;
+    disambiguationRequired: boolean;
+    mode: 'hybrid-rrf' | 'fts5-only';
+  } {
+    return sqliteCore.searchHybridRagCore(this.db, query, {
+      ...options,
+      getActiveTodos: () => this.getTodos(),
+      getTodoById: (id: string) => this.getTodoById(id),
+    }) as {
+      hits: Array<{
+        todoId: string;
+        title: string;
+        notes: string;
+        dueDate: string | null;
+        dueTime: string | null;
+        priority: Priority;
+        completed: boolean;
+        score: number;
+        matchedChunkText: string;
+        matchedChunkIndex: number;
+      }>;
+      disambiguationRequired: boolean;
+      mode: 'hybrid-rrf' | 'fts5-only';
+    };
   }
 
   close(): void {

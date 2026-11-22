@@ -41,6 +41,8 @@ import {
   clampZoomPercent,
   COLOR_THEMES,
   getContrastingForeground,
+  getNextZoomPreset,
+  getPrevZoomPreset,
   isValidAppIconId,
   isValidThemeId,
   normalizeHexColor,
@@ -786,7 +788,7 @@ test('QA: Third-pass audit hardening - drop helper, non-destructive categoryId, 
   const raw = new Database(dbPath);
   try {
     const version = raw.pragma('user_version', { simple: true });
-    assert.equal(version, 3);
+    assert.equal(version, 4);
     const indexes = raw
       .prepare("SELECT name FROM sqlite_master WHERE type = 'index'")
       .all() as Array<{ name: string }>;
@@ -941,7 +943,7 @@ test('QA: Windows 11 Electron installer/uninstaller assets, BMP headers, UTF-8 B
 
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.equal(pkg.main, 'electron/main.cjs');
-  assert.equal(pkg.version, '1.0.0');
+  assert.equal(pkg.version, '1.1.0');
   assert.equal(pkg.author.name, 'Vellium');
   assert.equal(pkg.author.email, 'support@vellium.dev');
   assert.equal(pkg.homepage, 'https://vellium.dev');
@@ -2553,7 +2555,7 @@ test('QA: 100/100 True Headless Control - Cold-Start Zero-GUI CLI, All 18 MCP To
       const initRes = runMcpStep(requests[0]);
       assert.equal(initRes.id, 1);
       const listToolsRes = runMcpStep(requests[1]);
-      assert.equal(listToolsRes.result?.tools?.length, 20, 'MCP server must expose all 20 headless tools');
+      assert.equal(listToolsRes.result?.tools?.length, 22, 'MCP server must expose all 22 headless + AI/RAG tools');
 
       for (let i = 2; i < requests.length; i += 1) {
         const resp = runMcpStep(requests[i]);
@@ -2959,6 +2961,28 @@ test('QA: True 100/100 Headless Automation - Headless Webhook Daemon (ag serve),
     assert.equal(stopped.stopped, true);
     const afterStop = JSON.parse(await runCliAsync(['serve', 'status', '-j'], baseEnv));
     assert.equal(afterStop.running, false);
+
+    // 6E. Third-Pass Audit Regressions: Zoom preset helpers, pre-release semver & Eisenhower Q1->Q2 startDate clear
+    assert.equal(getNextZoomPreset(115), 125);
+    assert.equal(getPrevZoomPreset(115), 110);
+    assert.equal(getNextZoomPreset(135), 150);
+    assert.equal(getPrevZoomPreset(135), 125);
+    assert.equal(getNextZoomPreset(150), 150);
+    assert.equal(getPrevZoomPreset(80), 80);
+
+    assert.equal(compareSemver('1.1.0', '1.1.0-beta.1'), 1);
+    assert.equal(compareSemver('1.1.0-alpha.1', '1.1.0'), -1);
+    assert.ok(compareSemver('1.1.0-beta.2', '1.1.0-beta.1') > 0);
+
+    const todaySample = '2026-11-22';
+    const tomorrowSample = addDaysToDateString(todaySample, 1);
+    assert.equal(
+      classifyEisenhowerQuadrant(
+        { important: true, priority: 'high', startDate: null, dueDate: tomorrowSample },
+        todaySample,
+      ),
+      'q2',
+    );
   } finally {
     try {
       await runCliAsync(['serve', 'stop', '-j'], baseEnv);

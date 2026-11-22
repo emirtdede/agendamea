@@ -31,6 +31,15 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
   setLaunchAtStartup: (enabled) => ipcRenderer.invoke('startup:set-login-item', Boolean(enabled)),
   setGlobalQuickAddShortcut: (enabled) =>
     ipcRenderer.invoke('shortcut:set-global-quick-add', Boolean(enabled)),
+  setGlobalQuickAddShortcutKey: (shortcut) =>
+    ipcRenderer.invoke('shortcut:set-global-quick-add-key', String(shortcut || '')),
+  showDesktopNotification: (payload) =>
+    ipcRenderer.invoke('notification:show', payload || {}),
+  onFocusTodo: (callback) => {
+    const listener = (_event, todoId) => callback(String(todoId || ''));
+    ipcRenderer.on('app:focus-todo', listener);
+    return () => ipcRenderer.removeListener('app:focus-todo', listener);
+  },
   getDiagnostics: () => ipcRenderer.invoke('app:get-diagnostics'),
   installCliShims: () => ipcRenderer.invoke('cli:install-shims'),
   openCliTerminal: () => ipcRenderer.invoke('cli:open-terminal'),
@@ -57,5 +66,18 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
     const listener = (_event, message) => callback(String(message || ''));
     ipcRenderer.on('updater:error', listener);
     return () => ipcRenderer.removeListener('updater:error', listener);
+  },
+  // v1.1.0 Taskbar Voice Dictation Overlay & Shortcut Controls
+  setVoiceShortcut: (shortcut) => ipcRenderer.invoke('voice:set-shortcut', String(shortcut || '')),
+  toggleVoiceOverlay: () => ipcRenderer.invoke('voice:toggle-overlay'),
+  hideVoiceOverlay: () => ipcRenderer.invoke('voice:hide-overlay'),
+  setOverlayFocusable: (focusable) => ipcRenderer.invoke('voice:set-focusable', Boolean(focusable)),
+  notifyOverlayListening: (listening) => ipcRenderer.invoke('voice:set-listening', Boolean(listening)),
+  getOverlayBounds: () => ipcRenderer.invoke('voice:get-overlay-bounds'),
+  openWindowsSpeechSettings: () => ipcRenderer.invoke('voice:open-speech-settings'),
+  onOverlayCommand: (callback) => {
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('overlay:command', listener);
+    return () => ipcRenderer.removeListener('overlay:command', listener);
   },
 });

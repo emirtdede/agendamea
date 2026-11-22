@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Agendamea MCP Server (JSON-RPC 2.0 over stdio - 18 Complete Headless Tools)
+ * Agendamea MCP Server (JSON-RPC 2.0 over stdio - 22 Complete Headless Tools)
  * Supports Content-Length framed messages and NDJSON lines.
  * Connects to live 127.0.0.1 API when running, or falls back directly to local SQLite (WAL)
  * with cold-start auto-schema creation when the desktop GUI is closed.
@@ -282,6 +282,29 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'agendamea_semantic_search',
+    description: 'Run Chunked Hybrid RAG search (SQLite FTS5 BM25 + GGUF Vector RRF) across all active tasks and long notes.',
+    inputSchema: {
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: { type: 'string', description: 'Natural language search query or keyword.' },
+        topK: { type: 'integer', description: 'Maximum ranked matches to return (default: 5).' },
+        minScore: { type: 'number', description: 'Minimum normalized relevance score threshold (default: 0.35).' },
+      },
+    },
+  },
+  {
+    name: 'agendamea_ai_status',
+    description: 'Inspect local hardware profile (64-bit VRAM, RAM, CPU, disk), recommended AI tier, detected Ollama/LM Studio backends, and installed Apache 2.0 / MIT model status.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        force: { type: 'boolean', description: 'Force fresh hardware rescan (default: false).' },
+      },
+    },
+  },
 ];
 
 async function executeTool(name, args) {
@@ -386,6 +409,13 @@ async function executeTool(name, args) {
       if (input.action === 'test_webhook') return store.testWebhook(input.webhookUrl);
       if (input.action === 'check_updates') return store.checkForUpdates();
       throw new Error(`Unsupported webhook/server action: ${input.action}`);
+    case 'agendamea_semantic_search':
+      return store.semanticSearchRag(input.query, {
+        topK: input.topK || 5,
+        minScore: input.minScore !== undefined ? Number(input.minScore) : 0.35,
+      });
+    case 'agendamea_ai_status':
+      return store.getAiStatus({ force: Boolean(input.force) });
     default:
       throw new Error(`Unknown tool: ${name}`);
   }

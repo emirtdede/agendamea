@@ -2,6 +2,7 @@ import React from 'react';
 import { RotateCcw } from 'lucide-react';
 import { readInitialLanguage } from '../i18n/I18nContext';
 import { getDictionary } from '../i18n/localesWorld';
+import { APP_VERSION } from '../utils/appVersion';
 import { BrandMark } from './BrandMark';
 import { WindowControls } from './WindowControls';
 
@@ -50,7 +51,7 @@ export class ErrorBoundary extends React.Component<
                 Agendamea
               </span>
               <span className="font-mono-tabular text-[10px] text-[var(--text-muted)]">
-                v1.0.0
+                v{APP_VERSION}
               </span>
             </div>
             <div className="app-no-drag shrink-0">

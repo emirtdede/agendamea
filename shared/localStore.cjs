@@ -15,10 +15,15 @@ const path = require('node:path');
 const { execFile, spawn } = require('node:child_process');
 const cliInstaller = require('./cliInstaller.cjs');
 const releaseUtils = require('./releaseUtils.cjs');
+const hardwareProfiler = require('./hardwareProfiler.cjs');
+const aiCatalog = require('./aiCatalog.cjs');
+const { ModelManager } = require('./modelManager.cjs');
+const sqliteCore = require('./sqliteCore.cjs');
+const { APP_VERSION } = require('./version.cjs');
+const { VoiceOrchestrator } = require('../electron/ai/voiceOrchestrator.cjs');
 
-const APP_VERSION = '1.0.0';
 const ABI_FALLBACK_EXIT_CODE = 86;
-const SCHEMA_VERSION = 3;
+const DEFAULT_HTTP_TIMEOUT_MS = 15_000;
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_24H_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -128,7 +133,7 @@ function getCandidateBaseUrls() {
       // Ignore unreadable port file
     }
   }
-  if (!process.env.AGENDAMEA_FORCE_OFFLINE) {
+  if (!process.env.AGENDAMEA_FORCE_OFFLINE && !process.env.AGENDAMEA_DATA_DIR) {
     for (const fallbackPort of [38721, 47821, 39721, 41721, 3000]) {
       urls.push(`http://127.0.0.1:${fallbackPort}`);
     }
@@ -146,7 +151,12 @@ async function resolveApiBaseUrl() {
       const timer = setTimeout(() => controller.abort(), 700);
       const res = await fetch(`${base}/api/health`, { signal: controller.signal });
       clearTimeout(timer);
-      if (res.ok) return base;
+      if (res.ok) {
+        const body = await res.json().catch(() => null);
+        if (body && body.ok === true && (body.app === 'Agendamea' || typeof body.version === 'string')) {
+          return base;
+        }
+      }
     } catch {
       // Try next port
     }
@@ -154,23 +164,31 @@ async function resolveApiBaseUrl() {
   return null;
 }
 
-async function httpRequest(baseUrl, method, endpoint, body) {
-  const res = await fetch(`${baseUrl}${endpoint}`, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let json = null;
+async function httpRequest(baseUrl, method, endpoint, body, timeoutMs = DEFAULT_HTTP_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  if (timer && typeof timer.unref === 'function') timer.unref();
   try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = null;
+    const res = await fetch(`${baseUrl}${endpoint}`, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+    if (!res.ok) {
+      throw new Error(json?.error || `HTTP ${res.status}`);
+    }
+    return json;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-  if (!res.ok) {
-    throw new Error(json?.error || `HTTP ${res.status}`);
-  }
-  return json;
 }
 
 function resolveSqliteDatabasePath() {
@@ -206,113 +224,11 @@ function loadBetterSqlite3() {
 }
 
 /**
- * Cold-start schema initializer matching src/db/database.ts 1:1 so headless CLI/MCP works
- * even on a fresh machine where the Agendamea desktop window has never been launched once.
+ * Cold-start schema initializer delegating to shared/sqliteCore.cjs (1:1 parity with src/db/database.ts).
  */
 function ensureOfflineSchema(db) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      color TEXT NOT NULL DEFAULT '#2563eb',
-      pinned INTEGER NOT NULL DEFAULT 0,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      deleted_at TEXT DEFAULT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS todos (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      notes TEXT NOT NULL DEFAULT '',
-      completed INTEGER NOT NULL DEFAULT 0,
-      important INTEGER NOT NULL DEFAULT 0,
-      pinned INTEGER NOT NULL DEFAULT 0,
-      priority TEXT NOT NULL DEFAULT 'normal',
-      start_date TEXT DEFAULT NULL,
-      due_date TEXT,
-      due_time TEXT DEFAULT NULL,
-      tags TEXT NOT NULL DEFAULT '[]',
-      category_id TEXT,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT DEFAULT NULL,
-      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS subtasks (
-      id TEXT PRIMARY KEY,
-      todo_id TEXT NOT NULL,
-      title TEXT NOT NULL,
-      completed INTEGER NOT NULL DEFAULT 0,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS webhook_logs (
-      id TEXT PRIMARY KEY,
-      direction TEXT NOT NULL DEFAULT 'outgoing',
-      event TEXT NOT NULL,
-      target_url TEXT NOT NULL DEFAULT '',
-      status_code INTEGER DEFAULT NULL,
-      ok INTEGER NOT NULL DEFAULT 0,
-      attempts INTEGER NOT NULL DEFAULT 1,
-      latency_ms INTEGER NOT NULL DEFAULT 0,
-      error TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_todos_category ON todos(category_id);
-    CREATE INDEX IF NOT EXISTS idx_subtasks_todo ON subtasks(todo_id);
-    CREATE INDEX IF NOT EXISTS idx_categories_deleted ON categories(deleted_at);
-    CREATE INDEX IF NOT EXISTS idx_todos_deleted ON todos(deleted_at);
-    CREATE INDEX IF NOT EXISTS idx_webhook_logs_created ON webhook_logs(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_todos_active_order
-      ON todos(pinned DESC, sort_order ASC, created_at DESC)
-      WHERE deleted_at IS NULL;
-    CREATE INDEX IF NOT EXISTS idx_categories_active_order
-      ON categories(pinned DESC, sort_order ASC, created_at ASC)
-      WHERE deleted_at IS NULL;
-  `);
-
-  const currentVersion = Number(db.pragma('user_version', { simple: true }) ?? 0);
-  if (currentVersion < SCHEMA_VERSION) {
-    db.pragma(`user_version = ${SCHEMA_VERSION}`);
-  }
-
-  const todoCols = db.pragma('table_info(todos)');
-  if (!todoCols.some((c) => c.name === 'start_date')) {
-    db.exec('ALTER TABLE todos ADD COLUMN start_date TEXT DEFAULT NULL');
-  }
-  if (!todoCols.some((c) => c.name === 'due_time')) {
-    db.exec('ALTER TABLE todos ADD COLUMN due_time TEXT DEFAULT NULL');
-  }
-  if (!todoCols.some((c) => c.name === 'tags')) {
-    db.exec("ALTER TABLE todos ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
-  }
-
-  const stmt = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-  const defaults = [
-    ['themeMode', 'light'],
-    ['themeId', 'obsidian'],
-    ['dragLocked', '0'],
-    ['sidebarCollapsed', '0'],
-    ['themeCustomized', '0'],
-    ['language', 'tr'],
-    ['autoUpdateCheck', '1'],
-    ['onedriveAutoSync', '0'],
-    ['onedriveCustomPath', ''],
-    ['onboardingCompleted', '0'],
-  ];
-  for (const [k, v] of defaults) {
-    stmt.run(k, v);
-  }
+  sqliteCore.applyAgendameaSchema(db, { selfHealFts: false });
+  sqliteCore.seedDefaultSettings(db);
 }
 
 function withOfflineDb(fn) {
@@ -447,6 +363,86 @@ function readSettingsOffline(db) {
   if (map.get('webhookUrl')) settings.webhookUrl = map.get('webhookUrl');
   if (map.get('webhookSecret')) settings.webhookSecret = map.get('webhookSecret');
   if (map.get('webhookEvents')) settings.webhookEvents = map.get('webhookEvents');
+  const rawAiEnabled = map.get('aiEnabled');
+  if (rawAiEnabled === '1' || rawAiEnabled === 'true') settings.aiEnabled = true;
+  else if (rawAiEnabled === '0' || rawAiEnabled === 'false') settings.aiEnabled = false;
+  const rawAiTier = map.get('aiTier');
+  if (
+    rawAiTier === 'tier-light' ||
+    rawAiTier === 'tier-medium' ||
+    rawAiTier === 'tier-strong' ||
+    rawAiTier === 'external-ollama' ||
+    rawAiTier === 'external-lmstudio'
+  ) {
+    settings.aiTier = rawAiTier;
+  }
+  if (map.get('aiLlmModelId')) settings.aiLlmModelId = map.get('aiLlmModelId');
+  if (map.get('aiSttModelId')) settings.aiSttModelId = map.get('aiSttModelId');
+  if (map.get('aiEmbedModelId')) settings.aiEmbedModelId = map.get('aiEmbedModelId');
+  const rawUseOllama = map.get('aiUseExternalOllama');
+  if (rawUseOllama === '1' || rawUseOllama === 'true') settings.aiUseExternalOllama = true;
+  else if (rawUseOllama === '0' || rawUseOllama === 'false') settings.aiUseExternalOllama = false;
+  if (map.get('aiOllamaModel')) settings.aiOllamaModel = map.get('aiOllamaModel');
+  if (map.get('voiceShortcut')) settings.voiceShortcut = map.get('voiceShortcut');
+  const rawVoiceAutoStop = map.get('voiceAutoStopMs');
+  if (rawVoiceAutoStop !== undefined) {
+    const ms = Number(rawVoiceAutoStop);
+    if (Number.isFinite(ms) && ms >= 600 && ms <= 5000) {
+      settings.voiceAutoStopMs = Math.round(ms);
+    }
+  }
+  const rawVoiceTtsEnabled = map.get('voiceTtsEnabled');
+  if (rawVoiceTtsEnabled === '1' || rawVoiceTtsEnabled === 'true') settings.voiceTtsEnabled = true;
+  else if (rawVoiceTtsEnabled === '0' || rawVoiceTtsEnabled === 'false') settings.voiceTtsEnabled = false;
+  if (map.get('voiceTtsVoice')) settings.voiceTtsVoice = map.get('voiceTtsVoice');
+  if (map.get('voiceMicDeviceId')) settings.voiceMicDeviceId = map.get('voiceMicDeviceId');
+  const rawNoiseSup = map.get('voiceNoiseSuppression');
+  if (rawNoiseSup === '1' || rawNoiseSup === 'true') settings.voiceNoiseSuppression = true;
+  else if (rawNoiseSup === '0' || rawNoiseSup === 'false') settings.voiceNoiseSuppression = false;
+  const rawSens = map.get('voiceSensitivity');
+  if (rawSens === 'auto' || rawSens === 'low' || rawSens === 'medium' || rawSens === 'high') {
+    settings.voiceSensitivity = rawSens;
+  }
+  if (map.get('globalQuickAddShortcutKey')) {
+    settings.globalQuickAddShortcutKey = map.get('globalQuickAddShortcutKey');
+  }
+  if (map.get('customShortcuts')) {
+    try {
+      const parsed = JSON.parse(map.get('customShortcuts'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        settings.customShortcuts = parsed;
+      }
+    } catch {
+      // Ignore malformed JSON
+    }
+  }
+  const rawNotifProfile = map.get('notificationProfile');
+  if (
+    rawNotifProfile === 'balanced' ||
+    rawNotifProfile === 'all' ||
+    rawNotifProfile === 'focus' ||
+    rawNotifProfile === 'silent_inapp' ||
+    rawNotifProfile === 'custom'
+  ) {
+    settings.notificationProfile = rawNotifProfile;
+  }
+  const rawNotifLead = map.get('notificationLeadMinutes');
+  if (rawNotifLead !== undefined) {
+    const mins = Number(rawNotifLead);
+    if (Number.isFinite(mins) && mins >= 1 && mins <= 180) {
+      settings.notificationLeadMinutes = Math.round(mins);
+    }
+  }
+  if (map.get('notificationChannels')) {
+    try {
+      const parsed = JSON.parse(map.get('notificationChannels'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        settings.notificationChannels = parsed;
+      }
+    } catch {
+      // Ignore malformed JSON
+    }
+  }
   return settings;
 }
 
@@ -464,11 +460,92 @@ function writeSettingsPatchOffline(db, patch) {
     'onedriveAutoSync',
     'onboardingCompleted',
     'webhookEnabled',
+    'aiEnabled',
+    'aiUseExternalOllama',
+    'voiceTtsEnabled',
+    'voiceNoiseSuppression',
   ];
   for (const key of boolKeys) {
     if (typeof patch[key] === 'boolean') {
       stmt.run(key, patch[key] ? '1' : '0');
     }
+  }
+  if (
+    patch.aiTier === 'tier-light' ||
+    patch.aiTier === 'tier-medium' ||
+    patch.aiTier === 'tier-strong' ||
+    patch.aiTier === 'external-ollama' ||
+    patch.aiTier === 'external-lmstudio'
+  ) {
+    stmt.run('aiTier', patch.aiTier);
+  }
+  if (typeof patch.aiLlmModelId === 'string') {
+    const id = patch.aiLlmModelId.trim().slice(0, 120);
+    if (id === '' || aiCatalog.MODELS_BY_ID[id]?.role === 'llm') {
+      stmt.run('aiLlmModelId', id);
+    }
+  }
+  if (typeof patch.aiSttModelId === 'string') {
+    const id = patch.aiSttModelId.trim().slice(0, 120);
+    if (id === '' || aiCatalog.MODELS_BY_ID[id]?.role === 'stt') {
+      stmt.run('aiSttModelId', id);
+    }
+  }
+  if (typeof patch.aiEmbedModelId === 'string') {
+    const id = patch.aiEmbedModelId.trim().slice(0, 120);
+    if (id === '' || aiCatalog.MODELS_BY_ID[id]?.role === 'embed') {
+      stmt.run('aiEmbedModelId', id);
+    }
+  }
+  if (typeof patch.aiOllamaModel === 'string') {
+    stmt.run('aiOllamaModel', patch.aiOllamaModel.trim().slice(0, 160));
+  }
+  if (typeof patch.voiceShortcut === 'string' && patch.voiceShortcut.trim().length > 0) {
+    stmt.run('voiceShortcut', patch.voiceShortcut.trim().slice(0, 64));
+  }
+  if (typeof patch.voiceAutoStopMs === 'number' && Number.isFinite(patch.voiceAutoStopMs)) {
+    const clamped = Math.max(600, Math.min(5000, Math.round(patch.voiceAutoStopMs)));
+    stmt.run('voiceAutoStopMs', String(clamped));
+  }
+  if (typeof patch.voiceTtsVoice === 'string') {
+    stmt.run('voiceTtsVoice', patch.voiceTtsVoice.trim().slice(0, 160));
+  }
+  if (typeof patch.voiceMicDeviceId === 'string') {
+    stmt.run('voiceMicDeviceId', patch.voiceMicDeviceId.trim().slice(0, 200));
+  }
+  if (
+    patch.voiceSensitivity === 'auto' ||
+    patch.voiceSensitivity === 'low' ||
+    patch.voiceSensitivity === 'medium' ||
+    patch.voiceSensitivity === 'high'
+  ) {
+    stmt.run('voiceSensitivity', patch.voiceSensitivity);
+  }
+  if (typeof patch.globalQuickAddShortcutKey === 'string' && patch.globalQuickAddShortcutKey.trim().length > 0) {
+    stmt.run('globalQuickAddShortcutKey', patch.globalQuickAddShortcutKey.trim().slice(0, 64));
+  }
+  if (patch.customShortcuts && typeof patch.customShortcuts === 'object' && !Array.isArray(patch.customShortcuts)) {
+    stmt.run('customShortcuts', JSON.stringify(patch.customShortcuts));
+  }
+  if (
+    patch.notificationProfile === 'balanced' ||
+    patch.notificationProfile === 'all' ||
+    patch.notificationProfile === 'focus' ||
+    patch.notificationProfile === 'silent_inapp' ||
+    patch.notificationProfile === 'custom'
+  ) {
+    stmt.run('notificationProfile', patch.notificationProfile);
+  }
+  if (typeof patch.notificationLeadMinutes === 'number' && Number.isFinite(patch.notificationLeadMinutes)) {
+    const clamped = Math.max(1, Math.min(180, Math.round(patch.notificationLeadMinutes)));
+    stmt.run('notificationLeadMinutes', String(clamped));
+  }
+  if (
+    patch.notificationChannels &&
+    typeof patch.notificationChannels === 'object' &&
+    !Array.isArray(patch.notificationChannels)
+  ) {
+    stmt.run('notificationChannels', JSON.stringify(patch.notificationChannels));
   }
   if (patch.themeMode === 'light' || patch.themeMode === 'dark' || patch.themeMode === 'system') {
     stmt.run('themeMode', patch.themeMode);
@@ -500,25 +577,19 @@ function writeSettingsPatchOffline(db, patch) {
     stmt.run('language', patch.language.trim());
   }
   if (typeof patch.onedriveCustomPath === 'string') {
-    stmt.run('onedriveCustomPath', patch.onedriveCustomPath.trim().slice(0, 500));
+    const trimmedPath = patch.onedriveCustomPath.trim().slice(0, 500);
+    if (trimmedPath === '') {
+      stmt.run('onedriveCustomPath', '');
+    } else {
+      stmt.run('onedriveCustomPath', assertSafeLocalSyncFolder(trimmedPath));
+    }
   }
   if (typeof patch.webhookUrl === 'string') {
     const trimmed = patch.webhookUrl.trim().slice(0, 4000);
     if (trimmed === '') {
       stmt.run('webhookUrl', '');
     } else {
-      const validUrls = trimmed
-        .split(/[\r\n,]+/)
-        .map((u) => u.trim())
-        .filter((u) => {
-          if (!u) return false;
-          try {
-            const parsed = new URL(u);
-            return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-          } catch {
-            return false;
-          }
-        });
+      const validUrls = parseWebhookUrlsOffline(trimmed);
       if (validUrls.length > 0) stmt.run('webhookUrl', validUrls.join(','));
     }
   }
@@ -1008,19 +1079,50 @@ function detectProviderForFolderOffline(folderPath, providers) {
   return 'custom';
 }
 
+const BLOCKED_WEBHOOK_HOSTS_OFFLINE = new Set([
+  '169.254.169.254',
+  'metadata.google.internal',
+  '[fd00:ec2::254]',
+]);
+
+function isValidWebhookUrlOffline(raw) {
+  if (!raw) return false;
+  try {
+    const p = new URL(raw);
+    if (p.protocol !== 'http:' && p.protocol !== 'https:') return false;
+    const host = p.hostname.toLowerCase();
+    if (BLOCKED_WEBHOOK_HOSTS_OFFLINE.has(host) || host.startsWith('169.254.')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function assertSafeLocalSyncFolder(rawPath) {
+  const trimmed = String(rawPath || '').trim();
+  if (!trimmed) {
+    throw new Error('Bulut senkronizasyon klasör yolu boş olamaz.');
+  }
+  if (trimmed.startsWith('\\\\') || trimmed.startsWith('//')) {
+    throw new Error('Güvenlik nedeniyle ağ paylaşımı (UNC) yolları desteklenmemektedir.');
+  }
+  const resolved = path.resolve(trimmed);
+  const parsed = path.parse(resolved);
+  if (resolved === parsed.root) {
+    throw new Error('Kök sürücü dizini doğrudan senkronizasyon klasörü olarak kullanılamaz.');
+  }
+  const winDir = (process.env.WINDIR || 'C:\\Windows').toLowerCase();
+  if (resolved.toLowerCase() === winDir || resolved.toLowerCase().startsWith(`${winDir}\\`)) {
+    throw new Error('Sistem klasörleri senkronizasyon klasörü olarak kullanılamaz.');
+  }
+  return resolved;
+}
+
 function parseWebhookUrlsOffline(rawUrl) {
   return String(rawUrl || '')
     .split(/[\r\n,]+/)
     .map((u) => u.trim())
-    .filter((u) => {
-      if (!u) return false;
-      try {
-        const p = new URL(u);
-        return p.protocol === 'http:' || p.protocol === 'https:';
-      } catch {
-        return false;
-      }
-    });
+    .filter((u) => isValidWebhookUrlOffline(u));
 }
 
 function isWebhookEventAllowedOffline(configuredEvents, event) {
@@ -1205,7 +1307,8 @@ function syncOsSettingsBridge(patch, mergedSettings) {
     if (
       patch.closeBehavior !== undefined ||
       patch.launchAtStartup !== undefined ||
-      patch.globalQuickAddShortcut !== undefined
+      patch.globalQuickAddShortcut !== undefined ||
+      patch.voiceShortcut !== undefined
     ) {
       const prefsPath = path.join(dataDir, 'window-prefs.json');
       let existing = {};
@@ -1226,6 +1329,12 @@ function syncOsSettingsBridge(patch, mergedSettings) {
             : existing.globalQuickAdd !== undefined
               ? Boolean(existing.globalQuickAdd)
               : true,
+        voiceShortcut:
+          typeof mergedSettings.voiceShortcut === 'string' && mergedSettings.voiceShortcut.trim()
+            ? mergedSettings.voiceShortcut.trim()
+            : typeof existing.voiceShortcut === 'string' && existing.voiceShortcut.trim()
+              ? existing.voiceShortcut.trim()
+              : 'CommandOrControl+Alt+Space',
       };
       fs.writeFileSync(prefsPath, JSON.stringify(nextPrefs, null, 2), 'utf8');
 
@@ -2207,6 +2316,7 @@ async function importBackup(payloadOrFilePath) {
     ];
 
     const tx = db.transaction(() => {
+      db.prepare('DELETE FROM todo_embedding_chunks').run();
       db.prepare('DELETE FROM subtasks').run();
       db.prepare('DELETE FROM todos').run();
       db.prepare('DELETE FROM categories').run();
@@ -2281,6 +2391,7 @@ async function importBackup(payloadOrFilePath) {
       if (payload.settings && typeof payload.settings === 'object') {
         writeSettingsPatchOffline(db, payload.settings);
       }
+      db.exec("INSERT INTO todos_fts(todos_fts) VALUES('rebuild')");
     });
     tx();
     const restored = getBootstrapOffline(db);
@@ -2339,7 +2450,7 @@ async function connectCloud(folderPath, autoSync = true) {
       autoSync: Boolean(autoSync),
     });
   }
-  let resolved = cleanFolder ? path.resolve(cleanFolder) : '';
+  let resolved = cleanFolder ? assertSafeLocalSyncFolder(cleanFolder) : '';
   if (!resolved) {
     const detected = detectCloudProvidersOffline().find((p) => p.detected);
     if (detected) {
@@ -2420,9 +2531,11 @@ async function resetAllData(options = {}) {
     const before = readSettingsOffline(db);
     const currentLang = before.language || 'tr';
     db.transaction(() => {
+      db.prepare('DELETE FROM todo_embedding_chunks').run();
       db.prepare('DELETE FROM subtasks').run();
       db.prepare('DELETE FROM todos').run();
       db.prepare('DELETE FROM categories').run();
+      db.exec("INSERT INTO todos_fts(todos_fts) VALUES('rebuild')");
       if (resetSettings) {
         db.prepare('DELETE FROM settings').run();
         ensureOfflineSchema(db);
@@ -2785,6 +2898,158 @@ async function uninstallCli(options = {}) {
   return cliInstaller.uninstallCliShims(options);
 }
 
+function getModelsDir() {
+  const baseDir = getCandidateDataDirs()[0] || path.join(os.homedir(), 'AppData', 'Roaming', 'Agendamea');
+  return path.join(baseDir, 'models');
+}
+
+async function getAiStatus(options = {}) {
+  const baseUrl = await resolveApiBaseUrl();
+  if (baseUrl) {
+    const qs = options.force ? '?force=1' : '';
+    return httpRequest(baseUrl, 'GET', `/api/ai/status${qs}`);
+  }
+  const dataDir = getCandidateDataDirs()[0] || os.homedir();
+  const modelsDir = getModelsDir();
+  const manager = new ModelManager({ modelsDir });
+  const [hardware, external] = await Promise.all([
+    hardwareProfiler.profileHardware({ targetDir: dataDir }),
+    aiCatalog.detectExternalBackends(),
+  ]);
+  const recommendation = aiCatalog.selectTierRecommendation(hardware, external);
+  const ragIndexedChunks = withOfflineDb((db) => {
+    try {
+      return Number(db.prepare('SELECT COUNT(*) as c FROM todo_embedding_chunks').get()?.c || 0);
+    } catch {
+      return 0;
+    }
+  });
+  const settings = await getSettings();
+  return {
+    mode: 'offline-sqlite',
+    hardware,
+    recommendation,
+    models: manager.listModelsStatus(),
+    installedDiskBytes: manager.getInstalledDiskUsageBytes(),
+    ragIndexedChunks,
+    settings,
+  };
+}
+
+async function listAiModels() {
+  const baseUrl = await resolveApiBaseUrl();
+  if (baseUrl) {
+    return httpRequest(baseUrl, 'GET', '/api/ai/models');
+  }
+  const modelsDir = getModelsDir();
+  const manager = new ModelManager({ modelsDir });
+  return {
+    modelsDir,
+    installedDiskBytes: manager.getInstalledDiskUsageBytes(),
+    models: manager.listModelsStatus(),
+  };
+}
+
+async function downloadAiModel(targetId) {
+  const clean = String(targetId || '').trim();
+  if (!clean) throw new Error('Model ID or tier (tier-light|tier-medium|tier-strong) is required.');
+  const modelIds = aiCatalog.TIER_BUNDLES[clean]
+    ? aiCatalog.getTierBundle(clean).modelIds
+    : [clean];
+  const baseUrl = await resolveApiBaseUrl();
+  if (baseUrl) {
+    const results = [];
+    for (const id of modelIds) {
+      results.push(
+        await httpRequest(
+          baseUrl,
+          'POST',
+          `/api/ai/models/${encodeURIComponent(id)}/download?sync=1`,
+          { sync: true },
+          0,
+        ),
+      );
+    }
+    return modelIds.length === 1 ? results[0] : { ok: results.every((r) => r.ok), results };
+  }
+  const manager = new ModelManager({ modelsDir: getModelsDir() });
+  const results = [];
+  for (const id of modelIds) {
+    results.push(await manager.downloadModel(id));
+  }
+  return modelIds.length === 1 ? results[0] : { ok: results.every((r) => r.ok), results };
+}
+
+async function deleteAiModel(targetId) {
+  const clean = String(targetId || '').trim();
+  if (!clean) throw new Error('Model ID (or "all") is required.');
+  const baseUrl = await resolveApiBaseUrl();
+  if (baseUrl) {
+    return httpRequest(baseUrl, 'DELETE', `/api/ai/models/${encodeURIComponent(clean)}`);
+  }
+  const manager = new ModelManager({ modelsDir: getModelsDir() });
+  return clean === 'all' ? manager.deleteAllModels() : manager.deleteModel(clean);
+}
+
+function searchRagOfflineDb(db, query, options = {}) {
+  return sqliteCore.searchHybridRagCore(db, query, {
+    ...options,
+    vectorHits: [],
+    getActiveTodos: () =>
+      db
+        .prepare('SELECT * FROM todos WHERE deleted_at IS NULL')
+        .all()
+        .map((row) => mapTodoRow(row, [])),
+    getTodoById: (id) => {
+      const row = db.prepare('SELECT * FROM todos WHERE id = ? AND deleted_at IS NULL').get(id);
+      return row ? mapTodoRow(row, []) : null;
+    },
+  });
+}
+
+async function semanticSearchRag(query, options = {}) {
+  const baseUrl = await resolveApiBaseUrl();
+  if (baseUrl) {
+    const topK = Number(options.topK) || 5;
+    const minScore = options.minScore !== undefined ? Number(options.minScore) : 0.35;
+    return httpRequest(baseUrl, 'POST', '/api/ai/rag/search', { query, topK, minScore });
+  }
+  return withOfflineDb((db) => searchRagOfflineDb(db, query, options));
+}
+
+async function askAiAssistant(text, options = {}) {
+  const baseUrl = await resolveApiBaseUrl();
+  if (baseUrl) {
+    return httpRequest(baseUrl, 'POST', '/api/ai/ask', {
+      text,
+      language: options.language,
+      readOnly: Boolean(options.readOnly),
+      confirmToken: options.confirmToken || undefined,
+      selectedTodoId: options.selectedTodoId || undefined,
+    });
+  }
+  const lang = options.language || (await getPreferredLanguage());
+  const orchestrator = new VoiceOrchestrator();
+  return orchestrator.handleUtterance({
+    text,
+    language: lang,
+    readOnly: Boolean(options.readOnly),
+    confirmToken: options.confirmToken || null,
+    selectedTodoId: options.selectedTodoId || null,
+    storeAdapter: {
+      getTodoById: async (id) => getTask(id),
+      listToday: async () => listTasks({ filter: 'today' }),
+      addTask: async (input) => addTask(input),
+      completeTask: async (selector, completed) => completeTask(selector, completed),
+      deleteTask: async (selector) => deleteTask(selector),
+      undoTrash: async () => restoreLastTrashed(),
+      clearCompleted: async () => clearCompleted(),
+      emptyTrash: async () => emptyTrash(),
+    },
+    ragSearchFn: async (q, opts) => semanticSearchRag(q, opts),
+  });
+}
+
 module.exports = {
   APP_VERSION,
   ABI_FALLBACK_EXIT_CODE,
@@ -2840,4 +3105,10 @@ module.exports = {
   stopHeadlessServer,
   installCli,
   uninstallCli,
+  getAiStatus,
+  listAiModels,
+  downloadAiModel,
+  deleteAiModel,
+  semanticSearchRag,
+  askAiAssistant,
 };

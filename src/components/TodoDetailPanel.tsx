@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, Check, Clock, Hash, Pin, Plus, Star, Trash2, X } from 'lucide-react';
+import { Calendar, Check, Clock, Copy, Hash, Pencil, Pin, Plus, Star, Trash2, X } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
-import type { Category, Priority, Todo, TodoPatch } from '../types';
+import type { Category, Priority, Subtask, Todo, TodoPatch } from '../types';
 import { addDaysToDateString, sanitizeTags } from '../utils/todoLogic';
+import { ContextMenu } from './ContextMenu';
+import { SelectField } from './SelectField';
 
 interface TodoDetailPanelProps {
   todo: Todo;
@@ -17,19 +19,31 @@ interface TodoDetailPanelProps {
   onDelete: (id: string) => void;
   onAddSubtask: (todoId: string, title: string) => Promise<boolean>;
   onToggleSubtask: (todoId: string, subtaskId: string, completed: boolean) => Promise<void>;
+  onRenameSubtask?: (todoId: string, subtaskId: string, title: string) => Promise<void>;
   onDeleteSubtask: (todoId: string, subtaskId: string) => Promise<void>;
+}
+
+const CREATED_AT_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
+
+function getCreatedAtFormatter(intlLocale: string): Intl.DateTimeFormat {
+  let fmt = CREATED_AT_FORMATTER_CACHE.get(intlLocale);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(intlLocale, {
+      day: 'numeric',
+      month: 'long',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    CREATED_AT_FORMATTER_CACHE.set(intlLocale, fmt);
+  }
+  return fmt;
 }
 
 function formatCreatedAt(iso: string, intlLocale: string): string {
   try {
     const dt = new Date(iso);
     if (Number.isNaN(dt.getTime())) return '';
-    return new Intl.DateTimeFormat(intlLocale, {
-      day: 'numeric',
-      month: 'long',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(dt);
+    return getCreatedAtFormatter(intlLocale).format(dt);
   } catch {
     return '';
   }
@@ -44,14 +58,22 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
   onDelete,
   onAddSubtask,
   onToggleSubtask,
+  onRenameSubtask,
   onDeleteSubtask,
 }: TodoDetailPanelProps) {
   const { t, meta } = useI18n();
   const [title, setTitle] = useState(todo.title);
   const [notes, setNotes] = useState(todo.notes);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+  const [editingSubtaskTitle, setEditingSubtaskTitle] = useState('');
   const [newTagInput, setNewTagInput] = useState('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [subtaskCtxMenu, setSubtaskCtxMenu] = useState<{
+    x: number;
+    y: number;
+    subtask: Subtask;
+  } | null>(null);
 
   const timerRef = useRef<number | null>(null);
   const isAddingSubtaskRef = useRef(false);
@@ -115,6 +137,8 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
       setTitle(todo.title);
       setNotes(todo.notes);
       setNewSubtaskTitle('');
+      setEditingSubtaskId(null);
+      setEditingSubtaskTitle('');
       setNewTagInput('');
       lastSavedRef.current = { id: todo.id, title: todo.title, notes: todo.notes };
       draftRef.current = { id: todo.id, title: todo.title, notes: todo.notes };
@@ -349,11 +373,11 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
               scheduleAutoSave(title, val);
             }}
             onBlur={() => flushChangesFor(todo.id, title, notes)}
-            rows={2}
+            rows={3}
             maxLength={10000}
             aria-label={t.notesPlaceholder}
             placeholder={t.notesPlaceholder}
-            className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+            className="w-full resize-y min-h-[76px] max-h-[280px] rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
           />
         </div>
 
@@ -374,6 +398,10 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
             {todo.subtasks.map((sub) => (
               <div
                 key={sub.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setSubtaskCtxMenu({ x: e.clientX, y: e.clientY, subtask: sub });
+                }}
                 className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-[var(--surface-hover)] transition-colors"
               >
                 <button
@@ -393,15 +421,51 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
                 >
                   {sub.completed && <Check className="h-2.5 w-2.5 stroke-[3]" />}
                 </button>
-                <span
-                  className={`flex-1 min-w-0 text-sm break-words ${
-                    sub.completed
-                      ? 'line-through text-[var(--text-muted)]'
-                      : 'text-[var(--text-primary)]'
-                  }`}
-                >
-                  {sub.title}
-                </span>
+                {editingSubtaskId === sub.id ? (
+                  <input
+                    type="text"
+                    autoFocus
+                    value={editingSubtaskTitle}
+                    maxLength={200}
+                    aria-label={sub.title}
+                    onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                    onBlur={() => {
+                      const next = editingSubtaskTitle.trim();
+                      setEditingSubtaskId(null);
+                      if (next && next !== sub.title) {
+                        void onRenameSubtask?.(todo.id, sub.id, next);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const next = editingSubtaskTitle.trim();
+                        setEditingSubtaskId(null);
+                        if (next && next !== sub.title) {
+                          void onRenameSubtask?.(todo.id, sub.id, next);
+                        }
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setEditingSubtaskId(null);
+                      }
+                    }}
+                    className="flex-1 min-w-0 rounded border border-[var(--border-strong)] bg-[var(--canvas)] px-2 py-0.5 text-sm text-[var(--text-primary)] focus:outline-none"
+                  />
+                ) : (
+                  <span
+                    onDoubleClick={() => {
+                      setEditingSubtaskId(sub.id);
+                      setEditingSubtaskTitle(sub.title);
+                    }}
+                    className={`flex-1 min-w-0 text-sm break-words cursor-text ${
+                      sub.completed
+                        ? 'line-through text-[var(--text-muted)]'
+                        : 'text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {sub.title}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => void onDeleteSubtask(todo.id, sub.id)}
@@ -508,11 +572,12 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
             >
               {t.categories}
             </label>
-            <select
+            <SelectField
               id="detail-category-select"
               value={todo.categoryId ?? ''}
               onChange={(e) => void onUpdate(todo.id, { categoryId: e.target.value || null })}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-sm text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+              wrapperClassName="w-full"
+              selectClassName="py-2 text-sm"
             >
               <option value="" className="bg-[var(--surface)]">
                 {t.uncategorized}
@@ -522,7 +587,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
                   {cat.name}
                 </option>
               ))}
-            </select>
+            </SelectField>
           </div>
 
           {/* Priority */}
@@ -574,7 +639,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => void onUpdate(todo.id, { dueDate: todayStr })}
+                onClick={() => void onUpdate(todo.id, { startDate: null, dueDate: todayStr })}
                 className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                   todo.dueDate === todayStr && !todo.startDate
                     ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
@@ -585,7 +650,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
               </button>
               <button
                 type="button"
-                onClick={() => void onUpdate(todo.id, { dueDate: tomorrowStr })}
+                onClick={() => void onUpdate(todo.id, { startDate: null, dueDate: tomorrowStr })}
                 className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                   todo.dueDate === tomorrowStr && !todo.startDate
                     ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
@@ -707,6 +772,53 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
           <span>{t.deleteToTrashButton}</span>
         </button>
       </div>
+
+      {subtaskCtxMenu && (
+        <ContextMenu
+          testId="subtask-context-menu"
+          x={subtaskCtxMenu.x}
+          y={subtaskCtxMenu.y}
+          onClose={() => setSubtaskCtxMenu(null)}
+          items={[
+            {
+              id: 'toggle',
+              label: subtaskCtxMenu.subtask.completed ? t.markCompletedDone : t.markComplete,
+              icon: <Check className="h-3.5 w-3.5" />,
+              onSelect: () =>
+                void onToggleSubtask(
+                  todo.id,
+                  subtaskCtxMenu.subtask.id,
+                  !subtaskCtxMenu.subtask.completed,
+                ),
+            },
+            {
+              id: 'rename',
+              label: t.ctxRename,
+              icon: <Pencil className="h-3.5 w-3.5" />,
+              onSelect: () => {
+                setEditingSubtaskId(subtaskCtxMenu.subtask.id);
+                setEditingSubtaskTitle(subtaskCtxMenu.subtask.title);
+              },
+            },
+            {
+              id: 'copy',
+              label: t.ctxCopyTitle,
+              icon: <Copy className="h-3.5 w-3.5" />,
+              onSelect: () => {
+                void navigator.clipboard?.writeText?.(subtaskCtxMenu.subtask.title).catch(() => {});
+              },
+            },
+            { id: 'div-1', divider: true },
+            {
+              id: 'delete',
+              label: t.ctxDeleteSubtask,
+              icon: <Trash2 className="h-3.5 w-3.5" />,
+              danger: true,
+              onSelect: () => void onDeleteSubtask(todo.id, subtaskCtxMenu.subtask.id),
+            },
+          ]}
+        />
+      )}
     </aside>
   );
 });

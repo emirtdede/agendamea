@@ -1,7 +1,7 @@
 {
   "name": "agendamea",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "electron/main.cjs",
   "bin": {
     "agendamea": "./cli/agendamea.cjs"
@@ -30,16 +30,19 @@
     "preview": "vite preview",
     "electron:dev": "electron .",
     "electron:rebuild": "electron-builder install-app-deps",
-    "dist:win": "npm run build && electron-builder --win nsis portable --x64",
+    "dist:win": "npm run build && electron-builder --win portable --x64 && node scripts/build-modern-setup.mjs --rebuild-app",
+    "dist:win:setup": "npm run build && node scripts/build-modern-setup.mjs --rebuild-app",
     "dist:win:appx": "npm run build && electron-builder --win appx --x64",
     "dist:win:dir": "npm run build && electron-builder --win --x64 --dir",
+    "test:setup": "npx tsx scripts/generate-installer-locales.mjs && dotnet run --project installer/Agendamea.Setup.Tests/Agendamea.Setup.Tests.csproj -c Release",
     "icons:generate": "node scripts/generate-icons.mjs",
     "icons:installer": "node scripts/generate-installer-assets.mjs",
-    "test": "tsx --test src/utils/todoLogic.test.ts",
+    "test": "tsx --test src/utils/todoLogic.test.ts src/utils/aiVoice.test.ts",
     "clean": "node -e \"import('node:fs').then(fs=>{fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('dist-server',{recursive:true,force:true});fs.rmSync('release',{recursive:true,force:true});fs.rmSync('server.js',{force:true});})\"",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@fugood/whisper.node": "^1.2.0-rc.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
     "@vitejs/plugin-react": "^6.1.1",
@@ -47,6 +50,7 @@
     "electron-updater": "^6.8.11",
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
+    "node-llama-cpp": "^3.22.3",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^8.3.0"

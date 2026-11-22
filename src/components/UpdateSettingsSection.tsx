@@ -12,6 +12,7 @@ import {
 import { useI18n } from '../i18n/I18nContext';
 import type { LanguageCode } from '../i18n/languages';
 import type { UpdateCheckResult } from '../types';
+import { APP_VERSION } from '../utils/appVersion';
 
 export interface AppUpdateState {
   status:
@@ -144,6 +145,20 @@ interface UpdatesSectionProps {
   onQuitAndInstall?: () => Promise<void>;
 }
 
+const CHECKED_AT_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
+
+function getCheckedAtFormatter(intlLocale: string): Intl.DateTimeFormat {
+  let fmt = CHECKED_AT_FORMATTER_CACHE.get(intlLocale);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(intlLocale, {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    CHECKED_AT_FORMATTER_CACHE.set(intlLocale, fmt);
+  }
+  return fmt;
+}
+
 export const UpdatesSection = React.memo(function UpdatesSection({
   autoUpdateCheck,
   onToggleAutoUpdateCheck,
@@ -160,10 +175,7 @@ export const UpdatesSection = React.memo(function UpdatesSection({
     try {
       const dt = new Date(iso);
       if (Number.isNaN(dt.getTime())) return null;
-      return new Intl.DateTimeFormat(meta.intlLocale, {
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(dt);
+      return getCheckedAtFormatter(meta.intlLocale).format(dt);
     } catch {
       return null;
     }
@@ -173,7 +185,7 @@ export const UpdatesSection = React.memo(function UpdatesSection({
     return null;
   }
 
-  const currentVersion = updateState.result?.currentVersion ?? '1.0.0';
+  const currentVersion = updateState.result?.currentVersion ?? APP_VERSION;
 
   return (
     <section aria-label={t.updatesSectionTitle} className="space-y-2.5">

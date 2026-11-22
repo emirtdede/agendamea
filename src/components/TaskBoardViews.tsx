@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Calendar as CalendarIcon,
   Check,
@@ -22,7 +22,7 @@ import {
   addDaysToDateString,
   classifyEisenhowerQuadrant,
   formatTodoDateSchedule,
-  isTodoOnCalendarDate,
+  normalizeDateRange,
 } from '../utils/todoLogic';
 import { ColorDot } from './ColorDot';
 
@@ -38,6 +38,8 @@ interface SharedBoardViewProps {
   onTogglePin: (id: string, pinned: boolean) => void;
   onUpdateTodo: (id: string, patch: TodoPatch) => Promise<boolean>;
   onTagClick?: (tag: string) => void;
+  onTodoContextMenu?: (e: React.MouseEvent, todo: Todo) => void;
+  onDayContextMenu?: (e: React.MouseEvent, dateStr: string) => void;
 }
 
 interface CompactBoardCardProps {
@@ -52,6 +54,7 @@ interface CompactBoardCardProps {
   onTogglePin: (id: string, next: boolean) => void;
   onTagClick?: (tag: string) => void;
   onDragStart: (e: React.DragEvent<HTMLDivElement>, id: string) => void;
+  onContextMenu?: (e: React.MouseEvent, todo: Todo) => void;
 }
 
 const CompactBoardCard = React.memo(function CompactBoardCard({
@@ -66,6 +69,7 @@ const CompactBoardCard = React.memo(function CompactBoardCard({
   onTogglePin,
   onTagClick,
   onDragStart,
+  onContextMenu,
 }: CompactBoardCardProps) {
   const { t, meta } = useI18n();
   const dueInfo = formatTodoDateSchedule(
@@ -99,6 +103,11 @@ const CompactBoardCard = React.memo(function CompactBoardCard({
           return;
         }
         onDragStart(e, todo.id);
+      }}
+      onContextMenu={(e) => {
+        if (!onContextMenu) return;
+        e.preventDefault();
+        onContextMenu(e, todo);
       }}
       className={`group relative flex flex-col gap-2 rounded-xl border p-3 transition-all duration-150 ${
         isSelected
@@ -236,20 +245,24 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
   onTogglePin,
   onUpdateTodo,
   onTagClick,
+  onTodoContextMenu,
 }: SharedBoardViewProps) {
   const { t } = useI18n();
   const [groupBy, setGroupBy] = useState<KanbanGroupBy>('priority');
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
 
-  const handleCardDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
-    if (dragLocked) {
-      e.preventDefault();
-      return;
-    }
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/agendamea-kanban-todo', id);
-    e.dataTransfer.setData('text/plain', id);
-  };
+  const handleCardDragStart = useCallback(
+    (e: React.DragEvent<HTMLDivElement>, id: string) => {
+      if (dragLocked) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/agendamea-kanban-todo', id);
+      e.dataTransfer.setData('text/plain', id);
+    },
+    [dragLocked],
+  );
 
   const columns = useMemo(() => {
     if (groupBy === 'status') {
@@ -407,6 +420,7 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
                       onTogglePin={onTogglePin}
                       onTagClick={onTagClick}
                       onDragStart={handleCardDragStart}
+                      onContextMenu={onTodoContextMenu}
                     />
                   ))
                 )}
@@ -431,6 +445,7 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
   onTogglePin,
   onUpdateTodo,
   onTagClick,
+  onTodoContextMenu,
 }: SharedBoardViewProps) {
   const { t } = useI18n();
   const [dragOverQuadrant, setDragOverQuadrant] = useState<MatrixQuadrant | null>(null);
@@ -479,15 +494,18 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
     ];
   }, [todos, todayStr, t]);
 
-  const handleCardDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
-    if (dragLocked) {
-      e.preventDefault();
-      return;
-    }
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/agendamea-matrix-todo', id);
-    e.dataTransfer.setData('text/plain', id);
-  };
+  const handleCardDragStart = useCallback(
+    (e: React.DragEvent<HTMLDivElement>, id: string) => {
+      if (dragLocked) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/agendamea-matrix-todo', id);
+      e.dataTransfer.setData('text/plain', id);
+    },
+    [dragLocked],
+  );
 
   const handleQuadrantDrop = (
     e: React.DragEvent<HTMLDivElement>,
@@ -502,13 +520,33 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
     if (!todoId) return;
 
     if (quadrant === 'q1') {
-      void onUpdateTodo(todoId, { important: true, priority: 'high', dueDate: todayStr });
+      void onUpdateTodo(todoId, {
+        important: true,
+        priority: 'high',
+        startDate: null,
+        dueDate: todayStr,
+      });
     } else if (quadrant === 'q2') {
-      void onUpdateTodo(todoId, { important: true, priority: 'high', dueDate: tomorrowStr });
+      void onUpdateTodo(todoId, {
+        important: true,
+        priority: 'high',
+        startDate: null,
+        dueDate: tomorrowStr,
+      });
     } else if (quadrant === 'q3') {
-      void onUpdateTodo(todoId, { important: false, priority: 'normal', dueDate: todayStr });
+      void onUpdateTodo(todoId, {
+        important: false,
+        priority: 'normal',
+        startDate: null,
+        dueDate: todayStr,
+      });
     } else {
-      void onUpdateTodo(todoId, { important: false, priority: 'low', dueDate: null, startDate: null });
+      void onUpdateTodo(todoId, {
+        important: false,
+        priority: 'low',
+        startDate: null,
+        dueDate: null,
+      });
     }
   };
 
@@ -574,6 +612,7 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
                     onTogglePin={onTogglePin}
                     onTagClick={onTagClick}
                     onDragStart={handleCardDragStart}
+                    onContextMenu={onTodoContextMenu}
                   />
                 ))
               )}
@@ -623,6 +662,27 @@ function buildCalendarGrid(
   return cells;
 }
 
+const MONTH_HEADING_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
+const WEEKDAY_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
+
+function getMonthHeadingFormatter(locale: string): Intl.DateTimeFormat {
+  let fmt = MONTH_HEADING_FORMATTER_CACHE.get(locale);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' });
+    MONTH_HEADING_FORMATTER_CACHE.set(locale, fmt);
+  }
+  return fmt;
+}
+
+function getWeekdayFormatter(locale: string): Intl.DateTimeFormat {
+  let fmt = WEEKDAY_FORMATTER_CACHE.get(locale);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+    WEEKDAY_FORMATTER_CACHE.set(locale, fmt);
+  }
+  return fmt;
+}
+
 export const CalendarPlannerView = React.memo(function CalendarPlannerView({
   todos,
   categoryMap,
@@ -632,6 +692,8 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
   onSelectTodo,
   onToggleComplete,
   onUpdateTodo,
+  onTodoContextMenu,
+  onDayContextMenu,
 }: SharedBoardViewProps) {
   const { t, meta } = useI18n();
   const [cursorMonth, setCursorMonth] = useState<{ year: number; month: number }>(() => {
@@ -646,10 +708,9 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
 
   const monthHeading = useMemo(() => {
     try {
-      return new Intl.DateTimeFormat(meta.intlLocale, {
-        month: 'long',
-        year: 'numeric',
-      }).format(new Date(cursorMonth.year, cursorMonth.month, 1));
+      return getMonthHeadingFormatter(meta.intlLocale).format(
+        new Date(cursorMonth.year, cursorMonth.month, 1),
+      );
     } catch {
       return `${cursorMonth.year}-${String(cursorMonth.month + 1).padStart(2, '0')}`;
     }
@@ -657,16 +718,16 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
 
   const weekdayLabels = useMemo(() => {
     const labels: string[] = [];
+    let fmt: Intl.DateTimeFormat | null = null;
+    try {
+      fmt = getWeekdayFormatter(meta.intlLocale);
+    } catch {
+      fmt = null;
+    }
     // 2026-01-05 is a Monday
     for (let i = 0; i < 7; i += 1) {
       const dt = new Date(2026, 0, 5 + i);
-      try {
-        labels.push(
-          new Intl.DateTimeFormat(meta.intlLocale, { weekday: 'short' }).format(dt),
-        );
-      } catch {
-        labels.push(String(i + 1));
-      }
+      labels.push(fmt ? fmt.format(dt) : String(i + 1));
     }
     return labels;
   }, [meta.intlLocale]);
@@ -691,18 +752,39 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
 
   const todosByDateMap = useMemo(() => {
     const map = new Map<string, Todo[]>();
+    const firstDate = gridCells[0]?.dateStr;
+    const lastDate = gridCells[gridCells.length - 1]?.dateStr;
     for (const cell of gridCells) {
-      const matching = scheduledTodos.filter((item) =>
-        isTodoOnCalendarDate(item, cell.dateStr),
-      );
-      matching.sort((a, b) => {
-        if (a.completed !== b.completed) return a.completed ? 1 : -1;
-        const timeA = a.dueTime || '99:99';
-        const timeB = b.dueTime || '99:99';
-        if (timeA !== timeB) return timeA.localeCompare(timeB);
-        return a.sortOrder - b.sortOrder;
-      });
-      map.set(cell.dateStr, matching);
+      map.set(cell.dateStr, []);
+    }
+    if (!firstDate || !lastDate) return map;
+
+    for (const item of scheduledTodos) {
+      const { startDate, dueDate } = normalizeDateRange(item.startDate, item.dueDate);
+      const s = startDate ?? dueDate;
+      const e = dueDate ?? startDate;
+      if (!s || !e || e < firstDate || s > lastDate) continue;
+      if (s === e) {
+        map.get(s)?.push(item);
+      } else {
+        for (const cell of gridCells) {
+          if (cell.dateStr >= s && cell.dateStr <= e) {
+            map.get(cell.dateStr)?.push(item);
+          }
+        }
+      }
+    }
+
+    for (const matching of map.values()) {
+      if (matching.length > 1) {
+        matching.sort((a, b) => {
+          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+          const timeA = a.dueTime || '99:99';
+          const timeB = b.dueTime || '99:99';
+          if (timeA !== timeB) return timeA.localeCompare(timeB);
+          return a.sortOrder - b.sortOrder;
+        });
+      }
     }
     return map;
   }, [gridCells, scheduledTodos]);
@@ -725,7 +807,20 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
       e.dataTransfer.getData('text/agendamea-cal-todo') ||
       e.dataTransfer.getData('text/plain');
     if (!todoId) return;
-    void onUpdateTodo(todoId, { dueDate: dateStr });
+
+    const dragged = todos.find((item) => item.id === todoId);
+    if (dragged?.startDate && dragged?.dueDate && dragged.startDate !== dragged.dueDate) {
+      const spanDays = Math.max(
+        0,
+        Math.round((Date.parse(dragged.dueDate) - Date.parse(dragged.startDate)) / 86_400_000),
+      );
+      void onUpdateTodo(todoId, {
+        startDate: dateStr,
+        dueDate: addDaysToDateString(dateStr, spanDays),
+      });
+    } else {
+      void onUpdateTodo(todoId, { startDate: null, dueDate: dateStr });
+    }
   };
 
   const stepMonth = (delta: number) => {
@@ -803,7 +898,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
       {showUnscheduled && unscheduledTodos.length > 0 && (
         <div
           data-testid="calendar-unscheduled-drawer"
-          className="rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)]/60 p-3 space-y-2"
+          className="animate-accordion rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)]/60 p-3 space-y-2"
         >
           <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span className="font-display font-semibold text-[var(--text-secondary)]">
@@ -821,6 +916,12 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
                   draggable={!dragLocked}
                   onDragStart={(e) => handleTaskDragStart(e, todo.id)}
                   onClick={() => onSelectTodo(todo.id)}
+                  onContextMenu={(e) => {
+                    if (!onTodoContextMenu) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onTodoContextMenu(e, todo);
+                  }}
                   className={`inline-flex max-w-[240px] cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
                     selected
                       ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
@@ -871,6 +972,11 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
                   if (dragOverDate === cell.dateStr) setDragOverDate(null);
                 }}
                 onDrop={(e) => handleDayDrop(e, cell.dateStr)}
+                onContextMenu={(e) => {
+                  if (!onDayContextMenu) return;
+                  e.preventDefault();
+                  onDayContextMenu(e, cell.dateStr);
+                }}
                 className={`min-h-[96px] border-b border-r border-[var(--border)] p-1.5 transition-colors ${
                   isOver
                     ? 'bg-[var(--accent-soft)]/45'
@@ -903,6 +1009,12 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
                         draggable={!dragLocked}
                         onDragStart={(e) => handleTaskDragStart(e, todo.id)}
                         onClick={() => onSelectTodo(todo.id)}
+                        onContextMenu={(e) => {
+                          if (!onTodoContextMenu) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onTodoContextMenu(e, todo);
+                        }}
                         className={`group flex cursor-pointer items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] transition-colors ${
                           selected
                             ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'

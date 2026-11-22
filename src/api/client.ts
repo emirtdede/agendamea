@@ -1,8 +1,12 @@
 import type {
+  AiModelStatus,
+  AiStatusPayload,
   AppSettings,
   BootstrapPayload,
   Category,
   CategoryPatch,
+  HardwareProfile,
+  HybridRagHit,
   OneDriveStatus,
   Priority,
   Subtask,
@@ -10,18 +14,27 @@ import type {
   Todo,
   TodoPatch,
   UpdateCheckResult,
+  VoiceAskResponse,
   WebhookTestResult,
 } from '../types';
 
-const DEFAULT_TIMEOUT_MS = 10000;
+const DEFAULT_TIMEOUT_MS = 10_000;
+const AI_SEARCH_TIMEOUT_MS = 20_000;
+const AI_ASK_TIMEOUT_MS = 45_000;
+const AI_STT_TIMEOUT_MS = 60_000;
+const AI_REINDEX_TIMEOUT_MS = 120_000;
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
+async function request<T>(
+  url: string,
+  options?: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<T> {
   const controller = new AbortController();
   let timedOut = false;
   const timer = window.setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, DEFAULT_TIMEOUT_MS);
+  }, timeoutMs);
 
   const signal =
     options?.signal && typeof AbortSignal.any === 'function'
@@ -75,6 +88,10 @@ const enc = (id: string) => encodeURIComponent(id);
 export const api = {
   bootstrap(): Promise<BootstrapPayload> {
     return request<BootstrapPayload>('/api/bootstrap');
+  },
+
+  getSettings(): Promise<AppSettings> {
+    return request<AppSettings>('/api/settings');
   },
 
   createCategory(input: {
@@ -296,5 +313,103 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(options ?? {}),
     });
+  },
+
+  getAiStatus(force = false): Promise<AiStatusPayload> {
+    return request<AiStatusPayload>(force ? '/api/ai/status?force=1' : '/api/ai/status');
+  },
+
+  getHardwareProfile(force = false): Promise<HardwareProfile> {
+    return request<HardwareProfile>(force ? '/api/ai/hardware?force=1' : '/api/ai/hardware');
+  },
+
+  getAiModels(): Promise<{
+    modelsDir: string;
+    installedDiskBytes: number;
+    models: AiModelStatus[];
+  }> {
+    return request('/api/ai/models');
+  },
+
+  downloadAiModel(modelId: string): Promise<{ ok: boolean; started?: boolean; modelId?: string; error?: string; code?: string }> {
+    return request(`/api/ai/models/${enc(modelId)}/download`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  cancelAiModelDownload(modelId: string): Promise<{ ok: boolean; cancelled: boolean }> {
+    return request(`/api/ai/models/${enc(modelId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  deleteAiModel(modelId: string): Promise<{ ok: boolean; removed?: boolean }> {
+    return request(`/api/ai/models/${enc(modelId)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  deleteAllAiModels(): Promise<{ ok: boolean; removedFiles: number }> {
+    return request('/api/ai/models/all', {
+      method: 'DELETE',
+    });
+  },
+
+  reindexRag(): Promise<{ ok: boolean; mode: string; recomputed: number; skipped: number }> {
+    return request(
+      '/api/ai/rag/reindex',
+      {
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+      AI_REINDEX_TIMEOUT_MS,
+    );
+  },
+
+  searchHybridRag(
+    query: string,
+    topK = 5,
+  ): Promise<{ hits: HybridRagHit[]; disambiguationRequired: boolean; mode: string }> {
+    return request(
+      '/api/ai/rag/search',
+      {
+        method: 'POST',
+        body: JSON.stringify({ query, topK }),
+      },
+      AI_SEARCH_TIMEOUT_MS,
+    );
+  },
+
+  askAi(payload: {
+    text: string;
+    language?: string;
+    readOnly?: boolean;
+    confirmToken?: string;
+    selectedTodoId?: string;
+  }): Promise<VoiceAskResponse> {
+    return request<VoiceAskResponse>(
+      '/api/ai/ask',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+      AI_ASK_TIMEOUT_MS,
+    );
+  },
+
+  transcribeAudio(
+    pcmBase64: string,
+    language?: string,
+  ): Promise<{ ok: boolean; text?: string; code?: string; message?: string }> {
+    return request(
+      '/api/ai/transcribe',
+      {
+        method: 'POST',
+        body: JSON.stringify({ pcmBase64, language }),
+      },
+      AI_STT_TIMEOUT_MS,
+    );
   },
 };

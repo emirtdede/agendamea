@@ -24,6 +24,7 @@ interface TodoItemProps {
   onDrop: (e: React.DragEvent<HTMLDivElement>, id: string) => void;
   onDragEnd: () => void;
   onTagClick?: (tag: string) => void;
+  onContextMenu?: (e: React.MouseEvent, todo: Todo) => void;
 }
 
 export const TodoItem = React.memo(function TodoItem({
@@ -45,6 +46,7 @@ export const TodoItem = React.memo(function TodoItem({
   onDrop,
   onDragEnd,
   onTagClick,
+  onContextMenu,
 }: TodoItemProps) {
   const { t, meta } = useI18n();
   const dueInfo = formatTodoDateSchedule(
@@ -190,6 +192,11 @@ export const TodoItem = React.memo(function TodoItem({
         onDrop(e, todo.id);
       }}
       onDragEnd={onDragEnd}
+      onContextMenu={(e) => {
+        if (!onContextMenu) return;
+        e.preventDefault();
+        onContextMenu(e, todo);
+      }}
       className={`group relative flex items-start gap-3 px-4 py-3 border-b border-[var(--border)] last:border-b-0 transition-colors duration-150 ${
         isSelected
           ? 'bg-[var(--accent-soft)]'

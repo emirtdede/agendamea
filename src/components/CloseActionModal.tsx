@@ -126,5 +126,3 @@ export function CloseActionModal({ onSelectAction, onCancel }: CloseActionModalP
     </div>
   );
 }
-
-export default CloseActionModal;

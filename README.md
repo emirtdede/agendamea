@@ -25,13 +25,14 @@
 <div align="center">
 
 [![CI](https://img.shields.io/github/actions/workflow/status/emirtdede/agendamea/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI&color=000000)](https://github.com/emirtdede/agendamea/actions/workflows/ci.yml)
-![Release](https://img.shields.io/badge/Release-v1.0.0-000000?style=flat-square)
+![Release](https://img.shields.io/badge/Release-v1.1.0-000000?style=flat-square)
 ![Electron](https://img.shields.io/badge/Electron-45.4-000000?style=flat-square&logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19.0-000000?style=flat-square&logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7.0-000000?style=flat-square&logo=typescript&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-000000?style=flat-square&logo=sqlite&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-000000?style=flat-square&logo=tailwindcss&logoColor=white)
-![MCP](https://img.shields.io/badge/MCP-20_Tools_Built--in-000000?style=flat-square)
+![MCP](https://img.shields.io/badge/MCP-22_Tools_Built--in-000000?style=flat-square)
+![Local AI](https://img.shields.io/badge/Local_AI-Whisper_%2B_Qwen3_%2B_Ollama-000000?style=flat-square)
 ![CLI](https://img.shields.io/badge/CLI-ag_Headless-000000?style=flat-square)
 ![Webhooks](https://img.shields.io/badge/Webhooks-Bi--Directional-000000?style=flat-square)
 ![Cloud Sync](https://img.shields.io/badge/Cloud_Sync-Multi--Provider-000000?style=flat-square)
@@ -53,7 +54,7 @@
     <img src="public/logos/agendamea-mark-light.svg" alt="Agendamea Logo" width="108" height="108" />
   </picture>
   <h3>Agendamea - Fast, Local-First Windows Task Manager &amp; Headless Automation Suite</h3>
-  <p><em>4-Way Planning Views, Built-in 20-Tool MCP Server, Short Terminal CLI (ag), Headless Webhook Daemon, Zero-Cost Multi-Cloud Sync, Custom HEX Themes, Dynamic App Icons &amp; 73 Languages</em></p>
+  <p><em>4-Way Planning Views, On-Device Local AI &amp; Voice Dictation, Built-in 22-Tool MCP Server, Notification Center &amp; Focus Mode, Custom Keyboard Shortcuts, Short Terminal CLI (ag), Zero-Cost Multi-Cloud Sync, 73 Languages &amp; Modern Frameless Setup</em></p>
   <p><strong>Developed &amp; Published by <a href="https://vellium.dev">Vellium</a></strong></p>
 </div>
 
@@ -61,9 +62,9 @@
 
 ## <img src="assets/icons/overview.svg" width="20" height="20" align="absmiddle" alt="" /> Project Overview
 
-**Agendamea (`v1.0.0`)** is a local-first, offline-first daily task manager and automation suite built for **Windows Desktop (Electron 45)** and **PWA** environments with **React 19**, **TypeScript 7**, **Express 4**, and **WAL-mode SQLite (`better-sqlite3`)**. Every change - tasks, optional start/due date ranges, due times, `#tags`, subtasks, auto-saving notes, categories, drag-and-drop order, and settings - saves instantaneously to your device with zero accounts, subscriptions, or external telemetry.
+**Agendamea (`v1.1.0`)** is a local-first, offline-first daily task manager, on-device AI voice assistant, and automation suite built for **Windows Desktop (Electron 45)** and **PWA** environments with **React 19**, **TypeScript 7**, **Express 4**, and **WAL-mode SQLite (`better-sqlite3`, schema v4 with FTS5 + Hybrid RAG)**. Every change - tasks, optional start/due date ranges, due times, `#tags`, subtasks, auto-saving notes, categories, custom keyboard shortcuts, notification profiles, and settings - saves instantaneously to your device with zero accounts, subscriptions, or external telemetry.
 
-It goes far beyond a standalone checklist. For developers, power users, and AI coding agents, Agendamea ships with **100% headless control** even when the desktop window has never been opened: a **short quote-free terminal CLI** (`ag`, `agenda`, `agendamea`), a **built-in 20-tool Model Context Protocol (MCP) server** (`ag mcp`), a **headless local API & webhook daemon** (`ag serve`), **bi-directional HMAC-SHA256 webhooks** (Discord, Slack, n8n, Zapier, Make, custom servers) with multi-URL retry and persistent delivery logs, and **live SSE UI synchronization**.
+It goes far beyond a standalone checklist. For developers, power users, and AI coding agents, Agendamea ships with **100% on-device Local AI & Voice Dictation** (Whisper.cpp + Qwen3 + Ollama / LM Studio with selectable microphone, noise suppression, and adaptive VAD), a **Notification Center with Focus Mode and per-event In-App / Windows Desktop controls**, **universal right-click context menus**, **100% customizable keyboard shortcuts**, a **short quote-free terminal CLI** (`ag`, `agenda`, `agendamea`), a **built-in 22-tool Model Context Protocol (MCP) server** (`ag mcp`), a **headless local API & webhook daemon** (`ag serve`), **bi-directional HMAC-SHA256 webhooks**, and **live SSE UI synchronization**.
 
 For effortless cross-device backup without vendor lock-in or server costs, Agendamea provides **Zero-Cost Multi-Cloud Folder Sync** across **OneDrive**, **Google Drive**, **iCloud Drive**, **Dropbox**, or any custom folder with atomic temp-file swaps, **15-day rolling daily backups**, automatic corrupt-primary fallback, and reinstall recovery.
 
@@ -312,10 +313,10 @@ Add Agendamea to **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf**, 
 
 ### Installing as an End User (Windows)
 
-1. Download **`Agendamea-Setup-1.0.0-win-x64.exe`** (or portable **`Agendamea-Portable-1.0.0-win-x64.exe`**) from [GitHub Releases](https://github.com/emirtdede/agendamea/releases), or install via the [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ).
-2. Run the setup file. **No administrator (UAC) elevation is required** - it installs per-user (`asInvoker`, `perMachine: false`) into `%LOCALAPPDATA%\Programs\Agendamea`.
-3. Select your language in the multi-language Vellium setup wizard and choose your install directory.
-4. Launch **Agendamea** from the Start Menu or Desktop shortcut (or run `ag` from any terminal after installing the CLI shim).
+1. Download **`Agendamea-Setup-1.1.0-win-x64.exe`** (or portable **`Agendamea-Portable-1.1.0-win-x64.exe`**) from [GitHub Releases](https://github.com/emirtdede/agendamea/releases), or install via the [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ).
+2. Run the modern frameless monochrome setup. **No administrator (UAC) elevation is required** - it installs per-user into `%LOCALAPPDATA%\Programs\Agendamea`.
+3. Open **Options** to switch live across all **73 languages** (with RTL support), pick your install directory, or toggle Desktop/Start Menu shortcuts, Windows startup, and `ag` CLI PATH shims (supports silent `/S`, `/DIR="..."`, `--uninstall`, `--delete-data`).
+4. Launch **Agendamea** from the Start Menu or Desktop shortcut (or run `ag` from any terminal).
 
 **SmartScreen on unsigned direct downloads:** For direct GitHub downloads outside the Microsoft Store, Windows SmartScreen may show "Windows protected your PC" on first run. Select **More info -> Run anyway**. The Microsoft Store package is signed by Microsoft and installs without SmartScreen prompts.
 
@@ -365,11 +366,11 @@ npm run dist:win:dir
 
 Build artifacts are produced under `release/`:
 
-- **NSIS Setup Installer** - `Agendamea-Setup-1.0.0-win-x64.exe` (with `.blockmap` & `latest.yml` for silent delta updates)
-- **Portable Executable** - `Agendamea-Portable-1.0.0-win-x64.exe`
-- **Microsoft Store Package** - `Agendamea-Store-1.0.0-win-x64.appx`
+- **Modern Frameless Setup Installer** - `Agendamea-Setup-1.1.0-win-x64.exe` (single-file monochrome `640x420` WPF setup + bundled `uninstall.exe`, silent `/S` support)
+- **Portable Executable** - `Agendamea-Portable-1.1.0-win-x64.exe`
+- **Microsoft Store Package** - `Agendamea-Store-1.1.0-win-x64.appx`
 - **Unpacked Build** - `release/win-unpacked/` via `npm run dist:win:dir`
-- **Checksums & WinGet** - `SHA256SUMS.txt` and `winget/manifests/v/Vellium/Agendamea/1.0.0/`
+- **Checksums & WinGet** - `SHA256SUMS.txt` and `winget/manifests/v/Vellium/Agendamea/1.1.0/`
 
 Published builds and release notes are available on the [GitHub Releases](https://github.com/emirtdede/agendamea/releases) page.
 
@@ -402,7 +403,7 @@ See [`LICENSE`](LICENSE) for the full MIT license text. Distributions delivered 
     <img src="public/logos/agendamea-mark-light.svg" alt="Agendamea Logosu" width="108" height="108" />
   </picture>
   <h3>Agendamea - Windows İçin Yerel Öncelikli Görev Yöneticisi, CLI ve MCP Otomasyon Paketi</h3>
-  <p><em>4 Farklı Planlama Görünümü, Yerleşik 20 Araçlı MCP Sunucusu, Kısa Terminal CLI (ag), Arayüzsüz Webhook Servisi, Ücretsiz Çoklu Bulut Eşitleme, Özel HEX Temalar, Dinamik İkonlar ve 73 Dil</em></p>
+  <p><em>4 Farklı Planlama Görünümü, Cihaz İçi Yerel Yapay Zeka ve Sesli Dikte, Yerleşik 22 Araçlı MCP Sunucusu, Bildirim Merkezi ve Odak Modu, Özelleştirilebilir Kısayollar, Kısa Terminal CLI (ag), Ücretsiz Çoklu Bulut Eşitleme, 73 Dil ve Modern Çerçevesiz Kurulum</em></p>
   <p><strong>Geliştirici ve Yayıncı: <a href="https://vellium.dev">Vellium</a></strong></p>
 </div>
 
@@ -410,9 +411,9 @@ See [`LICENSE`](LICENSE) for the full MIT license text. Distributions delivered 
 
 ## <img src="assets/icons/overview.svg" width="20" height="20" align="absmiddle" alt="" /> Proje Genel Bakışı
 
-**Agendamea (`v1.0.0`)**, **React 19**, **TypeScript 7**, **Express 4** ve **WAL modlu SQLite (`better-sqlite3`)** ile geliştirilmiş; **Windows Masaüstü (Electron 45)** ve **PWA** için tamamen yerel öncelikli (local-first) görev yöneticisi ve otomasyon aracıdır. Görevler, isteğe bağlı tarih aralıkları, saatler, `#etiketler`, alt görevler, otomatik kaydedilen notlar, kategoriler ve ayarlar; hesap, abonelik veya telemetri olmadan anında cihazınıza kaydedilir.
+**Agendamea (`v1.1.0`)**, **React 19**, **TypeScript 7**, **Express 4** ve **WAL modlu SQLite (`better-sqlite3`, FTS5 + Hibrit RAG v4)** ile geliştirilmiş; **Windows Masaüstü (Electron 45)** ve **PWA** için tamamen yerel öncelikli (local-first) görev yöneticisi, cihaz içi sesli asistan ve otomasyon aracıdır. Görevler, isteğe bağlı tarih aralıkları, saatler, `#etiketler`, alt görevler, otomatik kaydedilen notlar, kategoriler, bildirim profilleri, özel klavye kısayolları ve ayarlar; hesap, abonelik veya telemetri olmadan anında cihazınıza kaydedilir.
 
-Agendamea yalnızca görsel bir arayüzle sınırlı değildir. Geliştiriciler, ileri düzey kullanıcılar ve yapay zekâ ajanları için uygulama penceresi hiç açılmadan **%100 arayüzsüz tam kontrol** sunar: tırnaksız kısa **terminal CLI** (`ag`, `agenda`, `agendamea`), yerleşik **20 araçlı Model Context Protocol (MCP) sunucusu** (`ag mcp`), arka planda çalışan **arayüzsüz API ve Webhook servisi** (`ag serve`), çoklu URL, otomatik yeniden deneme ve SQLite teslimat günlüklerine sahip **çift yönlü HMAC-SHA256 webhook motoru** ve açık arayüz için **canlı SSE senkronizasyonu**.
+Agendamea yalnızca görsel bir arayüzle sınırlı değildir. **%100 cihaz içi Yerel Yapay Zeka ve Sesli Dikte** (seçilebilir mikrofon, gürültü filtresi, uyarlanabilir VAD, Whisper.cpp + Qwen3 + Ollama / LM Studio), **Odak Modu ve uygulama içi / Windows masaüstü kanal ayarlı Bildirim Merkezi**, **her yüzeyde sağ tık bağlam menüleri**, **tümü özelleştirilebilir klavye kısayolları**, tırnaksız kısa **terminal CLI** (`ag`, `agenda`, `agendamea`), yerleşik **22 araçlı Model Context Protocol (MCP) sunucusu** (`ag mcp`), arka planda çalışan **arayüzsüz API ve Webhook servisi** (`ag serve`) ve **canlı SSE senkronizasyonu** ile gelir.
 
 Sunucu maliyeti olmadan cihazlar arası yedekleme için **OneDrive**, **Google Drive**, **iCloud Drive**, **Dropbox** veya dilediğiniz klasörle atomik **15 günlük döngüsel bulut eşitleme** sunar.
 
@@ -455,10 +456,10 @@ Sunucu maliyeti olmadan cihazlar arası yedekleme için **OneDrive**, **Google D
 
 ### Son Kullanıcı İçin Kurulum (Windows)
 
-1. [GitHub Releases](https://github.com/emirtdede/agendamea/releases) sayfasından **`Agendamea-Setup-1.0.0-win-x64.exe`** (veya taşınabilir **`Agendamea-Portable-1.0.0-win-x64.exe`**) dosyasını indirin ya da [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ) üzerinden kurun.
-2. Kurulum dosyasını çalıştırın. **Yönetici (UAC) izni istenmez** - kullanıcı profiline (`%LOCALAPPDATA%\Programs\Agendamea`) kurulur.
-3. Çok dilli Vellium kurulum sihirbazında dil ve kurulum klasörünü seçin.
-4. Başlat menüsü veya Masaüstü kısayolundan başlatın; terminal kullanımı için Ayarlar -> Dokümantasyon -> **Terminale Kur (ag)** veya `node cli/agendamea.cjs install` komutunu kullanın.
+1. [GitHub Releases](https://github.com/emirtdede/agendamea/releases) sayfasından **`Agendamea-Setup-1.1.0-win-x64.exe`** (veya taşınabilir **`Agendamea-Portable-1.1.0-win-x64.exe`**) dosyasını indirin ya da [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ) üzerinden kurun.
+2. Modern çerçevesiz monokrom kurulumu çalıştırın. **Yönetici (UAC) izni istenmez** - kullanıcı profiline (`%LOCALAPPDATA%\Programs\Agendamea`) kurulur.
+3. **Seçenekler** panelinden 73 dil arasında anlık geçiş yapın, kurulum klasörünü ve kısayol / başlangıç / CLI PATH seçeneklerini belirleyin (sessiz `/S`, `/DIR="..."`, `--uninstall`, `--delete-data` destekli).
+4. Başlat menüsü veya Masaüstü kısayolundan başlatın; terminalde doğrudan `ag` komutunu kullanın.
 
 ### Kaynaktan Çalıştırma ve Derleme
 
@@ -486,10 +487,10 @@ npm run dist:win:appx
 
 Derleme çıktıları `release/` altında üretilir:
 
-- **NSIS Kurulum Paketi** - `Agendamea-Setup-1.0.0-win-x64.exe` (`latest.yml` ve `.blockmap` delta güncelleme dosyalarıyla)
-- **Taşınabilir (Portable) Sürüm** - `Agendamea-Portable-1.0.0-win-x64.exe`
-- **Microsoft Store Paketi** - `Agendamea-Store-1.0.0-win-x64.appx`
-- **Doğrulama Özetleri ve WinGet** - `SHA256SUMS.txt` ve `winget/manifests/v/Vellium/Agendamea/1.0.0/`
+- **Modern Çerçevesiz Kurulum Paketi** - `Agendamea-Setup-1.1.0-win-x64.exe` (tek dosya monokrom `640x420` WPF kurulum + gömülü `uninstall.exe`, sessiz `/S` desteği)
+- **Taşınabilir (Portable) Sürüm** - `Agendamea-Portable-1.1.0-win-x64.exe`
+- **Microsoft Store Paketi** - `Agendamea-Store-1.1.0-win-x64.appx`
+- **Doğrulama Özetleri ve WinGet** - `SHA256SUMS.txt` ve `winget/manifests/v/Vellium/Agendamea/1.1.0/`
 
 ---
 

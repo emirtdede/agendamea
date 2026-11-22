@@ -33,3 +33,6 @@ jobs:
 
       - name: Build production client & server
         run: npm run build
+
+      - name: Packaged Windows directory smoke check
+        run: npm run dist:win:dir

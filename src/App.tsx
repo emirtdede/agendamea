@@ -8,24 +8,33 @@ import React, {
 } from 'react';
 import {
   Calendar as CalendarIcon,
+  CalendarPlus,
+  Check,
   CheckCheck,
-  ChevronDown,
   Cloud,
   Columns3,
+  Copy,
+  Eye,
   FolderOpen,
   Grid2x2,
   Hash,
   List,
   Menu,
+  Pin,
   SlidersHorizontal,
+  Star,
+  Sun,
+  Trash2,
   Upload,
   X,
 } from 'lucide-react';
 import { api } from './api/client';
 import { CloseActionModal } from './components/CloseActionModal';
 import { ColorDot } from './components/ColorDot';
+import { ContextMenu } from './components/ContextMenu';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { QuickAddBar } from './components/QuickAddBar';
+import { SelectField } from './components/SelectField';
 import { Sidebar } from './components/Sidebar';
 import {
   CalendarPlannerView,
@@ -39,10 +48,18 @@ import { WelcomeModal } from './components/WelcomeModal';
 import { WindowControls } from './components/WindowControls';
 import { useAppUpdater } from './hooks/useAppUpdater';
 import { useDelayedFocus } from './hooks/useDelayedFocus';
+import { useNotificationCenter } from './hooks/useNotificationCenter';
 import { useThemeAndPreferences } from './hooks/useThemeAndPreferences';
 import { useToast } from './hooks/useToast';
 import { useTodayDate } from './hooks/useTodayDate';
 import { useTodoDragReorder } from './hooks/useTodoDragReorder';
+import {
+  DEFAULT_CUSTOM_SHORTCUTS,
+  matchesShortcutEvent,
+  sanitizeCustomShortcuts,
+  type CustomShortcutsMap,
+  type ShortcutActionId,
+} from './utils/shortcuts';
 import { I18nProvider } from './i18n/I18nContext';
 import type { LanguageCode } from './i18n/languages';
 import { localizeErrorMessage } from './i18n/translations';
@@ -64,8 +81,14 @@ import type {
   Todo,
   TodoPatch,
 } from './types';
-import { clampZoomPercent, normalizeHexColor, ZOOM_PRESETS } from './utils/themes';
 import {
+  clampZoomPercent,
+  getNextZoomPreset,
+  getPrevZoomPreset,
+  normalizeHexColor,
+} from './utils/themes';
+import {
+  addDaysToDateString,
   computeViewCounts,
   filterAndSortTodos,
   sortCategoriesWithPin,
@@ -143,6 +166,23 @@ export default function App() {
   const [webhookEnabled, setWebhookEnabled] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
+  const [voiceShortcut, setVoiceShortcut] = useState('CommandOrControl+Alt+Space');
+  const [globalQuickAddShortcutKey, setGlobalQuickAddShortcutKey] = useState(
+    'CommandOrControl+Alt+N',
+  );
+  const [customShortcuts, setCustomShortcuts] = useState<CustomShortcutsMap>({
+    ...DEFAULT_CUSTOM_SHORTCUTS,
+  });
+  const [todoContextMenu, setTodoContextMenu] = useState<{
+    x: number;
+    y: number;
+    todo: Todo;
+  } | null>(null);
+  const [dayContextMenu, setDayContextMenu] = useState<{
+    x: number;
+    y: number;
+    dateStr: string;
+  } | null>(null);
 
   const {
     undoToast,
@@ -195,7 +235,19 @@ export default function App() {
     handleToggleAutoUpdateCheck,
   } = useAppUpdater({ tRef, showInfoToast, formatUiError });
 
-  // Listen for Electron close / global quick-add / Windows Jump List events
+  const {
+    notificationProfile,
+    notificationLeadMinutes,
+    notificationChannels,
+    hydrateNotificationSettings,
+    applyNotificationProfile,
+    updateNotificationChannel,
+    updateNotificationLeadMinutes,
+    dispatchNotification,
+    sendTestNotification,
+  } = useNotificationCenter({ todos, tRef, showInfoToast });
+
+  // Listen for Electron close / global quick-add / desktop notification click / Windows Jump List events
   useEffect(() => {
     const unsubClose = window.agendameaWindow?.onCloseRequested?.(() => {
       setIsCloseModalOpen(true);
@@ -214,14 +266,24 @@ export default function App() {
         setActiveView({ type: 'smart', id: viewId });
       }
     });
+    const unsubFocusTodo = window.agendameaWindow?.onFocusTodo?.((todoId) => {
+      if (typeof todoId === 'string' && todoId.trim()) {
+        setIsSettingsOpen(false);
+        setIsWelcomeOpen(false);
+        setIsCloseModalOpen(false);
+        setActiveView({ type: 'smart', id: 'all' });
+        setSelectedTodoId(todoId);
+      }
+    });
     return () => {
       if (typeof unsubClose === 'function') unsubClose();
       if (typeof unsubQuickAdd === 'function') unsubQuickAdd();
       if (typeof unsubNavView === 'function') unsubNavView();
+      if (typeof unsubFocusTodo === 'function') unsubFocusTodo();
     };
   }, [scheduleFocus]);
 
-  const loadData = useCallback(async (silent = false) => {
+  const loadData = useCallback(async (silent = false, fromExternalSse = false) => {
     if (!silent) {
       setIsLoading(true);
       setLoadError(null);
@@ -239,7 +301,18 @@ export default function App() {
       setWebhookEnabled(Boolean(data.settings.webhookEnabled));
       setWebhookUrl(data.settings.webhookUrl ?? '');
       setWebhookSecret(data.settings.webhookSecret ?? '');
-      await syncFromBootstrapSettings(data.settings);
+      if (typeof data.settings.voiceShortcut === 'string' && data.settings.voiceShortcut.trim()) {
+        setVoiceShortcut(data.settings.voiceShortcut.trim());
+      }
+      if (
+        typeof data.settings.globalQuickAddShortcutKey === 'string' &&
+        data.settings.globalQuickAddShortcutKey.trim()
+      ) {
+        setGlobalQuickAddShortcutKey(data.settings.globalQuickAddShortcutKey.trim());
+      }
+      setCustomShortcuts(sanitizeCustomShortcuts(data.settings.customShortcuts));
+      hydrateNotificationSettings(data.settings);
+      await syncFromBootstrapSettings(data.settings, { fromExternalSse });
       setLoadError(null);
 
       // First-launch OneDrive backup detection when local DB is completely empty (e.g. after OS format / reinstall)
@@ -317,11 +390,19 @@ export default function App() {
     let refreshTimer: number | null = null;
     try {
       source = new EventSource('/api/events');
-      source.onmessage = () => {
+      source.onmessage = (evt) => {
+        try {
+          const parsed = JSON.parse(evt.data) as { type?: string };
+          if (parsed.type && parsed.type !== 'changed') {
+            return;
+          }
+        } catch {
+          // Non-JSON keepalive or legacy payload -> treat as refresh
+        }
         if (refreshTimer !== null) window.clearTimeout(refreshTimer);
         refreshTimer = window.setTimeout(() => {
           refreshTimer = null;
-          void loadData(true);
+          void loadData(true, true);
         }, 120);
       };
     } catch {
@@ -385,6 +466,7 @@ export default function App() {
     tagFilter,
     focusSidebarSearch,
     zoomPercent,
+    customShortcuts,
   });
   keyStateRef.current = {
     isSettingsOpen,
@@ -398,6 +480,7 @@ export default function App() {
     tagFilter,
     focusSidebarSearch,
     zoomPercent,
+    customShortcuts,
   };
 
   useEffect(() => {
@@ -415,16 +498,14 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
         if (e.key === '=' || e.key === '+') {
           e.preventDefault();
-          const idx = ZOOM_PRESETS.indexOf(state.zoomPercent as (typeof ZOOM_PRESETS)[number]);
-          const next = ZOOM_PRESETS[Math.min(ZOOM_PRESETS.length - 1, idx >= 0 ? idx + 1 : 3)];
+          const next = getNextZoomPreset(state.zoomPercent);
           setZoomPercent(next);
           void api.updateSettings({ zoomPercent: next }).catch(() => {});
           return;
         }
         if (e.key === '-') {
           e.preventDefault();
-          const idx = ZOOM_PRESETS.indexOf(state.zoomPercent as (typeof ZOOM_PRESETS)[number]);
-          const next = ZOOM_PRESETS[Math.max(0, idx >= 0 ? idx - 1 : 1)];
+          const next = getPrevZoomPreset(state.zoomPercent);
           setZoomPercent(next);
           void api.updateSettings({ zoomPercent: next }).catch(() => {});
           return;
@@ -465,16 +546,47 @@ export default function App() {
 
       if (isTypingField || state.isSettingsOpen || state.isWelcomeOpen || state.isCloseModalOpen) return;
 
-      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      const sc = state.customShortcuts;
+      if (matchesShortcutEvent(e, sc.openSettings)) {
         e.preventDefault();
-        keyboardReorderRef.current?.(e.key === 'ArrowUp' ? 'up' : 'down');
+        setSettingsInitialTab('appearance');
+        setIsSettingsOpen(true);
         return;
       }
-
-      if (e.key === '/') {
+      if (matchesShortcutEvent(e, sc.reorderUp)) {
+        e.preventDefault();
+        keyboardReorderRef.current?.('up');
+        return;
+      }
+      if (matchesShortcutEvent(e, sc.reorderDown)) {
+        e.preventDefault();
+        keyboardReorderRef.current?.('down');
+        return;
+      }
+      if (matchesShortcutEvent(e, sc.viewList)) {
+        e.preventDefault();
+        setLayoutMode('list');
+        return;
+      }
+      if (matchesShortcutEvent(e, sc.viewKanban)) {
+        e.preventDefault();
+        setLayoutMode('kanban');
+        return;
+      }
+      if (matchesShortcutEvent(e, sc.viewCalendar)) {
+        e.preventDefault();
+        setLayoutMode('calendar');
+        return;
+      }
+      if (matchesShortcutEvent(e, sc.viewMatrix)) {
+        e.preventDefault();
+        setLayoutMode('matrix');
+        return;
+      }
+      if (matchesShortcutEvent(e, sc.search)) {
         e.preventDefault();
         state.focusSidebarSearch();
-      } else if (e.key.toLowerCase() === 'n') {
+      } else if (matchesShortcutEvent(e, sc.newTask)) {
         e.preventDefault();
         quickAddRef.current?.focus();
       }
@@ -611,6 +723,59 @@ export default function App() {
     },
     [showInfoToast, formatUiError],
   );
+
+  const handleChangeGlobalQuickAddShortcutKey = useCallback(
+    (nextKey: string) => {
+      setGlobalQuickAddShortcutKey(nextKey);
+      void window.agendameaWindow?.setGlobalQuickAddShortcutKey?.(nextKey);
+      void api.updateSettings({ globalQuickAddShortcutKey: nextKey }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleChangeVoiceShortcut = useCallback(
+    (nextKey: string) => {
+      setVoiceShortcut(nextKey);
+      void window.agendameaWindow?.setVoiceShortcut?.(nextKey);
+      void api.updateSettings({ voiceShortcut: nextKey }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleChangeCustomShortcut = useCallback(
+    (action: ShortcutActionId, nextShortcut: string) => {
+      setCustomShortcuts((prev) => {
+        const next: CustomShortcutsMap = { ...prev, [action]: nextShortcut };
+        void api.updateSettings({ customShortcuts: next }).catch((err) => {
+          showInfoToast(formatUiError(err), 'error');
+        });
+        return next;
+      });
+    },
+    [showInfoToast, formatUiError],
+  );
+
+  const handleResetAllShortcuts = useCallback(() => {
+    const defaults = { ...DEFAULT_CUSTOM_SHORTCUTS };
+    setCustomShortcuts(defaults);
+    setGlobalQuickAddShortcutKey('CommandOrControl+Alt+N');
+    setVoiceShortcut('CommandOrControl+Alt+Space');
+    void window.agendameaWindow?.setGlobalQuickAddShortcutKey?.('CommandOrControl+Alt+N');
+    void window.agendameaWindow?.setVoiceShortcut?.('CommandOrControl+Alt+Space');
+    void api
+      .updateSettings({
+        customShortcuts: defaults,
+        globalQuickAddShortcutKey: 'CommandOrControl+Alt+N',
+        voiceShortcut: 'CommandOrControl+Alt+Space',
+      })
+      .catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
+      });
+  }, [showInfoToast, formatUiError]);
 
   const handleCloseModalSelectAction = useCallback(
     async (action: 'tray' | 'quit', rememberChoice: boolean) => {
@@ -1001,6 +1166,7 @@ export default function App() {
       clearUndoToast();
       todoUpdateSeqRef.current.clear();
       categoryUpdateSeqRef.current.clear();
+      subtaskUpdateSeqRef.current.clear();
       setCategories(sortCategoriesWithPin(restored.categories));
       setTodos(restored.todos);
       setTrashedCategories(restored.trashedCategories);
@@ -1015,9 +1181,18 @@ export default function App() {
       setWebhookEnabled(Boolean(restored.settings.webhookEnabled));
       setWebhookUrl(restored.settings.webhookUrl ?? '');
       setWebhookSecret(restored.settings.webhookSecret ?? '');
+      setVoiceShortcut(restored.settings.voiceShortcut || 'CommandOrControl+Alt+Space');
+      setGlobalQuickAddShortcutKey(
+        restored.settings.globalQuickAddShortcutKey || 'CommandOrControl+Alt+N',
+      );
+      setCustomShortcuts(sanitizeCustomShortcuts(restored.settings.customShortcuts));
+      hydrateNotificationSettings(restored.settings);
       setSelectedTodoId(null);
       setTagFilter(null);
       setSearchQuery('');
+      setSearchDateFrom('');
+      setSearchDateTo('');
+      setIsDateFilterOpen(false);
       setStatusFilter('all');
       setOneDrivePrompt(null);
       setActiveView({ type: 'smart', id: 'all' });
@@ -1047,6 +1222,7 @@ export default function App() {
       clearUndoToast();
       todoUpdateSeqRef.current.clear();
       categoryUpdateSeqRef.current.clear();
+      subtaskUpdateSeqRef.current.clear();
       setCategories(fresh.categories);
       setTodos(fresh.todos);
       setTrashedCategories(fresh.trashedCategories);
@@ -1068,6 +1244,12 @@ export default function App() {
         setWebhookEnabled(false);
         setWebhookUrl('');
         setWebhookSecret('');
+        setVoiceShortcut(fresh.settings.voiceShortcut || 'CommandOrControl+Alt+Space');
+        setGlobalQuickAddShortcutKey(
+          fresh.settings.globalQuickAddShortcutKey || 'CommandOrControl+Alt+N',
+        );
+        setCustomShortcuts(sanitizeCustomShortcuts(fresh.settings.customShortcuts));
+        hydrateNotificationSettings(fresh.settings);
       }
       showInfoToast(tRef.current.resetDataDoneToast, 'info');
     },
@@ -1112,6 +1294,40 @@ export default function App() {
       );
       try {
         await api.updateSubtask(subtaskId, { completed });
+      } catch (err) {
+        if (
+          !pendingSubtaskDeletesRef.current.has(subtaskId) &&
+          subtaskUpdateSeqRef.current.get(subtaskId) === seq
+        ) {
+          showInfoToast(formatUiError(err), 'error');
+          void loadData(true);
+        }
+      }
+    },
+    [showInfoToast, loadData, formatUiError],
+  );
+
+  const handleRenameSubtask = useCallback(
+    async (todoId: string, subtaskId: string, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed || pendingSubtaskDeletesRef.current.has(subtaskId)) return;
+      const seq = (subtaskUpdateSeqRef.current.get(subtaskId) ?? 0) + 1;
+      subtaskUpdateSeqRef.current.set(subtaskId, seq);
+
+      setTodos((prev) =>
+        prev.map((tItem) =>
+          tItem.id === todoId
+            ? {
+                ...tItem,
+                subtasks: tItem.subtasks.map((s) =>
+                  s.id === subtaskId ? { ...s, title: trimmed } : s,
+                ),
+              }
+            : tItem,
+        ),
+      );
+      try {
+        await api.updateSubtask(subtaskId, { title: trimmed });
       } catch (err) {
         if (
           !pendingSubtaskDeletesRef.current.has(subtaskId) &&
@@ -1287,10 +1503,29 @@ export default function App() {
 
   const handleToggleTodoComplete = useCallback(
     (id: string, completed: boolean) => {
-      void handleUpdateTodo(id, { completed });
+      const target = todosRef.current.find((item) => item.id === id);
+      void handleUpdateTodo(id, { completed }).then((ok) => {
+        if (ok && completed && target) {
+          dispatchNotification('taskCompleted', {
+            title: tRef.current.markCompletedDone,
+            body: target.title,
+            todoId: target.id,
+          });
+        }
+      });
     },
-    [handleUpdateTodo],
+    [dispatchNotification, handleUpdateTodo, tRef],
   );
+
+  const handleOpenTodoContextMenu = useCallback((e: React.MouseEvent, todo: Todo) => {
+    setDayContextMenu(null);
+    setTodoContextMenu({ x: e.clientX, y: e.clientY, todo });
+  }, []);
+
+  const handleOpenDayContextMenu = useCallback((e: React.MouseEvent, dateStr: string) => {
+    setTodoContextMenu(null);
+    setDayContextMenu({ x: e.clientX, y: e.clientY, dateStr });
+  }, []);
 
   const handleToggleTodoImportant = useCallback(
     (id: string, important: boolean) => {
@@ -1444,12 +1679,15 @@ export default function App() {
     void api.openOneDriveFolder(oneDrivePrompt?.folderPath).catch(() => {});
   }, [oneDrivePrompt]);
 
-  const smartViewTitles: Record<string, string> = {
-    all: t.allTasks,
-    today: t.today,
-    important: t.important,
-    completed: t.completed,
-  };
+  const smartViewTitles = useMemo<Record<string, string>>(
+    () => ({
+      all: t.allTasks,
+      today: t.today,
+      important: t.important,
+      completed: t.completed,
+    }),
+    [t.allTasks, t.today, t.important, t.completed],
+  );
 
   const activeCategory =
     activeView.type === 'category' ? categoryMap.get(activeView.id) : undefined;
@@ -1509,6 +1747,20 @@ export default function App() {
               closeBehavior={closeBehavior}
               launchAtStartup={launchAtStartup}
               globalQuickAddShortcut={globalQuickAddShortcut}
+              globalQuickAddShortcutKey={globalQuickAddShortcutKey}
+              voiceShortcut={voiceShortcut}
+              customShortcuts={customShortcuts}
+              onChangeGlobalQuickAddShortcutKey={handleChangeGlobalQuickAddShortcutKey}
+              onVoiceShortcutChange={handleChangeVoiceShortcut}
+              onChangeCustomShortcut={handleChangeCustomShortcut}
+              onResetAllShortcuts={handleResetAllShortcuts}
+              notificationProfile={notificationProfile}
+              notificationLeadMinutes={notificationLeadMinutes}
+              notificationChannels={notificationChannels}
+              onApplyNotificationProfile={applyNotificationProfile}
+              onChangeNotificationChannel={updateNotificationChannel}
+              onChangeNotificationLeadMinutes={updateNotificationLeadMinutes}
+              onSendTestNotification={sendTestNotification}
               dragLocked={dragLocked}
               onChangeMode={handleModeChange}
               onChangeTheme={handleThemeChange}
@@ -1727,23 +1979,19 @@ export default function App() {
                   <div className="relative inline-flex items-center">
                     <SlidersHorizontal
                       aria-hidden="true"
-                      className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]"
+                      className="pointer-events-none absolute left-2.5 z-10 h-3.5 w-3.5 text-[var(--text-muted)]"
                     />
-                    <select
+                    <SelectField
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value as SortOption)}
                       aria-label={t.sortCustom}
-                      className="h-[30px] appearance-none rounded-lg border border-[var(--border)] bg-[var(--surface)] pl-8 pr-7 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors focus:border-[var(--border-strong)] focus:outline-none cursor-pointer"
+                      selectClassName="h-[30px] bg-[var(--surface)] pl-8 pr-8 font-medium hover:bg-[var(--surface-hover)] cursor-pointer"
                     >
                       <option value="manual">{t.sortCustom}</option>
                       <option value="priority">{t.sortPriority}</option>
                       <option value="dueDate">{t.sortDueDate}</option>
                       <option value="newest">{t.sortNewest}</option>
-                    </select>
-                    <ChevronDown
-                      aria-hidden="true"
-                      className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-[var(--text-muted)]"
-                    />
+                    </SelectField>
                   </div>
                 </div>
               </div>
@@ -1914,7 +2162,43 @@ export default function App() {
 
               {/* 1:1 Layout-Matched Loading Skeleton */}
               {isLoading ? (
-                layoutMode === 'kanban' ? (
+                layoutMode === 'calendar' ? (
+                  <div
+                    aria-busy="true"
+                    aria-label="Agendamea"
+                    data-testid="calendar-loading-skeleton"
+                    className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+                      <div className="h-4 w-32 rounded bg-[var(--surface-hover)] animate-pulse" />
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-7 w-14 rounded-md bg-[var(--surface-subtle)] animate-pulse" />
+                        <div className="h-7 w-7 rounded-md bg-[var(--surface-subtle)] animate-pulse" />
+                        <div className="h-7 w-7 rounded-md bg-[var(--surface-subtle)] animate-pulse" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-7 border-b border-[var(--border)] bg-[var(--surface-subtle)]/50">
+                      {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+                        <div key={d} className="flex justify-center py-2">
+                          <div className="h-3 w-7 rounded bg-[var(--surface-hover)] animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7 divide-x divide-y divide-[var(--border)]">
+                      {Array.from({ length: 35 }).map((_, idx) => (
+                        <div key={idx} className="min-h-[82px] p-1.5 space-y-1.5">
+                          <div className="h-3.5 w-5 rounded bg-[var(--surface-subtle)] animate-pulse" />
+                          {idx % 5 === 1 && (
+                            <div className="h-4 w-full rounded bg-[var(--surface-hover)] animate-pulse" />
+                          )}
+                          {idx % 7 === 3 && (
+                            <div className="h-4 w-4/5 rounded bg-[var(--surface-hover)] animate-pulse" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : layoutMode === 'kanban' ? (
                   <div
                     aria-busy="true"
                     aria-label="Agendamea"
@@ -2013,6 +2297,8 @@ export default function App() {
                     onTogglePin={handleToggleTodoPin}
                     onUpdateTodo={handleUpdateTodo}
                     onTagClick={handleTagClick}
+                    onTodoContextMenu={handleOpenTodoContextMenu}
+                    onDayContextMenu={handleOpenDayContextMenu}
                   />
                 </div>
               ) : layoutMode === 'kanban' ? (
@@ -2029,6 +2315,7 @@ export default function App() {
                     onTogglePin={handleToggleTodoPin}
                     onUpdateTodo={handleUpdateTodo}
                     onTagClick={handleTagClick}
+                    onTodoContextMenu={handleOpenTodoContextMenu}
                   />
                 </div>
               ) : layoutMode === 'matrix' ? (
@@ -2045,6 +2332,7 @@ export default function App() {
                     onTogglePin={handleToggleTodoPin}
                     onUpdateTodo={handleUpdateTodo}
                     onTagClick={handleTagClick}
+                    onTodoContextMenu={handleOpenTodoContextMenu}
                   />
                 </div>
               ) : visibleTodos.length === 0 ? (
@@ -2131,6 +2419,7 @@ export default function App() {
                       onDrop={handleTodoDrop}
                       onDragEnd={handleTodoDragEnd}
                       onTagClick={handleTagClick}
+                      onContextMenu={handleOpenTodoContextMenu}
                     />
                   ))}
                 </div>
@@ -2147,7 +2436,7 @@ export default function App() {
               type="button"
               aria-label={t.closeMenu}
               onClick={handleCloseDetail}
-              className="fixed inset-0 z-20 bg-black/35 lg:hidden"
+              className="animate-fade-in fixed inset-0 z-20 bg-black/35 lg:hidden"
             />
             <TodoDetailPanel
               todo={selectedTodo}
@@ -2158,9 +2447,140 @@ export default function App() {
               onDelete={handleDeleteTodo}
               onAddSubtask={handleAddSubtask}
               onToggleSubtask={handleToggleSubtask}
+              onRenameSubtask={handleRenameSubtask}
               onDeleteSubtask={handleDeleteSubtask}
             />
           </>
+        )}
+
+        {todoContextMenu && (
+          <ContextMenu
+            testId="todo-context-menu"
+            x={todoContextMenu.x}
+            y={todoContextMenu.y}
+            onClose={() => setTodoContextMenu(null)}
+            items={[
+              {
+                id: 'open-details',
+                label: t.ctxOpenDetails,
+                icon: <Eye className="h-3.5 w-3.5" />,
+                onSelect: () => setSelectedTodoId(todoContextMenu.todo.id),
+              },
+              {
+                id: 'toggle-complete',
+                label: todoContextMenu.todo.completed ? t.markCompletedDone : t.markComplete,
+                icon: <Check className="h-3.5 w-3.5" />,
+                onSelect: () =>
+                  handleToggleTodoComplete(
+                    todoContextMenu.todo.id,
+                    !todoContextMenu.todo.completed,
+                  ),
+              },
+              {
+                id: 'toggle-pin',
+                label: todoContextMenu.todo.pinned ? t.unpinLabel : t.pinLabel,
+                icon: <Pin className="h-3.5 w-3.5" />,
+                onSelect: () =>
+                  handleToggleTodoPin(todoContextMenu.todo.id, !todoContextMenu.todo.pinned),
+              },
+              {
+                id: 'toggle-important',
+                label: todoContextMenu.todo.important ? t.ctxRemoveImportant : t.ctxMarkImportant,
+                icon: <Star className="h-3.5 w-3.5" />,
+                onSelect: () =>
+                  handleToggleTodoImportant(
+                    todoContextMenu.todo.id,
+                    !todoContextMenu.todo.important,
+                  ),
+              },
+              { id: 'div-schedule', divider: true },
+              {
+                id: 'schedule-today',
+                label: t.ctxSetToday,
+                icon: <Sun className="h-3.5 w-3.5" />,
+                onSelect: () =>
+                  void handleUpdateTodo(todoContextMenu.todo.id, {
+                    startDate: null,
+                    dueDate: todayStr,
+                  }),
+              },
+              {
+                id: 'schedule-tomorrow',
+                label: t.ctxSetTomorrow,
+                icon: <CalendarIcon className="h-3.5 w-3.5" />,
+                onSelect: () =>
+                  void handleUpdateTodo(todoContextMenu.todo.id, {
+                    startDate: null,
+                    dueDate: addDaysToDateString(todayStr, 1),
+                  }),
+              },
+              ...(todoContextMenu.todo.dueDate || todoContextMenu.todo.startDate
+                ? [
+                    {
+                      id: 'schedule-clear',
+                      label: t.ctxClearSchedule,
+                      icon: <X className="h-3.5 w-3.5" />,
+                      onSelect: () =>
+                        void handleUpdateTodo(todoContextMenu.todo.id, {
+                          startDate: null,
+                          dueDate: null,
+                          dueTime: null,
+                        }),
+                    },
+                  ]
+                : []),
+              { id: 'div-actions', divider: true },
+              {
+                id: 'copy-title',
+                label: t.ctxCopyTitle,
+                icon: <Copy className="h-3.5 w-3.5" />,
+                onSelect: () => {
+                  void navigator.clipboard
+                    ?.writeText?.(todoContextMenu.todo.title)
+                    .then(() => showInfoToast(tRef.current.ctxCopiedToast, 'info'))
+                    .catch(() => {});
+                },
+              },
+              {
+                id: 'delete-todo',
+                label: t.deleteToTrashButton,
+                icon: <Trash2 className="h-3.5 w-3.5" />,
+                danger: true,
+                onSelect: () => handleDeleteTodo(todoContextMenu.todo.id),
+              },
+            ]}
+          />
+        )}
+
+        {dayContextMenu && (
+          <ContextMenu
+            testId="calendar-day-context-menu"
+            x={dayContextMenu.x}
+            y={dayContextMenu.y}
+            onClose={() => setDayContextMenu(null)}
+            items={[
+              {
+                id: 'add-task-on-day',
+                label: `${t.ctxAddTaskHere} (${dayContextMenu.dateStr})`,
+                icon: <CalendarPlus className="h-3.5 w-3.5" />,
+                onSelect: () => {
+                  const categoryId = activeView.type === 'category' ? activeView.id : null;
+                  void handleAddTodo({
+                    title: t.addFirstTaskButton,
+                    priority: 'normal',
+                    startDate: null,
+                    dueDate: dayContextMenu.dateStr,
+                    dueTime: null,
+                    categoryId,
+                    important: false,
+                  }).then(() => {
+                    const newest = todosRef.current[0];
+                    if (newest) setSelectedTodoId(newest.id);
+                  });
+                },
+              },
+            ]}
+          />
         )}
 
         <ToastContainer

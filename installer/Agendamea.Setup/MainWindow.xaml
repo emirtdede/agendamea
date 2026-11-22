@@ -1,0 +1,615 @@
+<Window x:Class="Agendamea.Setup.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Agendamea Setup"
+        Width="676"
+        Height="456"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="True"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Ideal"
+        TextOptions.TextRenderingMode="ClearType">
+
+  <!-- Outer 18px shadow pad so inner card is EXACT 640x420 with 0 14px 36px rgba(0,0,0,0.55) shadow -->
+  <Grid Margin="18">
+    <Border x:Name="CardShadow"
+            Width="640"
+            Height="420"
+            CornerRadius="22"
+            Background="#111113">
+      <Border.Effect>
+        <DropShadowEffect Color="#000000" BlurRadius="36" ShadowDepth="14" Direction="270" Opacity="0.55" />
+      </Border.Effect>
+    </Border>
+
+    <!-- Main 640x420 Rounded-22 Card -->
+    <Border x:Name="RootCard"
+            Width="640"
+            Height="420"
+            CornerRadius="22"
+            Background="#111113"
+            BorderBrush="#1FFFFFFF"
+            BorderThickness="1"
+            ClipToBounds="True">
+      <Grid x:Name="ContentHost">
+        <Grid.Clip>
+          <RectangleGeometry RadiusX="22" RadiusY="22" Rect="0,0,640,420" />
+        </Grid.Clip>
+
+        <!-- 30 FPS Monochrome SoftBackdrop (3 radial blobs rgba(255,255,255,0.09), static on reduced motion) -->
+        <Canvas x:Name="BackdropCanvas" IsHitTestVisible="False" Width="640" Height="420">
+          <Ellipse x:Name="Blob1" Width="340" Height="340" Canvas.Left="-70" Canvas.Top="-110">
+            <Ellipse.Fill>
+              <RadialGradientBrush>
+                <GradientStop Color="#17FFFFFF" Offset="0" />
+                <GradientStop Color="#00FFFFFF" Offset="1" />
+              </RadialGradientBrush>
+            </Ellipse.Fill>
+          </Ellipse>
+          <Ellipse x:Name="Blob2" Width="300" Height="300" Canvas.Left="400" Canvas.Top="-70">
+            <Ellipse.Fill>
+              <RadialGradientBrush>
+                <GradientStop Color="#14FFFFFF" Offset="0" />
+                <GradientStop Color="#00FFFFFF" Offset="1" />
+              </RadialGradientBrush>
+            </Ellipse.Fill>
+          </Ellipse>
+          <Ellipse x:Name="Blob3" Width="360" Height="360" Canvas.Left="160" Canvas.Top="210">
+            <Ellipse.Fill>
+              <RadialGradientBrush>
+                <GradientStop Color="#12FFFFFF" Offset="0" />
+                <GradientStop Color="#00FFFFFF" Offset="1" />
+              </RadialGradientBrush>
+            </Ellipse.Fill>
+          </Ellipse>
+        </Canvas>
+
+        <!-- 42px Draggable TitleBar (No Maximize!) -->
+        <Grid x:Name="TitleBar"
+              Height="42"
+              VerticalAlignment="Top"
+              Background="Transparent"
+              MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+              Panel.ZIndex="40">
+          <TextBlock x:Name="TitleBarText"
+                     Text="Agendamea Setup"
+                     Foreground="#A1A1AA"
+                     FontFamily="Segoe UI Variable Text, Segoe UI"
+                     FontSize="12"
+                     FontWeight="Medium"
+                     VerticalAlignment="Center"
+                     Margin="20,0,0,0"
+                     HorizontalAlignment="Left" />
+
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0">
+            <Button x:Name="MinButton"
+                    Style="{StaticResource TitleBarButton}"
+                    Click="MinButton_Click"
+                    ToolTip="Minimize">
+              <Path Data="M 0,0 L 10,0" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+            </Button>
+            <Button x:Name="CloseButton"
+                    Style="{StaticResource TitleBarCloseButton}"
+                    Click="CloseButton_Click"
+                    Margin="2,0,0,0"
+                    ToolTip="Close">
+              <Path Data="M 0,0 L 9,9 M 9,0 L 0,9" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+            </Button>
+          </StackPanel>
+        </Grid>
+
+        <!-- VIEW 1: WELCOME -->
+        <Grid x:Name="WelcomeView" Margin="0,42,0,0" Visibility="Visible">
+          <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,-14,0,0">
+            <!-- 96x96 Crisp Vector Agendamea Squircle Logo -->
+            <Border Width="96" Height="96" CornerRadius="24" Background="#18181B" BorderBrush="#24FFFFFF" BorderThickness="1" HorizontalAlignment="Center">
+              <Viewbox Width="54" Height="54">
+                <Canvas Width="64" Height="64">
+                  <Path Data="M 14,50 L 32,12 L 50,50" Stroke="#FAFAFA" StrokeThickness="6.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                  <Path Data="M 22,37 L 30,44 L 45,27" Stroke="#A1A1AA" StrokeThickness="5.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                </Canvas>
+              </Viewbox>
+            </Border>
+
+            <!-- 26px Bold Name + Version Pill -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
+              <TextBlock Text="Agendamea"
+                         Foreground="#FAFAFA"
+                         FontFamily="Segoe UI Variable Display, Segoe UI"
+                         FontSize="26"
+                         FontWeight="Bold"
+                         VerticalAlignment="Center" />
+              <Border Margin="9,2,0,0"
+                      Background="#1C1C1F"
+                      BorderBrush="#27272A"
+                      BorderThickness="1"
+                      CornerRadius="10"
+                      Padding="8,2"
+                      VerticalAlignment="Center">
+                <TextBlock Text="v1.1.0"
+                           Foreground="#A1A1AA"
+                           FontFamily="Cascadia Mono, Consolas, Segoe UI"
+                           FontSize="11"
+                           FontWeight="SemiBold" />
+              </Border>
+            </StackPanel>
+
+            <!-- Single-Line Tagline -->
+            <TextBlock x:Name="WelcomeTagline"
+                       Text="Fast, offline-first daily task manager with on-device AI."
+                       Foreground="#A1A1AA"
+                       FontFamily="Segoe UI Variable Text, Segoe UI"
+                       FontSize="13"
+                       HorizontalAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       MaxWidth="520"
+                       Margin="0,7,0,0" />
+
+            <!-- Primary 200x46 Pill CTA -->
+            <Button x:Name="PrimaryInstallButton"
+                    Content="Install"
+                    Width="200"
+                    Height="46"
+                    Margin="0,24,0,0"
+                    Style="{StaticResource PrimaryPillButton}"
+                    Click="InstallButton_Click" />
+
+            <!-- Options ^ Trigger -->
+            <Button x:Name="OpenOptionsButton"
+                    Style="{StaticResource SubtleLinkButton}"
+                    Margin="0,10,0,0"
+                    HorizontalAlignment="Center"
+                    Click="OpenOptionsButton_Click">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="OpenOptionsText" Text="Options" VerticalAlignment="Center" />
+                <Path Data="M 0,4 L 4,0 L 8,4"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                      StrokeThickness="1.4"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Margin="6,1,0,0"
+                      VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+          </StackPanel>
+
+          <!-- 12px Subtle Footer -->
+          <TextBlock x:Name="FooterText"
+                     Text="Vellium Teknoloji A.S. · MIT"
+                     Foreground="#52525B"
+                     FontFamily="Segoe UI Variable Text, Segoe UI"
+                     FontSize="11.5"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Bottom"
+                     Margin="0,0,0,14" />
+        </Grid>
+
+        <!-- VIEW 2: PROGRESS (84x84 Logo + Step + % + 7px ShimmerBar) -->
+        <Grid x:Name="ProgressView" Margin="0,42,0,0" Visibility="Collapsed" Opacity="0">
+          <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="460" Margin="0,-10,0,0">
+            <Border Width="84" Height="84" CornerRadius="22" Background="#18181B" BorderBrush="#24FFFFFF" BorderThickness="1" HorizontalAlignment="Center">
+              <Viewbox Width="46" Height="46">
+                <Canvas Width="64" Height="64">
+                  <Path Data="M 14,50 L 32,12 L 50,50" Stroke="#FAFAFA" StrokeThickness="6.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                  <Path Data="M 22,37 L 30,44 L 45,27" Stroke="#A1A1AA" StrokeThickness="5.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                </Canvas>
+              </Viewbox>
+            </Border>
+
+            <Grid Margin="0,28,0,10">
+              <TextBlock x:Name="ProgressStepText"
+                         Text="Extracting application files..."
+                         Foreground="#E4E4E7"
+                         FontFamily="Segoe UI Variable Text, Segoe UI"
+                         FontSize="13"
+                         FontWeight="Medium"
+                         HorizontalAlignment="Left" />
+              <TextBlock x:Name="ProgressPercentText"
+                         Text="0%"
+                         Foreground="#A1A1AA"
+                         FontFamily="Cascadia Mono, Consolas, Segoe UI"
+                         FontSize="12.5"
+                         FontWeight="SemiBold"
+                         HorizontalAlignment="Right" />
+            </Grid>
+
+            <!-- 7px Animated ShimmerBar -->
+            <Border x:Name="ShimmerTrack"
+                    Height="7"
+                    CornerRadius="3.5"
+                    Background="#27272A"
+                    ClipToBounds="True">
+              <Grid HorizontalAlignment="Left" x:Name="ShimmerFillHost" Width="0">
+                <Border CornerRadius="3.5" Background="#FAFAFA" />
+                <Border Width="110" HorizontalAlignment="Left" CornerRadius="3.5">
+                  <Border.RenderTransform>
+                    <TranslateTransform x:Name="ShimmerTransform" X="-120" />
+                  </Border.RenderTransform>
+                  <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                      <GradientStop Color="#00FFFFFF" Offset="0" />
+                      <GradientStop Color="#66111113" Offset="0.5" />
+                      <GradientStop Color="#00FFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                  </Border.Background>
+                </Border>
+              </Grid>
+            </Border>
+          </StackPanel>
+        </Grid>
+
+        <!-- VIEW 3: DONE (88x88 Animated CheckBurst + Close + Launch Pills) -->
+        <Grid x:Name="DoneView" Margin="0,42,0,0" Visibility="Collapsed" Opacity="0">
+          <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,-10,0,0">
+            <Grid Width="88" Height="88" HorizontalAlignment="Center">
+              <Ellipse x:Name="DoneBurstRing"
+                       Width="88"
+                       Height="88"
+                       Stroke="#66FAFAFA"
+                       StrokeThickness="1.5"
+                       RenderTransformOrigin="0.5,0.5"
+                       Opacity="0">
+                <Ellipse.RenderTransform>
+                  <ScaleTransform x:Name="DoneBurstScale" ScaleX="0.7" ScaleY="0.7" />
+                </Ellipse.RenderTransform>
+              </Ellipse>
+              <Border x:Name="DoneCheckCircle"
+                      Width="72"
+                      Height="72"
+                      CornerRadius="36"
+                      Background="#FAFAFA"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform>
+                  <ScaleTransform x:Name="DoneCheckScale" ScaleX="0.75" ScaleY="0.75" />
+                </Border.RenderTransform>
+                <Path Data="M 21,37 L 31,47 L 51,26"
+                      Stroke="#111113"
+                      StrokeThickness="5"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      StrokeLineJoin="Round" />
+              </Border>
+            </Grid>
+
+            <TextBlock x:Name="DoneTitleText"
+                       Text="Agendamea is ready"
+                       Foreground="#FAFAFA"
+                       FontFamily="Segoe UI Variable Display, Segoe UI"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                       Margin="0,18,0,0" />
+
+            <TextBlock x:Name="DoneSubtitleText"
+                       Text="Installation finished cleanly."
+                       Foreground="#A1A1AA"
+                       FontFamily="Segoe UI Variable Text, Segoe UI"
+                       FontSize="12.5"
+                       HorizontalAlignment="Center"
+                       MaxWidth="480"
+                       TextTrimming="CharacterEllipsis"
+                       Margin="0,6,0,0" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,26,0,0">
+              <Button x:Name="DoneCloseButton"
+                      Content="Close"
+                      Height="40"
+                      MinWidth="112"
+                      Style="{StaticResource GhostPillButton}"
+                      Click="CloseButton_Click" />
+              <Button x:Name="DoneLaunchButton"
+                      Content="Launch Agendamea"
+                      Height="40"
+                      MinWidth="172"
+                      Margin="10,0,0,0"
+                      Style="{StaticResource PrimaryPillButton}"
+                      Click="LaunchAndCloseButton_Click" />
+            </StackPanel>
+          </StackPanel>
+        </Grid>
+
+        <!-- VIEW 4: UNINSTALL (72x72 Logo + #1C1C1F Rounded-14 Data Card + Cancel / Uninstall) -->
+        <Grid x:Name="UninstallView" Margin="0,42,0,0" Visibility="Collapsed" Opacity="0">
+          <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="476" Margin="0,-8,0,0">
+            <Border Width="72" Height="72" CornerRadius="19" Background="#18181B" BorderBrush="#24FFFFFF" BorderThickness="1" HorizontalAlignment="Center">
+              <Viewbox Width="40" Height="40">
+                <Canvas Width="64" Height="64">
+                  <Path Data="M 14,50 L 32,12 L 50,50" Stroke="#FAFAFA" StrokeThickness="6.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                  <Path Data="M 22,37 L 30,44 L 45,27" Stroke="#A1A1AA" StrokeThickness="5.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                </Canvas>
+              </Viewbox>
+            </Border>
+
+            <TextBlock x:Name="UninstallTitleText"
+                       Text="Uninstall Agendamea"
+                       Foreground="#FAFAFA"
+                       FontFamily="Segoe UI Variable Display, Segoe UI"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                       Margin="0,14,0,0" />
+
+            <TextBlock x:Name="UninstallSubtitleText"
+                       Text="Application files and shortcuts will be removed."
+                       Foreground="#A1A1AA"
+                       FontFamily="Segoe UI Variable Text, Segoe UI"
+                       FontSize="12.5"
+                       HorizontalAlignment="Center"
+                       Margin="0,5,0,0" />
+
+            <!-- #1C1C1F Rounded-14 Inner Card for Optional Data Removal -->
+            <Border Background="#1C1C1F"
+                    BorderBrush="#27272A"
+                    BorderThickness="1"
+                    CornerRadius="14"
+                    Padding="16,13"
+                    Margin="0,20,0,0">
+              <StackPanel>
+                <CheckBox x:Name="DeleteUserDataCheck"
+                          Content="Also delete local user data and tasks"
+                          Style="{StaticResource MonochromeCheckBox}" />
+                <TextBlock x:Name="UserDataPathText"
+                           Text="%APPDATA%\Agendamea"
+                           Foreground="#71717A"
+                           FontFamily="Cascadia Mono, Consolas, Segoe UI"
+                           FontSize="11"
+                           Margin="25,4,0,0"
+                           TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,22,0,0">
+              <Button x:Name="UninstallCancelButton"
+                      Content="Cancel"
+                      Height="40"
+                      MinWidth="116"
+                      Style="{StaticResource GhostPillButton}"
+                      Click="CloseButton_Click" />
+              <Button x:Name="UninstallConfirmButton"
+                      Content="Uninstall"
+                      Height="40"
+                      MinWidth="136"
+                      Margin="10,0,0,0"
+                      Style="{StaticResource DangerPillButton}"
+                      Click="ConfirmUninstallButton_Click" />
+            </StackPanel>
+          </StackPanel>
+        </Grid>
+
+        <!-- VIEW 5: UNINSTALLED / ERROR -->
+        <Grid x:Name="StatusDoneView" Margin="0,42,0,0" Visibility="Collapsed" Opacity="0">
+          <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="480" Margin="0,-10,0,0">
+            <Grid Width="88" Height="88" HorizontalAlignment="Center">
+              <Ellipse x:Name="StatusBurstRing"
+                       Width="88"
+                       Height="88"
+                       Stroke="#66FAFAFA"
+                       StrokeThickness="1.5"
+                       RenderTransformOrigin="0.5,0.5"
+                       Opacity="0">
+                <Ellipse.RenderTransform>
+                  <ScaleTransform x:Name="StatusBurstScale" ScaleX="0.7" ScaleY="0.7" />
+                </Ellipse.RenderTransform>
+              </Ellipse>
+              <Border x:Name="StatusCircle"
+                      Width="72"
+                      Height="72"
+                      CornerRadius="36"
+                      Background="#FAFAFA"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center">
+                <Path x:Name="StatusGlyphPath"
+                      Data="M 21,37 L 31,47 L 51,26"
+                      Stroke="#111113"
+                      StrokeThickness="5"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      StrokeLineJoin="Round" />
+              </Border>
+            </Grid>
+
+            <TextBlock x:Name="StatusTitleText"
+                       Text="Agendamea was uninstalled"
+                       Foreground="#FAFAFA"
+                       FontFamily="Segoe UI Variable Display, Segoe UI"
+                       FontSize="21"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                       Margin="0,18,0,0" />
+
+            <TextBlock x:Name="StatusSubtitleText"
+                       Text="All application files have been removed cleanly."
+                       Foreground="#A1A1AA"
+                       FontFamily="Segoe UI Variable Text, Segoe UI"
+                       FontSize="12.5"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Margin="0,7,0,0" />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,24,0,0">
+              <Button x:Name="StatusRetryButton"
+                      Content="Retry"
+                      Height="40"
+                      MinWidth="116"
+                      Margin="0,0,10,0"
+                      Visibility="Collapsed"
+                      Style="{StaticResource GhostPillButton}"
+                      Click="RetryButton_Click" />
+              <Button x:Name="StatusCloseButton"
+                      Content="Close"
+                      Height="40"
+                      MinWidth="136"
+                      Style="{StaticResource PrimaryPillButton}"
+                      Click="CloseButton_Click" />
+            </StackPanel>
+          </StackPanel>
+        </Grid>
+
+        <!-- SLIDING OPTIONS SHEET (top: 42px, 340ms cubic-bezier, #1C1C1F) -->
+        <Border x:Name="OptionsSheet"
+                Margin="0,42,0,0"
+                Background="#1C1C1F"
+                BorderBrush="#1FFFFFFF"
+                BorderThickness="0,1,0,0"
+                CornerRadius="18,18,22,22"
+                Panel.ZIndex="30"
+                Visibility="Collapsed">
+          <Border.RenderTransform>
+            <TranslateTransform x:Name="OptionsSheetTransform" Y="380" />
+          </Border.RenderTransform>
+          <Grid Margin="24,14,24,18">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Sheet Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,12">
+              <TextBlock x:Name="OptionsTitleText"
+                         Text="Install Options"
+                         Foreground="#FAFAFA"
+                         FontFamily="Segoe UI Variable Display, Segoe UI"
+                         FontSize="14.5"
+                         FontWeight="SemiBold"
+                         VerticalAlignment="Center"
+                         HorizontalAlignment="Left" />
+              <Button Style="{StaticResource TitleBarButton}"
+                      HorizontalAlignment="Right"
+                      Click="CloseOptionsButton_Click"
+                      ToolTip="Close Options">
+                <Path Data="M 0,0 L 5,5 L 10,0"
+                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                      StrokeThickness="1.5"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round" />
+              </Button>
+            </Grid>
+
+            <!-- Sheet Body: Language + Folder + 4 Checkboxes -->
+            <StackPanel Grid.Row="1" VerticalAlignment="Top">
+              <!-- Language + Folder 2-Row Compact Layout -->
+              <Grid Margin="0,0,0,11">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="210" />
+                  <ColumnDefinition Width="12" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                  <TextBlock x:Name="LanguageLabelText"
+                             Text="Language"
+                             Foreground="#A1A1AA"
+                             FontSize="11"
+                             FontWeight="Medium"
+                             Margin="0,0,0,5" />
+                  <ComboBox x:Name="LanguageComboBox"
+                            Style="{StaticResource DarkComboBox}"
+                            DisplayMemberPath="DisplayLabel"
+                            SelectionChanged="LanguageComboBox_SelectionChanged" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2">
+                  <TextBlock x:Name="InstallDirLabelText"
+                             Text="Install Folder"
+                             Foreground="#A1A1AA"
+                             FontSize="11"
+                             FontWeight="Medium"
+                             Margin="0,0,0,5" />
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="InstallDirTextBox"
+                             Grid.Column="0"
+                             Height="32"
+                             Style="{StaticResource DarkTextBox}" />
+                    <Button x:Name="BrowseDirButton"
+                            Grid.Column="1"
+                            Content="Browse"
+                            Height="32"
+                            Margin="6,0,0,0"
+                            Padding="12,0"
+                            Style="{StaticResource GhostPillButton}"
+                            FontSize="11.5"
+                            Click="BrowseDirButton_Click" />
+                  </Grid>
+                </StackPanel>
+              </Grid>
+
+              <!-- 4 Clean Checkboxes in 2x2 Grid -->
+              <Border Background="#141417" BorderBrush="#27272A" BorderThickness="1" CornerRadius="12" Padding="14,12">
+                <Grid>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="10" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+
+                  <CheckBox x:Name="DesktopShortcutCheck"
+                            Grid.Row="0" Grid.Column="0"
+                            IsChecked="True"
+                            Style="{StaticResource MonochromeCheckBox}"
+                            Content="Create Desktop shortcut" />
+                  <CheckBox x:Name="StartMenuShortcutCheck"
+                            Grid.Row="0" Grid.Column="2"
+                            IsChecked="True"
+                            Style="{StaticResource MonochromeCheckBox}"
+                            Content="Create Start Menu shortcut" />
+                  <CheckBox x:Name="StartupCheck"
+                            Grid.Row="2" Grid.Column="0"
+                            IsChecked="False"
+                            Style="{StaticResource MonochromeCheckBox}"
+                            Content="Launch at Windows startup" />
+                  <CheckBox x:Name="CliPathCheck"
+                            Grid.Row="2" Grid.Column="2"
+                            IsChecked="True"
+                            Style="{StaticResource MonochromeCheckBox}"
+                            Content="Add CLI (ag) to PATH" />
+                </Grid>
+              </Border>
+            </StackPanel>
+
+            <!-- Sheet Footer: Disk Space + Primary Install Pill -->
+            <Grid Grid.Row="2" Margin="0,12,0,0">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                <TextBlock x:Name="DiskRequiredLabelText"
+                           Text="Required space:"
+                           Foreground="#71717A"
+                           FontSize="12" />
+                <TextBlock x:Name="DiskRequiredValueText"
+                           Text="~190 MB"
+                           Foreground="#E4E4E7"
+                           FontFamily="Cascadia Mono, Consolas, Segoe UI"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Margin="6,0,0,0" />
+              </StackPanel>
+
+              <Button x:Name="SheetInstallButton"
+                      Content="Install"
+                      Width="148"
+                      Height="38"
+                      HorizontalAlignment="Right"
+                      Style="{StaticResource PrimaryPillButton}"
+                      Click="InstallButton_Click" />
+            </Grid>
+          </Grid>
+        </Border>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

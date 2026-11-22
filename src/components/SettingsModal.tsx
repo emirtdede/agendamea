@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  Bell,
   BookOpen,
   Cloud,
   Menu,
+  Mic,
   Palette,
   Settings,
   Shield,
@@ -20,23 +22,35 @@ import type {
   BootstrapPayload,
   Category,
   CloseBehavior,
+  NotificationChannelMode,
+  NotificationChannelsMap,
+  NotificationEventType,
+  NotificationProfileId,
   OneDriveStatus,
   SettingsTabId,
   ThemeId,
   ThemeMode,
   Todo,
 } from '../types';
+import {
+  DEFAULT_CUSTOM_SHORTCUTS,
+  formatShortcutDisplay,
+  type CustomShortcutsMap,
+  type ShortcutActionId,
+} from '../utils/shortcuts';
 import { DocsSettingsSection } from './DocsSettingsSection';
 import { LegalDocumentView } from './LegalDocumentView';
 import type { AppUpdateState } from './UpdateSettingsSection';
 import { AboutLegalSettingsTab } from './settings/AboutLegalSettingsTab';
 import { AccessibilitySettingsTab } from './settings/AccessibilitySettingsTab';
+import { AiVoiceSettingsTab } from './settings/AiVoiceSettingsTab';
 import { AppearanceSettingsTab } from './settings/AppearanceSettingsTab';
 import {
   DataBackupSettingsTab,
   type PendingImportState,
 } from './settings/DataBackupSettingsTab';
 import { GeneralSettingsTab } from './settings/GeneralSettingsTab';
+import { NotificationsSettingsTab } from './settings/NotificationsSettingsTab';
 import { TrashSettingsTab } from './settings/TrashSettingsTab';
 
 interface SettingsModalProps {
@@ -54,6 +68,23 @@ interface SettingsModalProps {
   closeBehavior: CloseBehavior;
   launchAtStartup?: boolean;
   globalQuickAddShortcut?: boolean;
+  globalQuickAddShortcutKey?: string;
+  voiceShortcut?: string;
+  customShortcuts?: CustomShortcutsMap;
+  onChangeGlobalQuickAddShortcutKey?: (shortcut: string) => void;
+  onVoiceShortcutChange?: (shortcut: string) => void;
+  onChangeCustomShortcut?: (action: ShortcutActionId, shortcut: string) => void;
+  onResetAllShortcuts?: () => void;
+  notificationProfile?: NotificationProfileId;
+  notificationLeadMinutes?: number;
+  notificationChannels?: NotificationChannelsMap;
+  onApplyNotificationProfile?: (profile: Exclude<NotificationProfileId, 'custom'>) => void;
+  onChangeNotificationChannel?: (
+    eventType: NotificationEventType,
+    mode: NotificationChannelMode,
+  ) => void;
+  onChangeNotificationLeadMinutes?: (minutes: number) => void;
+  onSendTestNotification?: () => void;
   dragLocked: boolean;
   onChangeMode: (mode: ThemeMode) => void;
   onChangeTheme: (id: ThemeId) => void;
@@ -97,17 +128,28 @@ interface SettingsModalProps {
   }) => Promise<void>;
 }
 
+const TIMESTAMP_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
+
+function getTimestampFormatter(intlLocale: string): Intl.DateTimeFormat {
+  let fmt = TIMESTAMP_FORMATTER_CACHE.get(intlLocale);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(intlLocale, {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    TIMESTAMP_FORMATTER_CACHE.set(intlLocale, fmt);
+  }
+  return fmt;
+}
+
 function formatTimestampForLocale(iso: string | null, intlLocale: string): string {
   if (!iso) return '';
   try {
     const dt = new Date(iso);
     if (Number.isNaN(dt.getTime())) return '';
-    return new Intl.DateTimeFormat(intlLocale, {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(dt);
+    return getTimestampFormatter(intlLocale).format(dt);
   } catch {
     return '';
   }
@@ -128,6 +170,20 @@ export function SettingsModal({
   closeBehavior,
   launchAtStartup = false,
   globalQuickAddShortcut = true,
+  globalQuickAddShortcutKey = 'CommandOrControl+Alt+N',
+  voiceShortcut = 'CommandOrControl+Alt+Space',
+  customShortcuts = DEFAULT_CUSTOM_SHORTCUTS,
+  onChangeGlobalQuickAddShortcutKey,
+  onVoiceShortcutChange,
+  onChangeCustomShortcut,
+  onResetAllShortcuts,
+  notificationProfile = 'balanced',
+  notificationLeadMinutes = 15,
+  notificationChannels,
+  onApplyNotificationProfile,
+  onChangeNotificationChannel,
+  onChangeNotificationLeadMinutes,
+  onSendTestNotification,
   dragLocked,
   onChangeMode,
   onChangeTheme,
@@ -238,18 +294,28 @@ export function SettingsModal({
 
   const shortcuts = useMemo(
     () => [
-      { keys: 'N', label: t.shortcutNewTask },
-      { keys: 'Ctrl + Alt + N', label: t.globalQuickAddTitle },
-      { keys: '/ · Ctrl+K', label: t.shortcutSearch },
-      { keys: 'Alt + ↑ / ↓', label: t.shortcutReorder },
+      { keys: formatShortcutDisplay(customShortcuts.newTask || 'N'), label: t.shortcutNewTask },
+      { keys: formatShortcutDisplay(globalQuickAddShortcutKey), label: t.shortcutGlobalQuickAdd },
+      { keys: formatShortcutDisplay(voiceShortcut), label: t.shortcutGlobalVoice },
+      { keys: `${formatShortcutDisplay(customShortcuts.search || '/')} · Ctrl+K`, label: t.shortcutSearch },
+      {
+        keys: `${formatShortcutDisplay(customShortcuts.reorderUp || 'Alt+ArrowUp')} / ${formatShortcutDisplay(customShortcuts.reorderDown || 'Alt+ArrowDown')}`,
+        label: t.shortcutReorder,
+      },
+      { keys: formatShortcutDisplay(customShortcuts.openSettings || 'Ctrl+,'), label: t.shortcutOpenSettings },
       { keys: 'Esc', label: t.shortcutEscape },
     ],
     [
+      customShortcuts,
+      globalQuickAddShortcutKey,
       t.shortcutNewTask,
-      t.globalQuickAddTitle,
+      t.shortcutGlobalQuickAdd,
+      t.shortcutGlobalVoice,
       t.shortcutSearch,
       t.shortcutReorder,
+      t.shortcutOpenSettings,
       t.shortcutEscape,
+      voiceShortcut,
     ],
   );
 
@@ -277,6 +343,8 @@ export function SettingsModal({
         groupTitle: t.settingsNavGroupWorkspace,
         items: [
           { id: 'general', label: t.settingsTabGeneral, Icon: SlidersHorizontal },
+          { id: 'notifications', label: t.settingsTabNotifications, Icon: Bell },
+          { id: 'ai', label: t.settingsTabAi, Icon: Mic },
           { id: 'data', label: t.dataAndBackupTitle, Icon: Cloud },
           {
             id: 'trash',
@@ -305,6 +373,8 @@ export function SettingsModal({
       t.accessibilitySectionTitle,
       t.settingsNavGroupWorkspace,
       t.settingsTabGeneral,
+      t.settingsTabNotifications,
+      t.settingsTabAi,
       t.dataAndBackupTitle,
       t.tabTrash,
       t.settingsNavGroupSystem,
@@ -532,7 +602,11 @@ export function SettingsModal({
                 ? legalDocs[activeLegalDoc].subtitle
                 : activeTab === 'docs'
                   ? t.docsSubtitle
-                  : t.settingsSubtitle}
+                  : activeTab === 'ai'
+                    ? t.aiSectionSubtitle
+                    : activeTab === 'notifications'
+                      ? t.notificationsSubtitle
+                      : t.settingsSubtitle}
             </span>
           </div>
         </header>
@@ -580,12 +654,36 @@ export function SettingsModal({
                 closeBehavior={closeBehavior}
                 launchAtStartup={launchAtStartup}
                 globalQuickAddShortcut={globalQuickAddShortcut}
+                globalQuickAddShortcutKey={globalQuickAddShortcutKey}
+                voiceShortcut={voiceShortcut}
+                customShortcuts={customShortcuts}
                 dragLocked={dragLocked}
-                shortcuts={shortcuts}
                 onChangeCloseBehavior={onChangeCloseBehavior}
                 onToggleLaunchAtStartup={onToggleLaunchAtStartup}
                 onToggleGlobalQuickAddShortcut={onToggleGlobalQuickAddShortcut}
+                onChangeGlobalQuickAddShortcutKey={onChangeGlobalQuickAddShortcutKey}
+                onVoiceShortcutChange={onVoiceShortcutChange}
+                onChangeCustomShortcut={onChangeCustomShortcut}
+                onResetAllShortcuts={onResetAllShortcuts}
                 onToggleDragLock={onToggleDragLock}
+              />
+            ) : activeTab === 'notifications' && notificationChannels ? (
+              <NotificationsSettingsTab
+                profile={notificationProfile}
+                leadMinutes={notificationLeadMinutes}
+                channels={notificationChannels}
+                onApplyProfile={(p) => onApplyNotificationProfile?.(p)}
+                onChangeChannel={(ev, mode) => onChangeNotificationChannel?.(ev, mode)}
+                onChangeLeadMinutes={(m) => onChangeNotificationLeadMinutes?.(m)}
+                onSendTest={() => onSendTestNotification?.()}
+              />
+            ) : activeTab === 'ai' ? (
+              <AiVoiceSettingsTab
+                closeBehavior={closeBehavior}
+                launchAtStartup={launchAtStartup}
+                onChangeCloseBehavior={onChangeCloseBehavior}
+                onToggleLaunchAtStartup={onToggleLaunchAtStartup}
+                onVoiceShortcutChange={onVoiceShortcutChange}
               />
             ) : activeTab === 'data' ? (
               <DataBackupSettingsTab

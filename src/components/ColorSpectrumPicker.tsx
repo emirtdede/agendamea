@@ -79,9 +79,12 @@ export function ColorSpectrumPicker({
   const svAreaRef = useRef<HTMLDivElement>(null);
   const hueBarRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<'sv' | 'hue' | null>(null);
+  const isEditingHexRef = useRef<boolean>(false);
 
   useEffect(() => {
-    setHexDraft(normalized);
+    if (!isEditingHexRef.current) {
+      setHexDraft(normalized);
+    }
     setHsv((prev) => {
       const currentHex = hsvToHex(prev.h, prev.s, prev.v);
       if (currentHex.toLowerCase() === normalized.toLowerCase()) {
@@ -134,6 +137,32 @@ export function ColorSpectrumPicker({
     [emitColor, hsv.s, hsv.v],
   );
 
+  const releaseSvDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (draggingRef.current === 'sv') {
+      draggingRef.current = null;
+      try {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Ignore already released pointer capture
+      }
+    }
+  }, []);
+
+  const releaseHueDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (draggingRef.current === 'hue') {
+      draggingRef.current = null;
+      try {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Ignore already released pointer capture
+      }
+    }
+  }, []);
+
   return (
     <div className={compact ? 'space-y-2' : 'space-y-2.5'} data-testid="color-spectrum-picker">
       {/* 2D Saturation / Brightness Palette */}
@@ -157,13 +186,10 @@ export function ColorSpectrumPicker({
             updateSvFromClientPoint(e.clientX, e.clientY);
           }
         }}
-        onPointerUp={(e) => {
-          if (draggingRef.current === 'sv') {
-            draggingRef.current = null;
-            if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-              e.currentTarget.releasePointerCapture(e.pointerId);
-            }
-          }
+        onPointerUp={releaseSvDrag}
+        onPointerCancel={releaseSvDrag}
+        onLostPointerCapture={() => {
+          if (draggingRef.current === 'sv') draggingRef.current = null;
         }}
         onKeyDown={(e) => {
           const step = 0.04;
@@ -222,13 +248,10 @@ export function ColorSpectrumPicker({
             updateHueFromClientX(e.clientX);
           }
         }}
-        onPointerUp={(e) => {
-          if (draggingRef.current === 'hue') {
-            draggingRef.current = null;
-            if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-              e.currentTarget.releasePointerCapture(e.pointerId);
-            }
-          }
+        onPointerUp={releaseHueDrag}
+        onPointerCancel={releaseHueDrag}
+        onLostPointerCapture={() => {
+          if (draggingRef.current === 'hue') draggingRef.current = null;
         }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowRight') {
@@ -278,12 +301,37 @@ export function ColorSpectrumPicker({
             maxLength={7}
             spellCheck={false}
             placeholder="#2563eb"
+            onFocus={() => {
+              isEditingHexRef.current = true;
+            }}
             onChange={(e) => {
               const val = e.target.value;
               setHexDraft(val);
-              const norm = normalizeHexColor(val);
+              const trimmed = val.trim();
+              if (/^#?[0-9a-fA-F]{6}$/.test(trimmed)) {
+                const norm = normalizeHexColor(trimmed);
+                if (norm) {
+                  onChange(norm);
+                }
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const norm = normalizeHexColor(hexDraft);
+                if (norm) {
+                  setHexDraft(norm);
+                  onChange(norm);
+                }
+              }
+            }}
+            onBlur={() => {
+              isEditingHexRef.current = false;
+              const norm = normalizeHexColor(hexDraft);
               if (norm) {
+                setHexDraft(norm);
                 onChange(norm);
+              } else {
+                setHexDraft(normalized);
               }
             }}
             className="h-7 w-[92px] shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-center font-mono-tabular text-xs font-semibold uppercase text-[var(--text-primary)] focus:border-[var(--accent)]"

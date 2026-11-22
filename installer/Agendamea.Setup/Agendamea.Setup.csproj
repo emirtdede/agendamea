@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Agendamea.Setup</AssemblyName>
+    <RootNamespace>Agendamea.Setup</RootNamespace>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <Product>Agendamea Setup</Product>
+    <Company>Vellium Teknoloji A.S.</Company>
+    <Copyright>Copyright (c) 2026 Vellium Teknoloji A.S.</Copyright>
+    <Description>Modern frameless monochrome Windows setup and uninstaller for Agendamea.</Description>
+    <ApplicationIcon>..\..\electron-resources\installer.ico</ApplicationIcon>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Localization\locales.json" LogicalName="Agendamea.Setup.Localization.locales.json" />
+  </ItemGroup>
+</Project>

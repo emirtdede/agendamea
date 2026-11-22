@@ -6,7 +6,21 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
+  let appVersion = '1.1.0';
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.resolve(import.meta.dirname, 'package.json'), 'utf8'),
+    ) as { version?: string };
+    if (typeof pkg.version === 'string' && pkg.version.trim()) {
+      appVersion = pkg.version.trim();
+    }
+  } catch {
+    // Keep fallback version
+  }
   return {
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion),
+    },
     plugins: [
       react(),
       tailwindcss(),
@@ -191,6 +205,10 @@ export default defineConfig(() => {
     build: {
       chunkSizeWarningLimit: 550,
       rolldownOptions: {
+        input: {
+          main: path.resolve(import.meta.dirname, 'index.html'),
+          overlay: path.resolve(import.meta.dirname, 'overlay.html'),
+        },
         output: {
           codeSplitting: {
             groups: [

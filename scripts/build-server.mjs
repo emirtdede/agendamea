@@ -5,7 +5,7 @@ await build({
   bundle: true,
   platform: 'node',
   format: 'esm',
-  external: ['better-sqlite3', 'vite'],
+  external: ['better-sqlite3', 'vite', 'node-llama-cpp', '@fugood/whisper.node'],
   banner: {
     js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
   },

@@ -31,10 +31,40 @@ export type SettingsTabId =
   | 'appearance'
   | 'accessibility'
   | 'general'
+  | 'notifications'
+  | 'ai'
   | 'data'
   | 'trash'
   | 'docs'
   | 'about';
+
+export type VoiceSensitivityMode = 'auto' | 'low' | 'medium' | 'high';
+
+export type NotificationProfileId =
+  | 'balanced'
+  | 'all'
+  | 'focus'
+  | 'silent_inapp'
+  | 'custom';
+
+export type NotificationChannelMode = 'both' | 'inApp' | 'desktop' | 'off';
+
+export type NotificationEventType =
+  | 'taskUpcoming'
+  | 'taskDue'
+  | 'taskCompleted'
+  | 'voiceAssistant'
+  | 'cloudSync'
+  | 'appUpdates';
+
+export type NotificationChannelsMap = Record<NotificationEventType, NotificationChannelMode>;
+
+export type AiTierId =
+  | 'tier-light'
+  | 'tier-medium'
+  | 'tier-strong'
+  | 'external-ollama'
+  | 'external-lmstudio';
 
 export type SmartView = 'all' | 'today' | 'important' | 'completed';
 
@@ -114,6 +144,169 @@ export interface AppSettings {
   webhookUrl?: string;
   webhookSecret?: string;
   webhookEvents?: string;
+  aiEnabled?: boolean;
+  aiTier?: AiTierId;
+  aiLlmModelId?: string;
+  aiSttModelId?: string;
+  aiEmbedModelId?: string;
+  aiUseExternalOllama?: boolean;
+  aiOllamaModel?: string;
+  voiceShortcut?: string;
+  voiceAutoStopMs?: number;
+  voiceTtsEnabled?: boolean;
+  voiceTtsVoice?: string;
+  voiceMicDeviceId?: string;
+  voiceNoiseSuppression?: boolean;
+  voiceSensitivity?: VoiceSensitivityMode;
+  globalQuickAddShortcutKey?: string;
+  customShortcuts?: Record<string, string>;
+  notificationProfile?: NotificationProfileId;
+  notificationLeadMinutes?: number;
+  notificationChannels?: NotificationChannelsMap;
+}
+
+export interface HardwareProfile {
+  platform: string;
+  arch: string;
+  ramGb: number;
+  cpuCores: number;
+  cpuModel: string;
+  avx2Likely: boolean;
+  gpuName: string;
+  gpuVendor: string;
+  vramBytes: number;
+  vramGb: number;
+  vramSource: string;
+  hasDiscreteGpu: boolean;
+  vulkanLikely: boolean;
+  freeDiskBytes: number | null;
+  freeDiskGb: number | null;
+  fallbackReason: string | null;
+  recommendedTier: 'tier-light' | 'tier-medium' | 'tier-strong';
+  measuredAt: string;
+}
+
+export interface AiModelStatus {
+  id: string;
+  role: 'stt' | 'llm' | 'embed';
+  tier: string;
+  label: string;
+  file: string;
+  license: string;
+  expectedBytes: number;
+  expectedSha256: string;
+  present: boolean;
+  verified: boolean;
+  bytes: number;
+  partialBytes: number;
+  downloading: boolean;
+  progress: {
+    modelId: string;
+    receivedBytes: number;
+    totalBytes: number;
+    percent: number;
+    resumed: boolean;
+  } | null;
+  fitsHardware?: boolean;
+  warningCode?: string | null;
+}
+
+export interface AiStatusPayload {
+  hardware: HardwareProfile;
+  recommendation: {
+    recommendedTier: 'tier-light' | 'tier-medium' | 'tier-strong';
+    primaryOptionId: AiTierId;
+    preferExternalOllama: boolean;
+    preferExternalLmStudio: boolean;
+    externalOllama: {
+      detected: boolean;
+      baseUrl: string;
+      models: string[];
+      downloadBytes: number;
+    };
+    externalLmStudio: {
+      detected: boolean;
+      baseUrl: string;
+      models: string[];
+      downloadBytes: number;
+    };
+    tiers: Array<{
+      id: 'tier-light' | 'tier-medium' | 'tier-strong';
+      sttModelId: string;
+      llmModelId: string;
+      embedModelId: string;
+      totalBytes: number;
+      recommended: boolean;
+      fitsHardware: boolean;
+      warningCode: string | null;
+    }>;
+  };
+  models: AiModelStatus[];
+  installedDiskBytes: number;
+  ragIndexedChunks: number;
+  settings: {
+    aiEnabled: boolean;
+    aiTier: AiTierId;
+    aiLlmModelId: string;
+    aiSttModelId: string;
+    aiEmbedModelId: string;
+    aiUseExternalOllama: boolean;
+    aiOllamaModel: string;
+    voiceShortcut: string;
+    voiceAutoStopMs: number;
+    voiceTtsEnabled: boolean;
+    voiceTtsVoice: string;
+    voiceMicDeviceId: string;
+    voiceNoiseSuppression: boolean;
+    voiceSensitivity: VoiceSensitivityMode;
+  };
+}
+
+export interface HybridRagHit {
+  todoId: string;
+  title: string;
+  notes: string;
+  dueDate: string | null;
+  dueTime: string | null;
+  priority: Priority;
+  completed: boolean;
+  score: number;
+  matchedChunkText: string;
+  matchedChunkIndex: number;
+}
+
+export interface VoiceAskResponse {
+  ok: boolean;
+  status:
+    | 'executed'
+    | 'answered'
+    | 'not_found'
+    | 'disambiguation'
+    | 'confirmation_required'
+    | 'confirmation_expired'
+    | 'blocked_read_only'
+    | 'blocked'
+    | 'preview';
+  intent: string;
+  parser?: string;
+  mutated?: boolean;
+  destructive?: boolean;
+  requiresConfirmation?: boolean;
+  confirmationToken?: string;
+  readOnlyIsolated?: boolean;
+  spokenText: string;
+  displayText: string;
+  ttsTruncated?: boolean;
+  todo?: Todo;
+  matches?: HybridRagHit[];
+  candidates?: Array<{
+    index: number;
+    todoId: string;
+    title: string;
+    score: number;
+    snippet: string;
+  }>;
+  payload?: { title?: string };
 }
 
 export interface WebhookLogEntry {

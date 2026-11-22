@@ -123,9 +123,13 @@ export function WelcomeModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onComplete, meta.dir]);
 
-  const featuredThemes = FEATURED_THEME_IDS.map((id) =>
-    COLOR_THEMES.find((item) => item.id === id),
-  ).filter((item): item is (typeof COLOR_THEMES)[number] => Boolean(item));
+  const featuredThemes = useMemo(
+    () =>
+      FEATURED_THEME_IDS.map((id) =>
+        COLOR_THEMES.find((item) => item.id === id),
+      ).filter((item): item is (typeof COLOR_THEMES)[number] => Boolean(item)),
+    [],
+  );
 
   const activeIconColors = resolveAppIconColors(
     appIconId,
@@ -135,36 +139,56 @@ export function WelcomeModal({
     customIconColor,
   );
 
-  const slideCopy = [
-    {
-      title: t.languageSectionTitle,
-      desc: t.welcomeLanguageDesc,
-    },
-    {
-      title: t.colorThemeTitle,
-      desc: t.customThemeHexHint,
-    },
-    {
-      title: t.appIconSectionTitle,
-      desc: t.appIconSectionDesc,
-    },
-    {
-      title: t.welcomeStep1Title,
-      desc: t.welcomeStep1Desc,
-    },
-    {
-      title: t.welcomeStep2Title,
-      desc: t.welcomeStep2Desc,
-    },
-    {
-      title: t.welcomeStep3Title,
-      desc: t.welcomeStep3Desc,
-    },
-    {
-      title: t.welcomeStep4Title,
-      desc: t.welcomeStep4Desc,
-    },
-  ][step];
+  const slideCopy = useMemo(
+    () =>
+      [
+        {
+          title: t.languageSectionTitle,
+          desc: t.welcomeLanguageDesc,
+        },
+        {
+          title: t.colorThemeTitle,
+          desc: t.customThemeHexHint,
+        },
+        {
+          title: t.appIconSectionTitle,
+          desc: t.appIconSectionDesc,
+        },
+        {
+          title: t.welcomeStep1Title,
+          desc: t.welcomeStep1Desc,
+        },
+        {
+          title: t.welcomeStep2Title,
+          desc: t.welcomeStep2Desc,
+        },
+        {
+          title: t.welcomeStep3Title,
+          desc: t.welcomeStep3Desc,
+        },
+        {
+          title: t.welcomeStep4Title,
+          desc: t.welcomeStep4Desc,
+        },
+      ][step],
+    [
+      step,
+      t.languageSectionTitle,
+      t.welcomeLanguageDesc,
+      t.colorThemeTitle,
+      t.customThemeHexHint,
+      t.appIconSectionTitle,
+      t.appIconSectionDesc,
+      t.welcomeStep1Title,
+      t.welcomeStep1Desc,
+      t.welcomeStep2Title,
+      t.welcomeStep2Desc,
+      t.welcomeStep3Title,
+      t.welcomeStep3Desc,
+      t.welcomeStep4Title,
+      t.welcomeStep4Desc,
+    ],
+  );
 
   const isFirst = step === 0;
   const isLast = step === TOTAL_STEPS - 1;
@@ -747,17 +771,18 @@ export function WelcomeModal({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4 border-t border-[var(--border)] pt-6">
+                    <div className="grid grid-cols-4 gap-3 border-t border-[var(--border)] pt-6">
                       {[
                         { keycap: 'N', label: t.shortcutNewTask },
                         { keycap: 'Ctrl + K', label: t.shortcutSearch },
+                        { keycap: 'Ctrl+Alt+Space', label: t.settingsTabAi },
                         { keycap: 'Alt + ↑/↓', label: t.shortcutReorder },
                       ].map((item) => (
                         <div key={item.keycap} className="flex flex-col items-center gap-2 text-center">
-                          <kbd className="rounded-md bg-[var(--accent-soft)] px-2.5 py-1 font-mono-tabular text-xs font-semibold text-[var(--accent)]">
+                          <kbd className="rounded-md bg-[var(--accent-soft)] px-2 py-1 font-mono-tabular text-[11px] font-semibold text-[var(--accent)] whitespace-nowrap">
                             {item.keycap}
                           </kbd>
-                          <span className="line-clamp-2 text-xs leading-snug text-[var(--text-muted)]">
+                          <span className="line-clamp-2 text-[11px] leading-snug text-[var(--text-muted)]">
                             {item.label}
                           </span>
                         </div>
@@ -883,5 +908,3 @@ export function WelcomeModal({
     </div>
   );
 }
-
-export default WelcomeModal;
