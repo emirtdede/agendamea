@@ -305,6 +305,10 @@ export interface UiDictionary {
   settingsTabAppearance: string;
   settingsTabGeneral: string;
   settingsTabAbout: string;
+  welcomeLanguageDesc: string;
+  welcomeBenefitOffline: string;
+  welcomeBenefitInstant: string;
+  welcomeBenefitPrivate: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -385,7 +389,7 @@ export const TR_DICTIONARY: UiDictionary = {
   settingsSubtitle: 'Tüm değişiklikler bilgisayarınıza anında kaydedilir.',
   tabGeneral: 'Genel ve Tema',
   tabTrash: 'Çöp Kutusu',
-  languageSectionTitle: 'Uygulama Dili (73 Dil)',
+  languageSectionTitle: 'Uygulama Dili',
   languageSearchPlaceholder: 'Dil ara (Türkçe, English, Deutsch...)...',
   appearanceModeTitle: 'Görünüm Modu',
   lightMode: 'Açık',
@@ -542,12 +546,12 @@ export const TR_DICTIONARY: UiDictionary = {
     'Başlangıç-bitiş tarihleri, saatler, alt görevler, otomatik kaydedilen notlar ve #etiketler ile her işi netleştirin; kısayollarla hız kazanın.',
   welcomeStep4Title: 'Verileriniz Sizde Kalır, Yedekleriniz Güvende',
   welcomeStep4Desc:
-    'Tüm veriler yerel SQLite veritabanında tutulur. Dilerseniz kendi Microsoft OneDrive klasörünüzü bağlayarak ücretsiz ve sunucusuz 15 günlük otomatik yedekleme açabilirsiniz.',
+    'Tüm verileriniz yalnızca kendi bilgisayarınızda saklanır. Dilerseniz kendi bulut klasörünüzü bağlayarak ücretsiz 15 günlük otomatik yedekleme açabilirsiniz.',
   welcomeCardListDesc: 'Hızlı günlük akış ve akıllı filtreler',
   welcomeCardKanbanDesc: 'Öncelik veya duruma göre sütunlar',
   welcomeCardCalendarDesc: 'Saatli aylık takvim ve sürükle-planla',
   welcomeCardMatrixDesc: '4 kadranlı aciliyet-önem matrisi',
-  welcomePrivacyLocalTitle: 'Yerel SQLite ve Anlık Kayıt',
+  welcomePrivacyLocalTitle: 'Cihazınızda Güvende ve Anlık Kayıt',
   welcomePrivacyLocalDesc: 'Hesap veya internet gerekmez; veriler cihazınızdan dışarı çıkmaz.',
   welcomePrivacyCloudTitle: 'Ücretsiz OneDrive Bulut Yedekleme',
   welcomePrivacyCloudDesc: '15 günlük tarihli yedek ve format sonrası otomatik kurtarma.',
@@ -600,6 +604,10 @@ export const TR_DICTIONARY: UiDictionary = {
   settingsTabAppearance: 'Görünüm ve Tema',
   settingsTabGeneral: 'Genel ve Dil',
   settingsTabAbout: 'Güncelleme ve Yasal',
+  welcomeLanguageDesc: 'Uygulamayı kullanmak istediğiniz dili seçin.',
+  welcomeBenefitOffline: 'İnternetsiz çalışır',
+  welcomeBenefitInstant: 'Anlık otomatik kayıt',
+  welcomeBenefitPrivate: 'Hesapsız ve reklamsız',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -680,7 +688,7 @@ export const EN_DICTIONARY: UiDictionary = {
   settingsSubtitle: 'All changes are saved instantly to your device.',
   tabGeneral: 'General & Theme',
   tabTrash: 'Trash',
-  languageSectionTitle: 'Application Language (73 Languages)',
+  languageSectionTitle: 'Application Language',
   languageSearchPlaceholder: 'Search language (English, Türkçe, Deutsch...)...',
   appearanceModeTitle: 'Appearance Mode',
   lightMode: 'Light',
@@ -837,12 +845,12 @@ export const EN_DICTIONARY: UiDictionary = {
     'Organize tasks with date ranges, due times, subtasks, auto-saving notes, and #tags, and move faster with built-in keyboard shortcuts.',
   welcomeStep4Title: 'Your Data Stays Private & Protected',
   welcomeStep4Desc:
-    'Everything lives locally in a self-healing SQLite database. Connect your own Microsoft OneDrive folder anytime for free, serverless 15-day backups.',
+    'Everything stays locally on your own computer. Connect your own cloud folder anytime for free automatic 15-day backups.',
   welcomeCardListDesc: 'Fast daily flow & smart filters',
   welcomeCardKanbanDesc: 'Columns by priority or status',
   welcomeCardCalendarDesc: 'Timed monthly grid & drag-to-schedule',
   welcomeCardMatrixDesc: '4-quadrant urgent-important grid',
-  welcomePrivacyLocalTitle: 'Local SQLite & Instant Auto-Save',
+  welcomePrivacyLocalTitle: 'Stored Locally & Saved Instantly',
   welcomePrivacyLocalDesc: 'No account or internet needed; data never leaves your PC.',
   welcomePrivacyCloudTitle: 'Free Serverless OneDrive Backup',
   welcomePrivacyCloudDesc: '15-day daily snapshots and automatic recovery after reinstall.',
@@ -895,6 +903,10 @@ export const EN_DICTIONARY: UiDictionary = {
   settingsTabAppearance: 'Appearance & Theme',
   settingsTabGeneral: 'General & Language',
   settingsTabAbout: 'Updates & Legal',
+  welcomeLanguageDesc: 'Choose the language you would like to use in Agendamea.',
+  welcomeBenefitOffline: 'Works offline',
+  welcomeBenefitInstant: 'Instant auto-save',
+  welcomeBenefitPrivate: 'Private & no account needed',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {

@@ -7,6 +7,7 @@ interface ColorSpectrumPickerProps {
   hexInputLabel: string;
   hexInputTestId?: string;
   compact?: boolean;
+  paletteHeightClass?: string;
   previewNode?: React.ReactNode;
 }
 
@@ -67,6 +68,7 @@ export function ColorSpectrumPicker({
   hexInputLabel,
   hexInputTestId,
   compact = false,
+  paletteHeightClass,
   previewNode,
 }: ColorSpectrumPickerProps) {
   const normalized = normalizeHexColor(value) ?? '#2563eb';
@@ -176,7 +178,7 @@ export function ColorSpectrumPicker({
           }
         }}
         className={`relative w-full cursor-crosshair overflow-hidden rounded-lg border border-[var(--border-strong)] select-none touch-none ${
-          compact ? 'h-[78px]' : 'h-[124px]'
+          paletteHeightClass ?? (compact ? 'h-[78px]' : 'h-[124px]')
         }`}
         style={{
           backgroundColor: huePureHex,

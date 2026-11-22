@@ -7,8 +7,6 @@ import {
   Clock,
   Cloud,
   Columns3,
-  Database,
-  Globe,
   Grid2x2,
   Hash,
   List,
@@ -18,9 +16,11 @@ import {
   RotateCcw,
   Search,
   Shield,
-  Sparkles,
+  ShieldCheck,
   Sun,
+  WifiOff,
   X,
+  Zap,
 } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '../i18n/languages';
@@ -136,7 +136,7 @@ export function WelcomeModal({
   const slideCopy = [
     {
       title: t.languageSectionTitle,
-      desc: `${meta.nativeName} (${meta.englishName})`,
+      desc: t.welcomeLanguageDesc,
     },
     {
       title: t.colorThemeTitle,
@@ -174,20 +174,20 @@ export function WelcomeModal({
       aria-modal="true"
       aria-labelledby="welcome-modal-title"
       data-testid="welcome-modal"
-      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/50 p-3 sm:p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           onComplete(false);
         }
       }}
     >
-      {/* Fixed 540x484 Dialog: Footer & Next button stay at the exact same pixel coordinates across all 7 steps */}
-      <div className="relative flex h-[484px] max-h-[calc(100vh-24px)] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
-        {/* Top Bar (Fixed 48px) */}
-        <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5">
+      {/* Generous, Strictly Fixed 700x560 Dialog: Footer & Next button never move across all 7 steps */}
+      <div className="relative flex h-[560px] max-h-[calc(100vh-20px)] w-full max-w-[700px] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+        {/* Top Bar (Fixed 52px) */}
+        <div className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-6">
           <div className="flex items-center gap-2.5 min-w-0">
             <BrandMark
-              className="h-6 w-6"
+              className="h-6 w-6 rounded-md border border-[var(--border-strong)]"
               bgColor={activeIconColors.bg}
               fgColor={activeIconColors.fg}
             />
@@ -199,8 +199,8 @@ export function WelcomeModal({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="font-mono-tabular text-[11px] font-medium text-[var(--text-muted)] tabular-nums">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <span className="font-mono-tabular text-xs font-medium text-[var(--text-muted)] tabular-nums">
               {step + 1} / {TOTAL_STEPS}
             </span>
             {!isLast && (
@@ -208,7 +208,7 @@ export function WelcomeModal({
                 type="button"
                 data-testid="welcome-step-skip"
                 onClick={() => onComplete(false)}
-                className="rounded-md px-2 py-1 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
+                className="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
               >
                 {t.welcomeSkipButton}
               </button>
@@ -224,53 +224,53 @@ export function WelcomeModal({
           </div>
         </div>
 
-        {/* Fixed-Height Body (Zero outer stage box, minimal nesting) */}
-        <div className="flex flex-1 flex-col overflow-hidden px-6 py-4">
-          {/* Step Header */}
-          <div className="mb-3.5 shrink-0">
+        {/* Fixed-Height Content Area: Consistent Unclipped Header Anchor + Zero Dead Space */}
+        <div className="flex flex-1 flex-col overflow-hidden px-7 py-5">
+          {/* Consistent 76px Step Header across all 7 steps (accommodates 2 full lines without clipping) */}
+          <div className="mb-4 h-[76px] shrink-0 flex flex-col justify-start pt-0.5">
             <h2
               id="welcome-modal-title"
-              className="font-display text-lg font-semibold tracking-tight text-[var(--text-primary)]"
+              className="font-display text-xl font-semibold tracking-tight text-[var(--text-primary)]"
             >
               {slideCopy.title}
             </h2>
-            <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-[var(--text-secondary)]">
+            <p className="mt-1.5 text-sm leading-relaxed text-[var(--text-secondary)]">
               {slideCopy.desc}
             </p>
           </div>
 
-          {/* Step Content Area */}
-          <div className="flex flex-1 flex-col justify-center min-h-0">
-            {/* STEP 1 / 7: LANGUAGE SELECTION (Single Box Only: Search Header + 5-Row Scroll List) */}
+          {/* Step Body (Available ~308px) */}
+          <div className="flex flex-1 flex-col min-h-0">
+            {/* STEP 1 / 7: LANGUAGE SELECTION (Single Clean Surface: Search + Strictly 5 Visible Rows) */}
             {step === 0 && (
               <div
                 data-testid="welcome-language-dropdown"
-                className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]"
+                className="flex flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]"
               >
-                <div className="relative flex items-center border-b border-[var(--border)] px-3.5">
-                  <Search className="pointer-events-none h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
+                <div className="relative flex h-11 shrink-0 items-center border-b border-[var(--border)] px-4">
+                  <Search className="pointer-events-none h-4 w-4 shrink-0 text-[var(--text-muted)]" />
                   <input
                     type="text"
                     value={langSearch}
                     onChange={(e) => setLangSearch(e.target.value)}
                     placeholder={t.languageSearchPlaceholder}
                     aria-label={t.languageSearchPlaceholder}
-                    className="h-10 w-full bg-transparent px-2.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+                    className="h-full w-full bg-transparent px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
                   />
                   <span
                     data-testid="welcome-language-select"
-                    className="font-mono-tabular text-[11px] font-semibold uppercase text-[var(--accent)] shrink-0"
+                    className="font-mono-tabular text-xs font-semibold uppercase text-[var(--accent)] shrink-0"
                   >
                     {meta.code}
                   </span>
                 </div>
 
-                {/* Strictly 5 rows visible at once (5 * 38px = 190px) with smooth vertical scroll */}
+                {/* Strictly 5 rows visible at once (5 * 48px = 240px) with smooth vertical scroll */}
                 <div
                   role="listbox"
                   aria-label={t.languageSectionTitle}
                   data-testid="welcome-language-listbox"
-                  className="h-[190px] overflow-y-auto divide-y divide-[var(--border)]/50"
+                  className="h-[240px] overflow-y-auto divide-y divide-[var(--border)]/50"
                 >
                   {filteredLanguages.map((item) => {
                     const selected = item.code === lang;
@@ -281,7 +281,7 @@ export function WelcomeModal({
                         role="option"
                         aria-selected={selected}
                         onClick={() => onChangeLanguage(item.code as LanguageCode)}
-                        className={`flex h-[38px] w-full items-center justify-between gap-2 px-3.5 text-left text-xs transition-colors ${
+                        className={`flex h-12 w-full items-center justify-between gap-3 px-4 text-left text-sm transition-colors ${
                           selected
                             ? 'bg-[var(--accent-soft)] font-semibold text-[var(--text-primary)]'
                             : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -289,12 +289,12 @@ export function WelcomeModal({
                       >
                         <span className="truncate">
                           <span className="text-[var(--text-primary)]">{item.nativeName}</span>{' '}
-                          <span className="text-[11px] text-[var(--text-muted)]">
+                          <span className="text-xs text-[var(--text-muted)]">
                             ({item.englishName})
                           </span>
                         </span>
                         {selected && (
-                          <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                          <Check className="h-4 w-4 shrink-0 text-[var(--accent)]" />
                         )}
                       </button>
                     );
@@ -303,17 +303,23 @@ export function WelcomeModal({
               </div>
             )}
 
-            {/* STEP 2 / 7: APPEARANCE & THEME SELECTION (Flat layout, Custom Color picker always open) */}
+            {/* STEP 2 / 7: APPEARANCE & THEME SELECTION (Clean Separated Rows + Always-Open Picker) */}
             {step === 1 && (
-              <div className="space-y-3.5" data-testid="welcome-custom-theme-panel">
-                {/* Flat Row 1: Appearance Mode + Preset Swatches */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
-                  <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5">
+              <div
+                className="flex flex-1 flex-col justify-between"
+                data-testid="welcome-custom-theme-panel"
+              >
+                {/* Row 1: Appearance Mode */}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-xs font-medium text-[var(--text-secondary)] shrink-0">
+                    {t.appearanceModeTitle}
+                  </span>
+                  <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-1">
                     <button
                       type="button"
                       data-testid="welcome-mode-light"
                       onClick={() => onChangeMode('light')}
-                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                      className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors whitespace-nowrap ${
                         themeMode === 'light'
                           ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -331,7 +337,7 @@ export function WelcomeModal({
                       type="button"
                       data-testid="welcome-mode-dark"
                       onClick={() => onChangeMode('dark')}
-                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                      className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors whitespace-nowrap ${
                         themeMode === 'dark'
                           ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -349,7 +355,7 @@ export function WelcomeModal({
                       type="button"
                       data-testid="welcome-mode-system"
                       onClick={() => onChangeMode('system')}
-                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                      className={`inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors whitespace-nowrap ${
                         themeMode === 'system'
                           ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -364,9 +370,14 @@ export function WelcomeModal({
                       <span>{t.systemMode}</span>
                     </button>
                   </div>
+                </div>
 
-                  {/* Preset Theme Color Dots */}
-                  <div className="flex items-center gap-1.5">
+                {/* Row 2: Preset Theme Swatches (Dedicated Row, Zero Crowding) */}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-xs font-medium text-[var(--text-secondary)] shrink-0">
+                    {t.colorThemeTitle}
+                  </span>
+                  <div className="flex items-center gap-2">
                     {featuredThemes.map((item) => {
                       const selected = item.id === themeId;
                       const colorHex =
@@ -379,7 +390,7 @@ export function WelcomeModal({
                           aria-label={getThemeDisplayName(item.id, item.name)}
                           aria-pressed={selected}
                           onClick={() => onChangeTheme(item.id)}
-                          className={`flex h-6 w-6 items-center justify-center rounded-full border transition-transform ${
+                          className={`flex h-7 w-7 items-center justify-center rounded-full border transition-transform ${
                             selected
                               ? 'scale-110 border-[var(--text-primary)] ring-2 ring-[var(--accent-ring)]'
                               : 'border-[var(--border-strong)] hover:scale-105'
@@ -388,7 +399,7 @@ export function WelcomeModal({
                         >
                           {selected && (
                             <Check
-                              className="h-3 w-3"
+                              className="h-3.5 w-3.5"
                               style={{
                                 color:
                                   effectiveMode === 'dark'
@@ -405,7 +416,7 @@ export function WelcomeModal({
                       data-testid="welcome-custom-theme-btn"
                       title={t.customThemeHexTitle}
                       onClick={() => onChangeTheme('custom')}
-                      className={`flex h-6 w-6 items-center justify-center rounded-full border transition-transform ${
+                      className={`flex h-7 w-7 items-center justify-center rounded-full border transition-transform ${
                         themeId === 'custom'
                           ? 'scale-110 border-[var(--text-primary)] ring-2 ring-[var(--accent-ring)]'
                           : 'border-dashed border-[var(--border-strong)] hover:scale-105'
@@ -419,45 +430,60 @@ export function WelcomeModal({
                           : undefined
                       }
                     >
-                      <Palette className="h-3 w-3" />
+                      <Palette className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
 
-                {/* Flat Row 2: Custom Color Spectrum Picker (Always Open) */}
-                <ColorSpectrumPicker
-                  value={customThemeColor}
-                  onChange={(hex) => {
-                    if (themeId !== 'custom') {
-                      onChangeTheme('custom');
+                {/* Row 3: Custom Color Spectrum Picker (Always Open, Balanced Height) */}
+                <div className="border-t border-[var(--border)] pt-4">
+                  <ColorSpectrumPicker
+                    value={customThemeColor}
+                    onChange={(hex) => {
+                      if (themeId !== 'custom') {
+                        onChangeTheme('custom');
+                      }
+                      onChangeCustomThemeColor(hex);
+                    }}
+                    hexInputLabel={t.customThemeHexTitle}
+                    hexInputTestId="welcome-custom-theme-hex"
+                    paletteHeightClass="h-[104px]"
+                    previewNode={
+                      <span
+                        aria-hidden="true"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border-strong)]"
+                        style={{
+                          backgroundColor: customThemeColor,
+                          color: getContrastingForeground(customThemeColor),
+                        }}
+                      >
+                        <Check className="h-4 w-4" />
+                      </span>
                     }
-                    onChangeCustomThemeColor(hex);
-                  }}
-                  hexInputLabel={t.customThemeHexTitle}
-                  hexInputTestId="welcome-custom-theme-hex"
-                  compact
-                  previewNode={
-                    <span
-                      aria-hidden="true"
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border-strong)]"
-                      style={{
-                        backgroundColor: customThemeColor,
-                        color: getContrastingForeground(customThemeColor),
-                      }}
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                    </span>
-                  }
-                />
+                  />
+                </div>
               </div>
             )}
 
-            {/* STEP 3 / 7: APP ICON SELECTION (Flat layout, Preset Icons + Always-Open Custom Icon Color Picker) */}
+            {/* STEP 3 / 7: APP ICON SELECTION (Large Crisp Preview + Larger Preset Icons + Always-Open Picker) */}
             {step === 2 && (
-              <div className="space-y-3.5" data-testid="welcome-icon-step">
-                {/* Flat Row 1: Mode Pills + Preset Theme Icons */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
-                  <div className="inline-flex flex-wrap items-center gap-1">
+              <div
+                className="flex flex-1 flex-col justify-between"
+                data-testid="welcome-icon-step"
+              >
+                {/* Row 1: Large Active Icon Preview (Left) + Clean Mode Selector (Right) */}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <BrandMark
+                      className="h-12 w-12 shrink-0 rounded-xl border border-[var(--border-strong)] shadow-sm"
+                      bgColor={activeIconColors.bg}
+                      fgColor={activeIconColors.fg}
+                    />
+                    <span className="font-display text-sm font-semibold text-[var(--text-primary)] truncate">
+                      Agendamea
+                    </span>
+                  </div>
+                  <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-1 shrink-0">
                     {(
                       [
                         { id: 'match-theme', label: t.appIconMatchTheme },
@@ -473,10 +499,10 @@ export function WelcomeModal({
                           type="button"
                           data-testid={`welcome-app-icon-${modeOpt.id}`}
                           onClick={() => onChangeAppIcon?.(modeOpt.id)}
-                          className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors whitespace-nowrap ${
+                          className={`h-7 rounded-md px-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
                             active
                               ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                              : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                           }`}
                           style={
                             active
@@ -489,100 +515,116 @@ export function WelcomeModal({
                       );
                     })}
                   </div>
+                </div>
 
-                  {/* Preset Theme Miniature App Icons */}
-                  <div className="flex items-center gap-1.5">
-                    {featuredThemes.slice(0, 7).map((item) => {
-                      const selected = appIconId === item.id;
-                      const preview = resolveAppIconColors(
-                        item.id,
-                        themeId,
-                        themeMode,
-                        customThemeColor,
-                        customIconColor,
-                      );
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          title={getThemeDisplayName(item.id, item.name)}
-                          aria-label={getThemeDisplayName(item.id, item.name)}
-                          aria-pressed={selected}
-                          onClick={() => onChangeAppIcon?.(item.id)}
-                          className={`rounded-lg p-0.5 transition-transform ${
-                            selected
-                              ? 'scale-110 ring-2 ring-[var(--text-primary)]'
-                              : 'opacity-85 hover:scale-105 hover:opacity-100'
-                          }`}
-                        >
-                          <BrandMark
-                            className="h-5 w-5 rounded-[5px]"
-                            bgColor={preview.bg}
-                            fgColor={preview.fg}
-                          />
-                        </button>
-                      );
-                    })}
+                {/* Row 2: Large 36x36 Preset Theme App Icons (Clearly Legible Monograms) */}
+                <div className="flex items-center justify-between gap-2">
+                  {featuredThemes.map((item) => {
+                    const selected = appIconId === item.id;
+                    const preview = resolveAppIconColors(
+                      item.id,
+                      themeId,
+                      themeMode,
+                      customThemeColor,
+                      customIconColor,
+                    );
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        title={getThemeDisplayName(item.id, item.name)}
+                        aria-label={getThemeDisplayName(item.id, item.name)}
+                        aria-pressed={selected}
+                        onClick={() => onChangeAppIcon?.(item.id)}
+                        className={`rounded-xl p-0.5 transition-transform ${
+                          selected
+                            ? 'scale-110 ring-2 ring-[var(--text-primary)]'
+                            : 'opacity-90 hover:scale-105 hover:opacity-100'
+                        }`}
+                      >
+                        <BrandMark
+                          className="h-9 w-9 rounded-lg border border-[var(--border-strong)]"
+                          bgColor={preview.bg}
+                          fgColor={preview.fg}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Row 3: Custom App Icon Color Picker (Always Open) */}
+                <div className="border-t border-[var(--border)] pt-4">
+                  <ColorSpectrumPicker
+                    value={customIconColor}
+                    onChange={(hex) => {
+                      if (appIconId !== 'custom') {
+                        onChangeAppIcon?.('custom');
+                      }
+                      onChangeCustomIconColor?.(hex);
+                    }}
+                    hexInputLabel={`${t.appIconCustom} (HEX)`}
+                    hexInputTestId="welcome-custom-icon-hex"
+                    paletteHeightClass="h-[92px]"
+                    previewNode={
+                      <BrandMark
+                        className="h-8 w-8 rounded-lg border border-[var(--border-strong)] shrink-0"
+                        bgColor={activeIconColors.bg}
+                        fgColor={activeIconColors.fg}
+                      />
+                    }
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* STEP 4 / 7: END-USER FOCUSED WELCOME HERO (Zero Technical Jargon) */}
+            {step === 3 && (
+              <div className="flex flex-1 flex-col items-center justify-between py-2 text-center">
+                <div className="flex flex-1 flex-col items-center justify-center space-y-3.5">
+                  <BrandMark
+                    className="h-[72px] w-[72px] rounded-2xl border border-[var(--border-strong)] shadow-md"
+                    bgColor={activeIconColors.bg}
+                    fgColor={activeIconColors.fg}
+                  />
+                  <div className="space-y-1">
+                    <p className="font-display text-lg font-semibold text-[var(--text-primary)]">
+                      Agendamea · {t.appTitleSuffix}
+                    </p>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {t.settingsSubtitle}
+                    </p>
                   </div>
                 </div>
 
-                {/* Flat Row 2: Custom App Icon Color Picker (Always Open) */}
-                <ColorSpectrumPicker
-                  value={customIconColor}
-                  onChange={(hex) => {
-                    if (appIconId !== 'custom') {
-                      onChangeAppIcon?.('custom');
-                    }
-                    onChangeCustomIconColor?.(hex);
-                  }}
-                  hexInputLabel={`${t.appIconCustom} (HEX)`}
-                  hexInputTestId="welcome-custom-icon-hex"
-                  compact
-                  previewNode={
-                    <BrandMark
-                      className="h-7 w-7 rounded-lg shrink-0"
-                      bgColor={activeIconColors.bg}
-                      fgColor={activeIconColors.fg}
-                    />
-                  }
-                />
-              </div>
-            )}
-
-            {/* STEP 4 / 7: WELCOME HERO (Zero boxes, calm & open) */}
-            {step === 3 && (
-              <div className="flex flex-col items-center justify-center text-center space-y-4">
-                <BrandMark
-                  className="h-16 w-16 rounded-2xl shadow-md"
-                  bgColor={activeIconColors.bg}
-                  fgColor={activeIconColors.fg}
-                />
-                <div className="space-y-1">
-                  <p className="font-display text-base font-semibold text-[var(--text-primary)]">
-                    Agendamea · {t.appTitleSuffix}
-                  </p>
-                  <p className="text-xs text-[var(--text-muted)]">{t.instantSaveBadge}</p>
-                </div>
-                <div className="flex flex-wrap items-center justify-center gap-5 pt-1 text-xs font-medium text-[var(--text-secondary)]">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Database className="h-3.5 w-3.5 text-[var(--accent)]" />
-                    <span>SQLite WAL</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" />
-                    <span>28+ {t.themesCountUnit}</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <Globe className="h-3.5 w-3.5 text-[var(--accent)]" />
-                    <span>73 · {meta.nativeName}</span>
-                  </span>
+                {/* 3 End-User Benefits (Offline, Instant Save, Private) */}
+                <div className="grid w-full grid-cols-3 gap-4 border-t border-[var(--border)] pt-5">
+                  {[
+                    { Icon: WifiOff, label: t.welcomeBenefitOffline },
+                    { Icon: Zap, label: t.welcomeBenefitInstant },
+                    { Icon: ShieldCheck, label: t.welcomeBenefitPrivate },
+                  ].map(({ Icon, label }) => (
+                    <div
+                      key={label}
+                      className="flex flex-col items-center gap-2 text-center"
+                    >
+                      <span
+                        className="flex h-9 w-9 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="text-xs font-medium leading-snug text-[var(--text-secondary)]">
+                        {label}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* STEP 5 / 7: 4 PLANNING VIEWS (Clean 2x2 Grid, Zero Nested Wireframe Boxes) */}
+            {/* STEP 5 / 7: 4 PLANNING VIEWS (Even 2x2 Grid Filling Full Stage) */}
             {step === 4 && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid flex-1 grid-cols-2 gap-4">
                 {[
                   { Icon: List, title: t.viewList, desc: t.welcomeCardListDesc },
                   { Icon: Columns3, title: t.viewKanban, desc: t.welcomeCardKanbanDesc },
@@ -591,15 +633,20 @@ export function WelcomeModal({
                 ].map(({ Icon, title, desc }) => (
                   <div
                     key={title}
-                    className="flex flex-col justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5"
+                    className="flex flex-col justify-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-5"
                   >
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 shrink-0 text-[var(--accent)]" />
-                      <span className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                        style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="font-display text-sm font-semibold text-[var(--text-primary)] truncate">
                         {title}
                       </span>
                     </div>
-                    <p className="text-[11px] leading-relaxed text-[var(--text-muted)]">
+                    <p className="text-xs leading-relaxed text-[var(--text-muted)]">
                       {desc}
                     </p>
                   </div>
@@ -607,47 +654,47 @@ export function WelcomeModal({
               </div>
             )}
 
-            {/* STEP 6 / 7: SMART DETAILS & KEYBOARD SHORTCUTS (1 Task Row + Flat Shortcut Line) */}
+            {/* STEP 6 / 7: SMART DETAILS & KEYBOARD SHORTCUTS (Balanced Vertical Rhythm, Zero Hollow Gap) */}
             {step === 5 && (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4">
-                  <div className="flex items-start gap-3">
+              <div className="flex flex-1 flex-col justify-center gap-7">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-5">
+                  <div className="flex items-start gap-3.5">
                     <span
-                      className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+                      className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
                       style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
                     >
-                      <Check className="h-2.5 w-2.5" />
+                      <Check className="h-3 w-3" />
                     </span>
-                    <div className="min-w-0 flex-1 space-y-2.5">
+                    <div className="min-w-0 flex-1 space-y-3">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
+                        <span className="font-display text-sm font-semibold text-[var(--text-primary)] truncate">
                           Agendamea · {t.today}
                         </span>
-                        <span className="inline-flex items-center gap-1 font-mono-tabular text-[11px] font-medium text-[var(--accent)] shrink-0">
-                          <Clock className="h-3 w-3" />
+                        <span className="inline-flex items-center gap-1 font-mono-tabular text-xs font-medium text-[var(--accent)] shrink-0">
+                          <Clock className="h-3.5 w-3.5" />
                           <span>14:30</span>
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-secondary)]">
-                        <span className="inline-flex items-center gap-1">
-                          <Calendar className="h-3 w-3 text-[var(--text-muted)]" />
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--text-secondary)]">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                           <span>{t.today}</span>
                         </span>
                         <span className="inline-flex items-center gap-0.5 text-[var(--accent)]">
-                          <Hash className="h-3 w-3" />
+                          <Hash className="h-3.5 w-3.5" />
                           <span>{t.important.toLowerCase()}</span>
                         </span>
                         <span className="inline-flex items-center gap-0.5 text-[var(--accent)]">
-                          <Hash className="h-3 w-3" />
+                          <Hash className="h-3.5 w-3.5" />
                           <span>{t.priorityHigh.toLowerCase()}</span>
                         </span>
-                        <span className="ms-auto font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                        <span className="ms-auto font-mono-tabular text-xs text-[var(--text-muted)]">
                           2 / 3 {t.subtaskCountUnit}
                         </span>
                       </div>
 
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
                         <div
                           className="h-full w-2/3 rounded-full"
                           style={{ backgroundColor: 'var(--accent)' }}
@@ -657,18 +704,18 @@ export function WelcomeModal({
                   </div>
                 </div>
 
-                {/* Flat Keyboard Shortcuts Row (Zero outer cards) */}
-                <div className="grid grid-cols-3 gap-3 pt-1">
+                {/* Clean Keyboard Shortcuts Row */}
+                <div className="grid grid-cols-3 gap-4 border-t border-[var(--border)] pt-6">
                   {[
                     { keycap: 'N', label: t.shortcutNewTask },
-                    { keycap: 'Ctrl+K', label: t.shortcutSearch },
-                    { keycap: 'Alt+↑/↓', label: t.shortcutReorder },
+                    { keycap: 'Ctrl + K', label: t.shortcutSearch },
+                    { keycap: 'Alt + ↑/↓', label: t.shortcutReorder },
                   ].map((item) => (
-                    <div key={item.keycap} className="flex flex-col items-center gap-1 text-center">
-                      <kbd className="font-mono-tabular text-xs font-semibold text-[var(--accent)]">
+                    <div key={item.keycap} className="flex flex-col items-center gap-2 text-center">
+                      <kbd className="rounded-md bg-[var(--accent-soft)] px-2.5 py-1 font-mono-tabular text-xs font-semibold text-[var(--accent)]">
                         {item.keycap}
                       </kbd>
-                      <span className="line-clamp-2 text-[11px] leading-snug text-[var(--text-muted)]">
+                      <span className="line-clamp-2 text-xs leading-snug text-[var(--text-muted)]">
                         {item.label}
                       </span>
                     </div>
@@ -677,9 +724,9 @@ export function WelcomeModal({
               </div>
             )}
 
-            {/* STEP 7 / 7: PRIVACY & CLOUD BACKUP (Flat Divider List, Zero Boxes) */}
+            {/* STEP 7 / 7: PRIVACY & CLOUD BACKUP (Spacious Flat Divider List) */}
             {step === 6 && (
-              <div className="divide-y divide-[var(--border)]">
+              <div className="flex flex-1 flex-col justify-center divide-y divide-[var(--border)]">
                 {[
                   {
                     Icon: Shield,
@@ -696,10 +743,10 @@ export function WelcomeModal({
                         type="button"
                         data-testid="welcome-open-settings"
                         onClick={() => onComplete(true)}
-                        className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0 self-center"
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0 self-center"
                       >
                         <span>{t.settings}</span>
-                        <ChevronRight className="h-3 w-3 rtl:rotate-180 shrink-0" />
+                        <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180 shrink-0" />
                       </button>
                     ),
                   },
@@ -710,13 +757,18 @@ export function WelcomeModal({
                     action: null,
                   },
                 ].map(({ Icon, title, desc, action }) => (
-                  <div key={title} className="flex items-start gap-3 py-3 first:pt-1 last:pb-1">
-                    <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
+                  <div key={title} className="flex items-start gap-4 py-4 first:pt-1 last:pb-1">
+                    <span
+                      className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                      style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </span>
                     <div className="min-w-0 flex-1">
-                      <p className="font-display text-xs font-semibold text-[var(--text-primary)]">
+                      <p className="font-display text-sm font-semibold text-[var(--text-primary)]">
                         {title}
                       </p>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--text-muted)]">
+                      <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
                         {desc}
                       </p>
                     </div>
@@ -728,10 +780,10 @@ export function WelcomeModal({
           </div>
         </div>
 
-        {/* Fixed 56px Footer: Next/Start Button Never Moves Across Steps */}
-        <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--canvas)] px-5">
+        {/* Fixed 60px Footer: Next / Start Button Never Moves Across Steps */}
+        <div className="flex h-[60px] shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--canvas)] px-6">
           {/* Interactive Step Indicators */}
-          <div className="flex items-center gap-1.5" role="tablist" aria-label="Agendamea">
+          <div className="flex items-center gap-2" role="tablist" aria-label="Agendamea">
             {Array.from({ length: TOTAL_STEPS }).map((_, idx) => {
               const active = idx === step;
               return (
@@ -742,7 +794,7 @@ export function WelcomeModal({
                   aria-selected={active}
                   aria-label={`${idx + 1} / ${TOTAL_STEPS}`}
                   onClick={() => setStep(idx)}
-                  className={`h-2 rounded-full ${active ? 'w-6' : 'w-2 hover:opacity-80'}`}
+                  className={`h-2 rounded-full transition-all ${active ? 'w-7' : 'w-2 hover:opacity-80'}`}
                   style={{
                     backgroundColor: active ? 'var(--accent)' : 'var(--border-strong)',
                   }}
@@ -752,13 +804,13 @@ export function WelcomeModal({
           </div>
 
           {/* Action Buttons (Fixed coordinates, High Contrast & Unselectable) */}
-          <div className="flex items-center gap-2 shrink-0 flex-nowrap">
+          <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
             {!isFirst && (
               <button
                 type="button"
                 data-testid="welcome-step-back"
                 onClick={() => setStep((prev) => Math.max(0, prev - 1))}
-                className="inline-flex select-none items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex h-9 select-none items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
               >
                 <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180 shrink-0" />
                 <span>{t.welcomeBackButton}</span>
@@ -770,7 +822,7 @@ export function WelcomeModal({
                 type="button"
                 data-testid="welcome-step-start"
                 onClick={() => onComplete(false)}
-                className="inline-flex select-none items-center gap-1.5 rounded-lg border border-transparent px-4 py-1.5 font-display text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
+                className="inline-flex h-9 select-none items-center gap-1.5 rounded-lg border border-transparent px-4 font-display text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
                 style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 <span style={{ color: 'var(--accent-fg)' }}>{t.welcomeStartButton}</span>
@@ -781,7 +833,7 @@ export function WelcomeModal({
                 type="button"
                 data-testid="welcome-step-next"
                 onClick={() => setStep((prev) => Math.min(TOTAL_STEPS - 1, prev + 1))}
-                className="inline-flex select-none items-center gap-1 rounded-lg border border-transparent px-4 py-1.5 font-display text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
+                className="inline-flex h-9 select-none items-center gap-1 rounded-lg border border-transparent px-4 font-display text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
                 style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
                 <span style={{ color: 'var(--accent-fg)' }}>{t.welcomeNextButton}</span>

@@ -209,7 +209,7 @@ export function compileSeedToDictionary(
     settingsSubtitle,
     tabGeneral: generalAndTheme,
     tabTrash: trash,
-    languageSectionTitle: `${languageTitle} (73)`,
+    languageSectionTitle: languageTitle,
     languageSearchPlaceholder: `${search} (${languageTitle})...`,
     appearanceModeTitle: appearance,
     lightMode: light,
@@ -366,7 +366,7 @@ export function compileSeedToDictionary(
     welcomeCardKanbanDesc: `${priority} / ${active}`,
     welcomeCardCalendarDesc: `${dueDate} · ${dueTimeLabel}`,
     welcomeCardMatrixDesc: `${important} · ${today}`,
-    welcomePrivacyLocalTitle: `SQLite · ${instantSave}`,
+    welcomePrivacyLocalTitle: `${instantSave} · ${legalPrivacy}`,
     welcomePrivacyLocalDesc: settingsSubtitle,
     welcomePrivacyCloudTitle: `OneDrive · ${cloudSync}`,
     welcomePrivacyCloudDesc: backupRestoreDesc,
@@ -419,6 +419,10 @@ export function compileSeedToDictionary(
     settingsTabAppearance: `${appearance} & ${colorTheme}`,
     settingsTabGeneral: `${generalAndTheme} · ${languageTitle}`,
     settingsTabAbout: `${updatesTitle} & ${currentVersion}`,
+    welcomeLanguageDesc: `${languageTitle} - ${settingsSubtitle}`,
+    welcomeBenefitOffline: offlineBanner,
+    welcomeBenefitInstant: instantSave,
+    welcomeBenefitPrivate: legalPrivacy,
   };
 }
 
