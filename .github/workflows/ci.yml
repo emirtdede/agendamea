@@ -1,15 +1,17 @@
-name: CI
+name: CI Quality Gate
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   verify:
-    name: Test, Type-Check & Build
-    runs-on: ubuntu-latest
+    name: Typecheck, Unit & Integration Tests, Production Build
+    runs-on: windows-latest
 
     steps:
       - name: Checkout repository
@@ -23,11 +25,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Run unit tests
-        run: npm test
-
       - name: TypeScript type-check
         run: npm run lint
 
-      - name: Build client & server bundles
+      - name: Run full QA & i18n test suite
+        run: npm test
+
+      - name: Build production client & server
         run: npm run build

@@ -868,7 +868,7 @@ export function applyAccessibilityToDocument(options: {
 
   if (electronBridge && typeof electronBridge.setZoomFactor === 'function') {
     root.style.zoom = '';
-    void electronBridge.setZoomFactor(zoom / 100);
+    void Promise.resolve(electronBridge.setZoomFactor(zoom / 100)).catch(() => {});
   } else {
     root.style.zoom = zoom === 100 ? '' : `${zoom}%`;
   }

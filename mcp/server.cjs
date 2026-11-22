@@ -3,102 +3,17 @@
 
 /**
  * Agendamea MCP Server (JSON-RPC 2.0 over stdio)
- * Supports both Content-Length framed messages and NDJSON lines.
- * Zero external dependencies - connects securely to Agendamea's local 127.0.0.1 API.
+ * Supports Content-Length framed messages and NDJSON lines.
+ * Connects to live 127.0.0.1 API when running, or falls back directly to local SQLite (WAL) when closed.
  */
 
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+const store = require('../shared/localStore.cjs');
 
 const SERVER_NAME = 'agendamea';
-const SERVER_VERSION = '1.0.0';
+const SERVER_VERSION = store.APP_VERSION;
 const PROTOCOL_VERSION = '2024-11-05';
 
 let useContentLengthFraming = false;
-
-function getCandidateBaseUrls() {
-  const urls = [];
-  if (process.env.AGENDAMEA_URL) {
-    urls.push(String(process.env.AGENDAMEA_URL).replace(/\/+$/, ''));
-  }
-  if (process.env.AGENDAMEA_PORT) {
-    urls.push(`http://127.0.0.1:${process.env.AGENDAMEA_PORT}`);
-  }
-
-  const dataDirs = [
-    process.env.AGENDAMEA_DATA_DIR,
-    process.env.APPDATA ? path.join(process.env.APPDATA, 'Agendamea') : null,
-    path.join(os.homedir(), 'AppData', 'Roaming', 'Agendamea'),
-  ].filter(Boolean);
-
-  for (const dir of dataDirs) {
-    try {
-      const portFile = path.join(dir, 'runtime-port.json');
-      if (fs.existsSync(portFile)) {
-        const parsed = JSON.parse(fs.readFileSync(portFile, 'utf8'));
-        const port = Number(parsed?.port);
-        if (Number.isInteger(port) && port > 0 && port < 65536) {
-          urls.push(`http://127.0.0.1:${port}`);
-        }
-      }
-    } catch {
-      // Ignore unreadable port file
-    }
-  }
-
-  for (const fallbackPort of [38721, 47821, 39721, 41721, 3000]) {
-    urls.push(`http://127.0.0.1:${fallbackPort}`);
-  }
-
-  return [...new Set(urls)];
-}
-
-async function resolveApiBaseUrl() {
-  for (const base of getCandidateBaseUrls()) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 900);
-      const res = await fetch(`${base}/api/health`, { signal: controller.signal });
-      clearTimeout(timer);
-      if (res.ok) return base;
-    } catch {
-      // Try next port
-    }
-  }
-  return null;
-}
-
-async function apiRequest(method, endpoint, body) {
-  const baseUrl = await resolveApiBaseUrl();
-  if (!baseUrl) {
-    throw new Error('Agendamea desktop app is not running. Launch Agendamea and retry.');
-  }
-  const res = await fetch(`${baseUrl}${endpoint}`, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = null;
-  }
-  if (!res.ok) {
-    throw new Error(json?.error || `Agendamea API error (HTTP ${res.status})`);
-  }
-  return { baseUrl, data: json };
-}
-
-function getTodayStr() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
 
 const TOOLS = [
   {
@@ -170,57 +85,18 @@ const TOOLS = [
   },
 ];
 
-function resolveTodoPrefix(todos, idOrPrefix) {
-  const clean = String(idOrPrefix || '').trim().toLowerCase();
-  if (!clean) throw new Error('Task ID is required.');
-  const exact = todos.find((t) => t.id.toLowerCase() === clean);
-  if (exact) return exact;
-  const matches = todos.filter((t) => t.id.toLowerCase().startsWith(clean));
-  if (matches.length === 1) return matches[0];
-  if (matches.length > 1) {
-    throw new Error(`Ambiguous task ID prefix "${idOrPrefix}" (${matches.length} matches).`);
-  }
-  throw new Error(`Task not found: "${idOrPrefix}".`);
-}
-
 async function executeTool(name, args) {
   const input = args && typeof args === 'object' ? args : {};
 
   if (name === 'agendamea_status') {
-    const { baseUrl, data } = await apiRequest('GET', '/api/bootstrap');
-    const today = getTodayStr();
-    const active = data.todos.filter((t) => !t.completed);
-    return {
-      endpoint: baseUrl,
-      version: SERVER_VERSION,
-      activeTasks: active.length,
-      dueToday: active.filter((t) => t.dueDate === today).length,
-      important: active.filter((t) => t.important).length,
-      completedTasks: data.todos.filter((t) => t.completed).length,
-      categories: data.categories.length,
-      trashCount: data.trashedTodos.length + data.trashedCategories.length,
-    };
+    return store.getStatus();
   }
 
   if (name === 'agendamea_list_tasks') {
-    const { data } = await apiRequest('GET', '/api/bootstrap');
-    const filter = input.filter || 'active';
-    const today = getTodayStr();
-    let list = data.todos;
-    if (filter === 'active') list = list.filter((t) => !t.completed);
-    else if (filter === 'completed') list = list.filter((t) => t.completed);
-    else if (filter === 'today') list = list.filter((t) => !t.completed && t.dueDate === today);
-    else if (filter === 'important') list = list.filter((t) => !t.completed && t.important);
-
-    if (typeof input.query === 'string' && input.query.trim()) {
-      const q = input.query.trim().toLowerCase();
-      list = list.filter(
-        (t) =>
-          String(t.title || '').toLowerCase().includes(q) ||
-          String(t.notes || '').toLowerCase().includes(q),
-      );
-    }
-
+    const list = await store.listTasks({
+      filter: input.filter || 'active',
+      query: input.query,
+    });
     return list.map((t) => ({
       id: t.id,
       title: t.title,
@@ -234,43 +110,20 @@ async function executeTool(name, args) {
   }
 
   if (name === 'agendamea_add_task') {
-    if (typeof input.title !== 'string' || !input.title.trim()) {
-      throw new Error('title must be a non-empty string.');
-    }
-    const { data } = await apiRequest('POST', '/api/todos', {
-      title: input.title.trim(),
-      notes: typeof input.notes === 'string' ? input.notes : '',
-      dueDate: typeof input.dueDate === 'string' ? input.dueDate : null,
-      priority:
-        input.priority === 'high' || input.priority === 'low' || input.priority === 'normal'
-          ? input.priority
-          : 'normal',
-      important: Boolean(input.important),
-      categoryId: typeof input.categoryId === 'string' ? input.categoryId : null,
-    });
-    return data;
+    return store.addTask(input);
   }
 
   if (name === 'agendamea_complete_task') {
-    const { data: boot } = await apiRequest('GET', '/api/bootstrap');
-    const target = resolveTodoPrefix(boot.todos, input.id);
     const completed = input.completed === undefined ? true : Boolean(input.completed);
-    const { data } = await apiRequest('PATCH', `/api/todos/${encodeURIComponent(target.id)}`, {
-      completed,
-    });
-    return data;
+    return store.completeTask(input.id, completed);
   }
 
   if (name === 'agendamea_delete_task') {
-    const { data: boot } = await apiRequest('GET', '/api/bootstrap');
-    const target = resolveTodoPrefix(boot.todos, input.id);
-    await apiRequest('DELETE', `/api/todos/${encodeURIComponent(target.id)}`);
-    return { ok: true, id: target.id, movedToTrash: true };
+    return store.deleteTask(input.id);
   }
 
   if (name === 'agendamea_list_categories') {
-    const { data } = await apiRequest('GET', '/api/bootstrap');
-    return data.categories;
+    return store.listCategories();
   }
 
   throw new Error(`Unknown tool: ${name}`);
@@ -290,7 +143,6 @@ async function handleRequest(msg) {
   if (!msg || typeof msg !== 'object') return;
   const { id, method, params } = msg;
 
-  // Notifications have no id
   if (method === 'notifications/initialized' || method === 'notifications/cancelled') {
     return;
   }
@@ -324,10 +176,8 @@ async function handleRequest(msg) {
     }
 
     if (method === 'tools/call') {
-      const toolName = params?.name;
-      const toolArgs = params?.arguments;
       try {
-        const result = await executeTool(toolName, toolArgs);
+        const result = await executeTool(params?.name, params?.arguments);
         sendMessage({
           jsonrpc: '2.0',
           id,

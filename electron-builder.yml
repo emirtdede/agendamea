@@ -16,6 +16,7 @@ asar: true
 asarUnpack:
   - "cli/**"
   - "mcp/**"
+  - "shared/**"
   - "dist/**"
   - "dist-server/**"
   - "electron-resources/icon.ico"
@@ -26,6 +27,7 @@ asarUnpack:
 files:
   - "cli/**"
   - "mcp/**"
+  - "shared/**"
   - "dist/**"
   - "dist-server/**"
   - "electron/**"

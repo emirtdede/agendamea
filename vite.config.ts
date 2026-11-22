@@ -189,7 +189,30 @@ export default defineConfig(() => {
       },
     },
     build: {
-      chunkSizeWarningLimit: 750,
+      chunkSizeWarningLimit: 550,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: 'vendor-react',
+                test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+                priority: 30,
+              },
+              {
+                name: 'vendor-icons',
+                test: /node_modules[\\/]lucide-react[\\/]/,
+                priority: 25,
+              },
+              {
+                name: 'i18n-locales',
+                test: /src[\\/]i18n[\\/]/,
+                priority: 20,
+              },
+            ],
+          },
+        },
+      },
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

@@ -1216,12 +1216,20 @@ test('QA: Zero language leakage across all 73 languages, UI components, color na
   });
   assert.equal(matchedUpper.length, 1, 'Uppercase "IMPORTANT" must match "Important"');
 
-  // 7. Static source scan of all React components & App.tsx for zero hardcoded Turkish characters
+  // 7. Recursive static source scan of all React components (including subdirectories) & App.tsx for zero hardcoded Turkish characters
   const componentDir = path.join(process.cwd(), 'src', 'components');
-  const componentFiles = fs
-    .readdirSync(componentDir)
-    .filter((f) => f.endsWith('.tsx'))
-    .map((f) => path.join(componentDir, f));
+  const componentFiles: string[] = [];
+  const collectTsxFiles = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        collectTsxFiles(fullPath);
+      } else if (entry.name.endsWith('.tsx')) {
+        componentFiles.push(fullPath);
+      }
+    }
+  };
+  collectTsxFiles(componentDir);
   componentFiles.push(path.join(process.cwd(), 'src', 'App.tsx'));
 
   const trCharRegex = /[ğüşıöçĞÜŞİÖÇ]/;
@@ -1818,6 +1826,72 @@ test('QA: Trash search/sort/date-range, CLI & MCP server protocol, zero icon/aut
   assert.ok(enLegal.opensource.sections[1].paragraphs[0].includes('Electron Updater'));
   assert.ok(trLegal.accessibility.sections[2].paragraphs[0].includes('9MT5X1NGZJXZ'));
   assert.ok(enLegal.accessibility.sections[2].paragraphs[0].includes('9MT5X1NGZJXZ'));
+
+  // 6. Shared releaseUtils.cjs (single source of truth for Electron + Express), offline SQLite CLI/MCP localStore.cjs & CI workflow
+  const { createRequire } = await import('node:module');
+  const req = createRequire(import.meta.url);
+  const releaseUtils = req(path.join(process.cwd(), 'shared', 'releaseUtils.cjs'));
+  assert.equal(releaseUtils.compareSemver('1.2.0', '1.0.9'), 1);
+  assert.equal(releaseUtils.compareSemver('v1.0.0', '1.0.0'), 0);
+  const parsedRel = releaseUtils.parseGitHubRelease(
+    {
+      tag_name: 'v1.1.0',
+      name: 'Agendamea v1.1.0',
+      html_url: 'https://github.com/emirtdede/agendamea/releases/tag/v1.1.0',
+      assets: [
+        { name: 'Agendamea-Setup-1.1.0-win-x64.exe', browser_download_url: 'https://example.com/setup.exe' },
+        { name: 'Agendamea-Store-1.1.0-win-x64.appx', browser_download_url: 'https://example.com/store.appx' },
+      ],
+    },
+    '1.0.0',
+    'https://github.com/emirtdede/agendamea/releases/latest',
+    '2026-11-22T00:00:00.000Z',
+  );
+  assert.equal(parsedRel.updateAvailable, true);
+  assert.equal(parsedRel.latestVersion, '1.1.0');
+  assert.equal(parsedRel.setupUrl, 'https://example.com/setup.exe');
+  assert.equal(parsedRel.msixUrl, 'https://example.com/store.appx');
+
+  // Offline direct SQLite fallback for CLI & MCP when desktop app is closed
+  const tmpOfflineDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agendamea-offline-store-'));
+  const offlineDbPath = path.join(tmpOfflineDir, 'agendamea.db');
+  const seedDb = new TodoDatabase(offlineDbPath);
+  seedDb.createCategory({ name: 'CLI Test', color: '#2563eb' });
+  seedDb.close();
+
+  const prevForceOffline = process.env.AGENDAMEA_FORCE_OFFLINE;
+  const prevDbPath = process.env.AGENDAMEA_DB_PATH;
+  process.env.AGENDAMEA_FORCE_OFFLINE = '1';
+  process.env.AGENDAMEA_DB_PATH = offlineDbPath;
+  try {
+    const localStore = req(path.join(process.cwd(), 'shared', 'localStore.cjs'));
+    const added = await localStore.addTask({ title: 'Offline CLI task', priority: 'high', important: true });
+    assert.ok(added.id.startsWith('todo-'));
+    const listed = await localStore.listTasks({ filter: 'important' });
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0].title, 'Offline CLI task');
+    const done = await localStore.completeTask(added.id.slice(0, 12), true);
+    assert.equal(done.completed, true);
+    const status = await localStore.getStatus();
+    assert.equal(status.mode, 'offline-sqlite');
+    assert.equal(status.completedTasks, 1);
+    assert.equal(status.categories, 1);
+    await localStore.deleteTask(added.id.slice(0, 12));
+    const afterDelete = await localStore.getStatus();
+    assert.equal(afterDelete.trashCount, 1);
+  } finally {
+    if (prevForceOffline === undefined) delete process.env.AGENDAMEA_FORCE_OFFLINE;
+    else process.env.AGENDAMEA_FORCE_OFFLINE = prevForceOffline;
+    if (prevDbPath === undefined) delete process.env.AGENDAMEA_DB_PATH;
+    else process.env.AGENDAMEA_DB_PATH = prevDbPath;
+    fs.rmSync(tmpOfflineDir, { recursive: true, force: true });
+  }
+
+  // CI workflow presence & required quality gates
+  const ciYml = fs.readFileSync(path.join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf8');
+  assert.ok(ciYml.includes('npm run lint'));
+  assert.ok(ciYml.includes('npm test'));
+  assert.ok(ciYml.includes('npm run build'));
 });
 
 

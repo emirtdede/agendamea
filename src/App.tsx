@@ -36,17 +36,14 @@ import { TodoDetailPanel } from './components/TodoDetailPanel';
 import { TodoItem } from './components/TodoItem';
 import { WelcomeModal } from './components/WelcomeModal';
 import { WindowControls } from './components/WindowControls';
+import { useAppUpdater } from './hooks/useAppUpdater';
 import { useDelayedFocus } from './hooks/useDelayedFocus';
+import { useThemeAndPreferences } from './hooks/useThemeAndPreferences';
 import { useToast } from './hooks/useToast';
 import { useTodayDate } from './hooks/useTodayDate';
-import { I18nProvider, readInitialLanguage } from './i18n/I18nContext';
-import {
-  getLanguageMeta,
-  isValidLanguageCode,
-  resolveSystemLanguage,
-  type LanguageCode,
-} from './i18n/languages';
-import { getDictionary } from './i18n/localesWorld';
+import { useTodoDragReorder } from './hooks/useTodoDragReorder';
+import { I18nProvider } from './i18n/I18nContext';
+import type { LanguageCode } from './i18n/languages';
 import { localizeErrorMessage } from './i18n/translations';
 import type {
   ActiveView,
@@ -66,120 +63,60 @@ import type {
   Todo,
   TodoPatch,
 } from './types';
-import {
-  applyAccessibilityToDocument,
-  applyAppIconTokensToDocument,
-  applyThemeToDocument,
-  clampZoomPercent,
-  isValidAppIconId,
-  isValidThemeId,
-  normalizeHexColor,
-  resolveAppIconColors,
-  ZOOM_PRESETS,
-} from './utils/themes';
+import { clampZoomPercent, normalizeHexColor, ZOOM_PRESETS } from './utils/themes';
 import {
   computeViewCounts,
   filterAndSortTodos,
-  getVerticalDropPosition,
-  moveIdRelative,
   sortCategoriesWithPin,
 } from './utils/todoLogic';
 import { SettingsModal } from './components/SettingsModal';
-import type { AppUpdateState } from './components/UpdateSettingsSection';
-
-function readInitialTheme(): {
-  mode: ThemeMode;
-  themeId: ThemeId;
-  customThemeColor: string;
-  hasStoredPreference: boolean;
-} {
-  try {
-    const savedMode = localStorage.getItem('agendamea-theme-mode');
-    const savedId = localStorage.getItem('agendamea-theme-id');
-    const savedCustom = normalizeHexColor(
-      localStorage.getItem('agendamea-custom-theme-color') ?? '',
-    );
-    const hasMode = savedMode === 'light' || savedMode === 'dark' || savedMode === 'system';
-    const hasId = Boolean(savedId && isValidThemeId(savedId));
-    return {
-      mode:
-        savedMode === 'dark'
-          ? 'dark'
-          : savedMode === 'system'
-            ? 'system'
-            : 'light',
-      themeId: hasId && savedId ? (savedId as ThemeId) : 'obsidian',
-      customThemeColor: savedCustom ?? '#2563eb',
-      hasStoredPreference: hasMode || hasId,
-    };
-  } catch {
-    return {
-      mode: 'light',
-      themeId: 'obsidian',
-      customThemeColor: '#2563eb',
-      hasStoredPreference: false,
-    };
-  }
-}
-
-function readInitialAccessibility(): {
-  zoomPercent: number;
-  highContrast: boolean;
-  reducedMotion: boolean;
-} {
-  try {
-    return {
-      zoomPercent: clampZoomPercent(localStorage.getItem('agendamea-zoom-percent') ?? 100),
-      highContrast: localStorage.getItem('agendamea-high-contrast') === 'true',
-      reducedMotion: localStorage.getItem('agendamea-reduced-motion') === 'true',
-    };
-  } catch {
-    return { zoomPercent: 100, highContrast: false, reducedMotion: false };
-  }
-}
-
-function readInitialSidebarCollapsed(): boolean {
-  try {
-    return localStorage.getItem('agendamea-sidebar-collapsed') === 'true';
-  } catch {
-    return false;
-  }
-}
 
 export default function App() {
-  const initialTheme = useMemo(() => readInitialTheme(), []);
-  const initialAccessibility = useMemo(() => readInitialAccessibility(), []);
-  const initialLang = useMemo(() => readInitialLanguage(), []);
-  const [themeMode, setThemeMode] = useState<ThemeMode>(initialTheme.mode);
-  const [themeId, setThemeId] = useState<ThemeId>(initialTheme.themeId);
-  const [customThemeColor, setCustomThemeColor] = useState<string>(initialTheme.customThemeColor);
-  const [appIconId, setAppIconId] = useState<AppIconId>('match-theme');
-  const [customIconColor, setCustomIconColor] = useState<string>('#2563eb');
-  const [zoomPercent, setZoomPercent] = useState<number>(initialAccessibility.zoomPercent);
-  const [highContrast, setHighContrast] = useState<boolean>(initialAccessibility.highContrast);
-  const [reducedMotion, setReducedMotion] = useState<boolean>(initialAccessibility.reducedMotion);
-  const [closeBehavior, setCloseBehavior] = useState<CloseBehavior>('ask');
-  const [launchAtStartup, setLaunchAtStartup] = useState<boolean>(false);
-  const [globalQuickAddShortcut, setGlobalQuickAddShortcut] = useState<boolean>(true);
+  const {
+    themeMode,
+    setThemeMode,
+    themeId,
+    setThemeId,
+    customThemeColor,
+    setCustomThemeColor,
+    appIconId,
+    setAppIconId,
+    customIconColor,
+    setCustomIconColor,
+    zoomPercent,
+    setZoomPercent,
+    highContrast,
+    setHighContrast,
+    reducedMotion,
+    setReducedMotion,
+    closeBehavior,
+    setCloseBehavior,
+    launchAtStartup,
+    setLaunchAtStartup,
+    globalQuickAddShortcut,
+    setGlobalQuickAddShortcut,
+    language,
+    setLanguage,
+    sidebarCollapsed,
+    langMeta,
+    t,
+    langRef,
+    tRef,
+    themeDirtyRef,
+    iconDirtyRef,
+    langDirtyRef,
+    syncFromBootstrapSettings,
+    applyRestoredSettings,
+    handleToggleSidebarCollapse,
+    expandSidebarIfCollapsed,
+  } = useThemeAndPreferences();
+
   const [isCloseModalOpen, setIsCloseModalOpen] = useState(false);
-  const [language, setLanguage] = useState<LanguageCode>(initialLang.code);
-  const [autoUpdateCheck, setAutoUpdateCheck] = useState<boolean>(true);
   const [dragLocked, setDragLocked] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
-    readInitialSidebarCollapsed(),
-  );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('appearance');
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
   const welcomeCheckedRef = useRef(false);
-  const iconInitializedRef = useRef(false);
-  const iconDirtyRef = useRef(false);
-
-  const [updateState, setUpdateState] = useState<AppUpdateState>({
-    status: 'idle',
-    result: null,
-    downloadPercent: null,
-  });
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -200,15 +137,6 @@ export default function App() {
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-  const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
-  const [todoDropTarget, setTodoDropTarget] = useState<{
-    id: string;
-    position: 'before' | 'after';
-  } | null>(null);
-
-  const langMeta = useMemo(() => getLanguageMeta(language), [language]);
-  const t = useMemo(() => getDictionary(language), [language]);
-
   const {
     undoToast,
     infoToast,
@@ -228,102 +156,39 @@ export default function App() {
   const categoryUpdateSeqRef = useRef<Map<string, number>>(new Map());
   const subtaskUpdateSeqRef = useRef<Map<string, number>>(new Map());
   const reorderCatSeqRef = useRef(0);
-  const reorderTodoSeqRef = useRef(0);
   const pendingDeletesRef = useRef<Map<string, Promise<boolean>>>(new Map());
   const pendingSubtaskDeletesRef = useRef<Set<string>>(new Set());
   const isEmptyingTrashRef = useRef(false);
   const pendingTrashOpsRef = useRef<Set<string>>(new Set());
-  const themeDirtyRef = useRef(false);
-  const sidebarDirtyRef = useRef(false);
-  const langDirtyRef = useRef(false);
   const todosRef = useRef(todos);
   todosRef.current = todos;
   const trashedCategoriesRef = useRef(trashedCategories);
   trashedCategoriesRef.current = trashedCategories;
-  const sidebarCollapsedRef = useRef(sidebarCollapsed);
-  sidebarCollapsedRef.current = sidebarCollapsed;
-  const langRef = useRef(language);
-  langRef.current = language;
-  const tRef = useRef(t);
-  tRef.current = t;
 
-  const formatUiError = useCallback((err: unknown, fallback?: string): string => {
-    const dict = tRef.current;
-    return localizeErrorMessage(
-      err,
-      fallback ?? dict.operationFailedToast,
-      langRef.current,
-      dict,
-    );
-  }, []);
+  const formatUiError = useCallback(
+    (err: unknown, fallback?: string): string => {
+      const dict = tRef.current;
+      return localizeErrorMessage(
+        err,
+        fallback ?? dict.operationFailedToast,
+        langRef.current,
+        dict,
+      );
+    },
+    [langRef, tRef],
+  );
 
-  const [systemDarkTick, setSystemDarkTick] = useState(0);
+  const {
+    autoUpdateCheck,
+    setAutoUpdateCheck,
+    updateState,
+    handleManualCheckForUpdates,
+    handleDownloadAndInstallUpdate,
+    handleQuitAndInstallUpdate,
+    handleToggleAutoUpdateCheck,
+  } = useAppUpdater({ tRef, showInfoToast, formatUiError });
 
-  useEffect(() => {
-    if (themeMode !== 'system' || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return;
-    }
-    const mql = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => setSystemDarkTick((n) => n + 1);
-    if (typeof mql.addEventListener === 'function') {
-      mql.addEventListener('change', onChange);
-      return () => mql.removeEventListener('change', onChange);
-    }
-  }, [themeMode]);
-
-  useEffect(() => {
-    applyThemeToDocument(themeId, themeMode, customThemeColor);
-  }, [themeId, themeMode, customThemeColor, systemDarkTick]);
-
-  // Synchronize active App Icon across in-app BrandMark, Window, Taskbar, System Tray & Windows Shortcuts
-  useEffect(() => {
-    const colors = resolveAppIconColors(
-      appIconId,
-      themeId,
-      themeMode,
-      customThemeColor,
-      customIconColor,
-    );
-    applyAppIconTokensToDocument(colors);
-    try {
-      localStorage.setItem('agendamea-app-icon-tokens', JSON.stringify(colors));
-    } catch {
-      // Ignore storage restrictions
-    }
-    const shouldUpdateShortcuts = iconDirtyRef.current;
-    if (iconInitializedRef.current || iconDirtyRef.current) {
-      iconDirtyRef.current = false;
-      void window.agendameaWindow?.applyAppIcon?.({
-        bg: colors.bg,
-        fg: colors.fg,
-        updateShortcuts: shouldUpdateShortcuts,
-      });
-    } else {
-      iconInitializedRef.current = true;
-    }
-  }, [appIconId, customIconColor, themeId, themeMode, customThemeColor, systemDarkTick]);
-
-  // Apply Accessibility settings (Zoom %, High Contrast, Reduced Motion)
-  useEffect(() => {
-    applyAccessibilityToDocument({ zoomPercent, highContrast, reducedMotion });
-  }, [zoomPercent, highContrast, reducedMotion]);
-
-  // Keep Electron System Tray & Windows Taskbar Jump List labels localized across all 73 languages
-  useEffect(() => {
-    void window.agendameaWindow?.updateTrayLabels?.({
-      openLabel: t.trayOpenApp,
-      newTaskLabel: t.addFirstTaskButton,
-      todayLabel: t.today,
-      importantLabel: t.important,
-      quitLabel: t.closeActionQuitTitle,
-    });
-  }, [t.trayOpenApp, t.addFirstTaskButton, t.today, t.important, t.closeActionQuitTitle]);
-
-  // Keep Electron Main Process close behavior in sync & listen for close / quick-add / Jump List events
-  useEffect(() => {
-    void window.agendameaWindow?.setCloseBehavior?.(closeBehavior);
-  }, [closeBehavior]);
-
+  // Listen for Electron close / global quick-add / Windows Jump List events
   useEffect(() => {
     const unsubClose = window.agendameaWindow?.onCloseRequested?.(() => {
       setIsCloseModalOpen(true);
@@ -349,41 +214,6 @@ export default function App() {
     };
   }, [scheduleFocus]);
 
-  // Listen to Electron native update progress, downloaded & error events
-  useEffect(() => {
-    const unsubProgress = window.agendameaWindow?.onUpdateProgress?.((pct) => {
-      setUpdateState((prev) =>
-        prev.status === 'downloading' ? { ...prev, downloadPercent: pct } : prev,
-      );
-    });
-    const unsubDownloaded = window.agendameaWindow?.onUpdateDownloaded?.((info) => {
-      setUpdateState((prev) => ({
-        status: 'downloaded',
-        result: prev.result
-          ? {
-              ...prev.result,
-              latestVersion: info.version || prev.result.latestVersion,
-              downloaded: true,
-            }
-          : prev.result,
-        downloadPercent: 100,
-      }));
-      showInfoToast(tRef.current.updateReadyToInstallLabel, 'info');
-    });
-    const unsubError = window.agendameaWindow?.onUpdateError?.(() => {
-      setUpdateState((prev) =>
-        prev.status === 'downloading'
-          ? { ...prev, status: prev.result?.updateAvailable ? 'available' : 'error', downloadPercent: null }
-          : prev,
-      );
-    });
-    return () => {
-      if (typeof unsubProgress === 'function') unsubProgress();
-      if (typeof unsubDownloaded === 'function') unsubDownloaded();
-      if (typeof unsubError === 'function') unsubError();
-    };
-  }, [showInfoToast]);
-
   const loadData = useCallback(async (silent = false) => {
     if (!silent) {
       setIsLoading(true);
@@ -399,114 +229,7 @@ export default function App() {
       setAutoUpdateCheck(
         data.settings.autoUpdateCheck === undefined ? true : Boolean(data.settings.autoUpdateCheck),
       );
-      if (data.settings.customThemeColor) {
-        const norm = normalizeHexColor(data.settings.customThemeColor);
-        if (norm) setCustomThemeColor(norm);
-      }
-      if (data.settings.appIconId && isValidAppIconId(data.settings.appIconId)) {
-        setAppIconId(data.settings.appIconId);
-      }
-      if (data.settings.customIconColor) {
-        const norm = normalizeHexColor(data.settings.customIconColor);
-        if (norm) setCustomIconColor(norm);
-      }
-      if (typeof data.settings.zoomPercent === 'number') {
-        setZoomPercent(clampZoomPercent(data.settings.zoomPercent));
-      }
-      if (typeof data.settings.highContrast === 'boolean') {
-        setHighContrast(data.settings.highContrast);
-      }
-      if (typeof data.settings.reducedMotion === 'boolean') {
-        setReducedMotion(data.settings.reducedMotion);
-      }
-      if (
-        data.settings.closeBehavior === 'ask' ||
-        data.settings.closeBehavior === 'tray' ||
-        data.settings.closeBehavior === 'quit'
-      ) {
-        setCloseBehavior(data.settings.closeBehavior);
-      }
-      if (typeof data.settings.launchAtStartup === 'boolean') {
-        setLaunchAtStartup(data.settings.launchAtStartup);
-        void window.agendameaWindow?.setLaunchAtStartup?.(data.settings.launchAtStartup);
-      }
-      if (typeof data.settings.globalQuickAddShortcut === 'boolean') {
-        setGlobalQuickAddShortcut(data.settings.globalQuickAddShortcut);
-        void window.agendameaWindow?.setGlobalQuickAddShortcut?.(
-          data.settings.globalQuickAddShortcut,
-        );
-      }
-
-      if (!langDirtyRef.current && data.settings.language && isValidLanguageCode(data.settings.language)) {
-        let hasCustomLang = false;
-        try {
-          hasCustomLang = localStorage.getItem('agendamea-language-customized') === 'true';
-        } catch {
-          // Ignore storage read errors
-        }
-        let nativeLocale: { installerLocale: string | null; osLocale: string; preferred: string } | null = null;
-        try {
-          nativeLocale = (await window.agendameaWindow?.getInitialLocale?.()) ?? null;
-        } catch {
-          // Fall back to navigator language
-        }
-
-        if (nativeLocale?.installerLocale) {
-          // Setup wizard explicitly wrote a freshly chosen language: apply immediately (works on both fresh install & reinstall)
-          const setupLang = resolveSystemLanguage([nativeLocale.installerLocale], 'en');
-          setLanguage(setupLang);
-          try {
-            localStorage.setItem('agendamea-language-customized', 'true');
-          } catch {
-            // Ignore storage write errors
-          }
-          if (data.settings.language !== setupLang) {
-            void api.updateSettings({ language: setupLang }).catch(() => {});
-          }
-        } else if (!hasCustomLang) {
-          let resolvedInitial: LanguageCode = initialLang.code;
-          if (nativeLocale?.osLocale) {
-            resolvedInitial = resolveSystemLanguage([nativeLocale.osLocale], 'en');
-          }
-          if (data.settings.language === 'tr' && resolvedInitial !== 'tr') {
-            setLanguage(resolvedInitial);
-            try {
-              localStorage.setItem('agendamea-language-customized', 'true');
-            } catch {
-              // Ignore storage write errors
-            }
-            void api.updateSettings({ language: resolvedInitial }).catch(() => {});
-          } else {
-            setLanguage(data.settings.language);
-          }
-        } else {
-          setLanguage(data.settings.language);
-        }
-      }
-
-      if (!sidebarDirtyRef.current) {
-        const dbCollapsed = Boolean(data.settings.sidebarCollapsed);
-        setSidebarCollapsed(dbCollapsed);
-        try {
-          localStorage.setItem('agendamea-sidebar-collapsed', String(dbCollapsed));
-        } catch {
-          // Ignore storage errors
-        }
-      }
-
-      if (!themeDirtyRef.current) {
-        const storedTheme = readInitialTheme();
-        if (!data.settings.themeCustomized && storedTheme.hasStoredPreference) {
-          setThemeMode(storedTheme.mode);
-          setThemeId(storedTheme.themeId);
-          void api
-            .updateSettings({ themeMode: storedTheme.mode, themeId: storedTheme.themeId })
-            .catch(() => {});
-        } else {
-          setThemeMode(data.settings.themeMode);
-          setThemeId(data.settings.themeId);
-        }
-      }
+      await syncFromBootstrapSettings(data.settings);
       setLoadError(null);
 
       // First-launch OneDrive backup detection when local DB is completely empty (e.g. after OS format / reinstall)
@@ -571,121 +294,11 @@ export default function App() {
         setIsLoading(false);
       }
     }
-  }, [formatUiError]);
+  }, [formatUiError, setAutoUpdateCheck, syncFromBootstrapSettings, tRef]);
 
   useEffect(() => {
     void loadData(false);
   }, [loadData]);
-
-  // Manual & Automatic Update Check
-  const runUpdateCheck = useCallback(
-    async (isManual: boolean) => {
-      setUpdateState((prev) => ({
-        ...prev,
-        status: 'checking',
-      }));
-      try {
-        const res = await api.checkForUpdates();
-        if (!res.ok) {
-          setUpdateState({
-            status: isManual ? 'error' : 'idle',
-            result: res,
-            downloadPercent: null,
-          });
-          return;
-        }
-        if (res.downloaded) {
-          setUpdateState({
-            status: 'downloaded',
-            result: res,
-            downloadPercent: 100,
-          });
-        } else if (res.updateAvailable) {
-          setUpdateState({
-            status: 'available',
-            result: res,
-            downloadPercent: null,
-          });
-          if (!isManual) {
-            showInfoToast(`${tRef.current.updateAvailableLabel}: v${res.latestVersion}`, 'info');
-          }
-        } else {
-          setUpdateState({
-            status: 'up-to-date',
-            result: res,
-            downloadPercent: null,
-          });
-        }
-      } catch {
-        setUpdateState((prev) => ({
-          status: isManual ? 'error' : 'idle',
-          result: prev.result,
-          downloadPercent: null,
-        }));
-      }
-    },
-    [showInfoToast],
-  );
-
-  // Automatic background update check on startup & every 6 hours when enabled (skipped inside Microsoft Store MSIX sandbox)
-  useEffect(() => {
-    if (!autoUpdateCheck || window.agendameaWindow?.isWindowsStore) return;
-    const startupTimer = window.setTimeout(() => {
-      void runUpdateCheck(false);
-    }, 3000);
-    const periodicTimer = window.setInterval(
-      () => {
-        void runUpdateCheck(false);
-      },
-      6 * 60 * 60 * 1000,
-    );
-    return () => {
-      window.clearTimeout(startupTimer);
-      window.clearInterval(periodicTimer);
-    };
-  }, [autoUpdateCheck, runUpdateCheck]);
-
-  const handleManualCheckForUpdates = useCallback(async () => {
-    await runUpdateCheck(true);
-  }, [runUpdateCheck]);
-
-  const handleDownloadAndInstallUpdate = useCallback(async () => {
-    const res = updateState.result;
-    if (!res) return;
-    const installerUrl = res.setupUrl || res.msixUrl || null;
-    const downloadUrl = installerUrl || res.portableUrl || res.releaseUrl;
-    if (window.agendameaWindow?.downloadAndInstallUpdate && (res.nativeAutoUpdateReady || installerUrl)) {
-      setUpdateState((prev) => ({
-        ...prev,
-        status: 'downloading',
-        downloadPercent: 5,
-      }));
-      const outcome = await window.agendameaWindow.downloadAndInstallUpdate(installerUrl || '');
-      if (outcome?.downloaded) {
-        setUpdateState((prev) => ({
-          ...prev,
-          status: 'downloaded',
-          downloadPercent: 100,
-        }));
-      } else {
-        setUpdateState((prev) =>
-          prev.status === 'downloaded'
-            ? prev
-            : {
-                ...prev,
-                status: 'available',
-                downloadPercent: null,
-              },
-        );
-      }
-      return;
-    }
-    window.open(downloadUrl, '_blank', 'noopener,noreferrer');
-  }, [updateState.result]);
-
-  const handleQuitAndInstallUpdate = useCallback(async () => {
-    await window.agendameaWindow?.quitAndInstallUpdate?.();
-  }, []);
 
   // Handle Windows Jump List / PWA shortcut launch query params (?view=... & ?action=new)
   useEffect(() => {
@@ -719,21 +332,12 @@ export default function App() {
       scheduleFocus(() => searchInputRef.current?.focus(), 80);
       return;
     }
-    if (sidebarCollapsedRef.current) {
-      sidebarDirtyRef.current = true;
-      sidebarCollapsedRef.current = false;
-      setSidebarCollapsed(false);
-      try {
-        localStorage.setItem('agendamea-sidebar-collapsed', 'false');
-      } catch {
-        // Ignore storage errors
-      }
-      void api.updateSettings({ sidebarCollapsed: false }).catch(() => {});
+    if (expandSidebarIfCollapsed()) {
       scheduleFocus(() => searchInputRef.current?.focus(), 80);
       return;
     }
     searchInputRef.current?.focus();
-  }, [scheduleFocus]);
+  }, [scheduleFocus, expandSidebarIfCollapsed]);
 
   const keyboardReorderRef = useRef<((direction: 'up' | 'down') => void) | null>(null);
   const keyStateRef = useRef({
@@ -1000,29 +604,6 @@ export default function App() {
     },
     [showInfoToast, formatUiError],
   );
-
-  const handleToggleAutoUpdateCheck = useCallback(
-    (enabled: boolean) => {
-      setAutoUpdateCheck(enabled);
-      void api.updateSettings({ autoUpdateCheck: enabled }).catch((err) => {
-        showInfoToast(formatUiError(err), 'error');
-      });
-    },
-    [showInfoToast, formatUiError],
-  );
-
-  const handleToggleSidebarCollapse = useCallback(() => {
-    sidebarDirtyRef.current = true;
-    const next = !sidebarCollapsedRef.current;
-    sidebarCollapsedRef.current = next;
-    setSidebarCollapsed(next);
-    try {
-      localStorage.setItem('agendamea-sidebar-collapsed', String(next));
-    } catch {
-      // Ignore storage errors
-    }
-    void api.updateSettings({ sidebarCollapsed: next }).catch(() => {});
-  }, []);
 
   const handleCreateCategory = useCallback(
     async (payload: { id: string; name: string; color: string }) => {
@@ -1380,68 +961,17 @@ export default function App() {
       clearUndoToast();
       todoUpdateSeqRef.current.clear();
       categoryUpdateSeqRef.current.clear();
-      themeDirtyRef.current = false;
-      sidebarDirtyRef.current = false;
-      langDirtyRef.current = false;
-      const nextCollapsed = Boolean(restored.settings.sidebarCollapsed);
-      try {
-        localStorage.setItem('agendamea-sidebar-collapsed', String(nextCollapsed));
-      } catch {
-        // Ignore storage errors
-      }
       setCategories(sortCategoriesWithPin(restored.categories));
       setTodos(restored.todos);
       setTrashedCategories(restored.trashedCategories);
       setTrashedTodos(restored.trashedTodos);
-      setThemeMode(restored.settings.themeMode);
-      setThemeId(restored.settings.themeId);
-      setCustomThemeColor(
-        (restored.settings.customThemeColor &&
-          normalizeHexColor(restored.settings.customThemeColor)) ||
-          '#2563eb',
-      );
-      setAppIconId(
-        restored.settings.appIconId && isValidAppIconId(restored.settings.appIconId)
-          ? restored.settings.appIconId
-          : 'match-theme',
-      );
-      setCustomIconColor(
-        (restored.settings.customIconColor &&
-          normalizeHexColor(restored.settings.customIconColor)) ||
-          '#2563eb',
-      );
-      setZoomPercent(
-        typeof restored.settings.zoomPercent === 'number'
-          ? clampZoomPercent(restored.settings.zoomPercent)
-          : 100,
-      );
-      setHighContrast(Boolean(restored.settings.highContrast));
-      setReducedMotion(Boolean(restored.settings.reducedMotion));
-      const nextCloseBehavior: CloseBehavior =
-        restored.settings.closeBehavior === 'tray' || restored.settings.closeBehavior === 'quit'
-          ? restored.settings.closeBehavior
-          : 'ask';
-      setCloseBehavior(nextCloseBehavior);
-      void window.agendameaWindow?.setCloseBehavior?.(nextCloseBehavior);
-      const nextLaunchAtStartup = Boolean(restored.settings.launchAtStartup);
-      setLaunchAtStartup(nextLaunchAtStartup);
-      void window.agendameaWindow?.setLaunchAtStartup?.(nextLaunchAtStartup);
-      const nextGlobalQuickAdd =
-        restored.settings.globalQuickAddShortcut === undefined
-          ? true
-          : Boolean(restored.settings.globalQuickAddShortcut);
-      setGlobalQuickAddShortcut(nextGlobalQuickAdd);
-      void window.agendameaWindow?.setGlobalQuickAddShortcut?.(nextGlobalQuickAdd);
+      applyRestoredSettings(restored.settings);
       setDragLocked(Boolean(restored.settings.dragLocked));
-      if (restored.settings.language && isValidLanguageCode(restored.settings.language)) {
-        setLanguage(restored.settings.language);
-      }
       setAutoUpdateCheck(
         restored.settings.autoUpdateCheck === undefined
           ? true
           : Boolean(restored.settings.autoUpdateCheck),
       );
-      setSidebarCollapsed(nextCollapsed);
       setSelectedTodoId(null);
       setTagFilter(null);
       setSearchQuery('');
@@ -1450,7 +980,7 @@ export default function App() {
       setActiveView({ type: 'smart', id: 'all' });
       showInfoToast(tRef.current.backupRestoredToast);
     },
-    [clearUndoToast, showInfoToast],
+    [clearUndoToast, applyRestoredSettings, setAutoUpdateCheck, showInfoToast, tRef],
   );
 
   const handleImportBackup = useCallback(
@@ -1577,19 +1107,45 @@ export default function App() {
     [todos, selectedTodoId],
   );
 
+  const isCompletedView = activeView.type === 'smart' && activeView.id === 'completed';
+  const canDragTodos =
+    !dragLocked && !deferredSearchQuery.trim() && !tagFilter && visibleTodos.length > 1;
+
+  const {
+    draggedTodoId,
+    todoDropTarget,
+    clearDragState,
+    handleDropTodo,
+    handleTodoDragStart,
+    handleTodoDragOver,
+    handleTodoDragLeave,
+    handleTodoDrop,
+    handleTodoDragEnd,
+  } = useTodoDragReorder({
+    visibleTodos,
+    todosRef,
+    setTodos,
+    dragLocked,
+    canDragTodos,
+    sortBy,
+    setSortBy,
+    showInfoToast,
+    formatUiError,
+    loadData,
+  });
+
   const handleToggleDragLock = useCallback(
     (locked: boolean) => {
       setDragLocked(locked);
       if (locked) {
-        setDraggedTodoId(null);
-        setTodoDropTarget(null);
+        clearDragState();
       }
       void api.updateSettings({ dragLocked: locked }).catch((err) => {
         showInfoToast(formatUiError(err), 'error');
         void loadData(true);
       });
     },
-    [showInfoToast, loadData, formatUiError],
+    [clearDragState, showInfoToast, loadData, formatUiError],
   );
 
   const handleReorderCategories = useCallback(
@@ -1604,70 +1160,6 @@ export default function App() {
       );
       void api.reorderCategories(orderedIds).catch((err) => {
         if (reorderCatSeqRef.current === seq) {
-          showInfoToast(formatUiError(err), 'error');
-          void loadData(true);
-        }
-      });
-    },
-    [showInfoToast, loadData, formatUiError],
-  );
-
-  const isCompletedView = activeView.type === 'smart' && activeView.id === 'completed';
-  const canDragTodos =
-    !dragLocked && !deferredSearchQuery.trim() && !tagFilter && visibleTodos.length > 1;
-
-  const visibleTodosRef = useRef(visibleTodos);
-  visibleTodosRef.current = visibleTodos;
-  const draggedTodoIdRef = useRef(draggedTodoId);
-  draggedTodoIdRef.current = draggedTodoId;
-  const canDragTodosRef = useRef(canDragTodos);
-  canDragTodosRef.current = canDragTodos;
-  const dragLockedRef = useRef(dragLocked);
-  dragLockedRef.current = dragLocked;
-  const sortByRef = useRef(sortBy);
-  sortByRef.current = sortBy;
-
-  const handleDropTodo = useCallback(
-    (sourceId: string, targetId: string, position: 'before' | 'after') => {
-      if (dragLockedRef.current || sourceId === targetId) return;
-
-      const currentVisible = visibleTodosRef.current;
-      const sourceTodo = currentVisible.find((tItem) => tItem.id === sourceId);
-      const targetTodo = currentVisible.find((tItem) => tItem.id === targetId);
-      if (!sourceTodo || !targetTodo) return;
-      if (sourceTodo.pinned !== targetTodo.pinned || sourceTodo.completed !== targetTodo.completed) {
-        return;
-      }
-
-      const visibleIds = currentVisible.map((tItem) => tItem.id);
-      const reorderedVisible = moveIdRelative(visibleIds, sourceId, targetId, position);
-      const visibleSet = new Set(reorderedVisible);
-
-      const allSorted = [...todosRef.current].sort((a, b) => a.sortOrder - b.sortOrder);
-      let cursor = 0;
-      const nextOrderedIds = allSorted.map((tItem) => {
-        if (visibleSet.has(tItem.id)) {
-          const replacement = reorderedVisible[cursor];
-          cursor += 1;
-          return replacement;
-        }
-        return tItem.id;
-      });
-
-      const finalOrderMap = new Map(nextOrderedIds.map((tid, i) => [tid, i]));
-      if (sortByRef.current !== 'manual') {
-        setSortBy('manual');
-      }
-      setTodos((prev) =>
-        prev.map((tItem) => ({
-          ...tItem,
-          sortOrder: finalOrderMap.get(tItem.id) ?? tItem.sortOrder,
-        })),
-      );
-      const seq = reorderTodoSeqRef.current + 1;
-      reorderTodoSeqRef.current = seq;
-      void api.reorderTodos(nextOrderedIds).catch((err) => {
-        if (reorderTodoSeqRef.current === seq) {
           showInfoToast(formatUiError(err), 'error');
           void loadData(true);
         }
@@ -1710,71 +1202,6 @@ export default function App() {
     },
     [handleUpdateTodo],
   );
-
-  const handleTodoDragStart = useCallback(
-    (e: React.DragEvent<HTMLDivElement>, id: string) => {
-      setDraggedTodoId(id);
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/agendamea-todo', id);
-      e.dataTransfer.setData('text/plain', id);
-    },
-    [],
-  );
-
-  const handleTodoDragOver = useCallback(
-    (e: React.DragEvent<HTMLDivElement>, id: string) => {
-      const draggedId = draggedTodoIdRef.current;
-      if (!canDragTodosRef.current || !draggedId || draggedId === id) return;
-      const list = visibleTodosRef.current;
-      const sourceTodo = list.find((tItem) => tItem.id === draggedId);
-      const targetTodo = list.find((tItem) => tItem.id === id);
-      if (
-        !sourceTodo ||
-        !targetTodo ||
-        sourceTodo.pinned !== targetTodo.pinned ||
-        sourceTodo.completed !== targetTodo.completed
-      ) {
-        return;
-      }
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      const position = getVerticalDropPosition(
-        e.clientY,
-        e.currentTarget.getBoundingClientRect(),
-      );
-      setTodoDropTarget((prev) =>
-        prev && prev.id === id && prev.position === position ? prev : { id, position },
-      );
-    },
-    [],
-  );
-
-  const handleTodoDragLeave = useCallback((id: string) => {
-    setTodoDropTarget((prev) => (prev && prev.id === id ? null : prev));
-  }, []);
-
-  const handleTodoDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>, targetId: string) => {
-      if (!canDragTodosRef.current) return;
-      e.preventDefault();
-      const sourceId = draggedTodoIdRef.current ?? e.dataTransfer.getData('text/agendamea-todo');
-      if (sourceId && sourceId !== targetId) {
-        const position = getVerticalDropPosition(
-          e.clientY,
-          e.currentTarget.getBoundingClientRect(),
-        );
-        handleDropTodo(sourceId, targetId, position);
-      }
-      setDraggedTodoId(null);
-      setTodoDropTarget(null);
-    },
-    [handleDropTodo],
-  );
-
-  const handleTodoDragEnd = useCallback(() => {
-    setDraggedTodoId(null);
-    setTodoDropTarget(null);
-  }, []);
 
   const handleWindowNotify = useCallback(
     (msg: string) => showInfoToast(msg, 'info'),

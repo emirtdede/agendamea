@@ -1,78 +1,43 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDownToLine,
   ArrowLeft,
   BookOpen,
-  Check,
-  ChevronDown,
-  ChevronRight,
   Cloud,
-  Contrast,
-  Copy,
-  Download,
-  FileText,
-  FolderOpen,
-  Keyboard,
-  Lock,
   Menu,
-  Minus,
-  Monitor,
-  Moon,
   Palette,
-  Plus,
-  Power,
-  RefreshCw,
-  RotateCcw,
-  Scale,
-  Search,
   Settings,
   Shield,
   SlidersHorizontal,
   Sparkles,
-  Sun,
   Trash2,
-  Unlock,
-  Upload,
-  X,
   ZoomIn,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n/I18nContext';
-import { localizeErrorMessage, type LegalDocId } from '../i18n/translations';
+import type { LegalDocId } from '../i18n/translations';
 import type {
   AppIconId,
   BootstrapPayload,
   Category,
   CloseBehavior,
-  DetectedCloudProvider,
   OneDriveStatus,
   SettingsTabId,
   ThemeId,
   ThemeMode,
   Todo,
 } from '../types';
-import {
-  COLOR_THEMES,
-  resolveAppIconColors,
-  resolveEffectiveThemeMode,
-  ZOOM_PRESETS,
-} from '../utils/themes';
-import {
-  filterAndSortTrash,
-  type TrashSortOption,
-  type TrashTypeFilter,
-} from '../utils/todoLogic';
-import { BrandMark } from './BrandMark';
-import { ColorDot } from './ColorDot';
-import { ColorSpectrumPicker } from './ColorSpectrumPicker';
 import { DocsSettingsSection } from './DocsSettingsSection';
 import { LegalDocumentView } from './LegalDocumentView';
+import type { AppUpdateState } from './UpdateSettingsSection';
+import { AboutLegalSettingsTab } from './settings/AboutLegalSettingsTab';
+import { AccessibilitySettingsTab } from './settings/AccessibilitySettingsTab';
+import { AppearanceSettingsTab } from './settings/AppearanceSettingsTab';
 import {
-  LanguageSelectorSection,
-  UpdatesSection,
-  type AppUpdateState,
-} from './UpdateSettingsSection';
-import { VelliumLogo } from './VelliumLogo';
+  DataBackupSettingsTab,
+  type PendingImportState,
+} from './settings/DataBackupSettingsTab';
+import { GeneralSettingsTab } from './settings/GeneralSettingsTab';
+import { TrashSettingsTab } from './settings/TrashSettingsTab';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -123,9 +88,7 @@ interface SettingsModalProps {
   onOpenWelcomeGuide?: () => void;
 }
 
-const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
-
-function formatDeletedAt(iso: string | null, intlLocale: string): string {
+function formatTimestampForLocale(iso: string | null, intlLocale: string): string {
   if (!iso) return '';
   try {
     const dt = new Date(iso);
@@ -189,269 +152,30 @@ export function SettingsModal({
   onEmptyTrash,
   onOpenWelcomeGuide,
 }: SettingsModalProps) {
-  const { lang, t, meta, getThemeDisplayName, legalDocs } = useI18n();
+  const { t, meta, legalDocs } = useI18n();
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
   const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocId | null>(null);
-  const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [isClearingCompleted, setIsClearingCompleted] = useState(false);
-  const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
-  const [busyTrashIds, setBusyTrashIds] = useState<Set<string>>(() => new Set());
-  const [importError, setImportError] = useState<string | null>(null);
-  const [isAppIconOpen, setIsAppIconOpen] = useState(false);
-  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
-
-  // Trash search, type filter, sort & deleted date-range state
-  const [trashSearchQuery, setTrashSearchQuery] = useState('');
-  const [trashTypeFilter, setTrashTypeFilter] = useState<TrashTypeFilter>('all');
-  const [trashSortBy, setTrashSortBy] = useState<TrashSortOption>('newest');
-  const [trashDateFrom, setTrashDateFrom] = useState('');
-  const [trashDateTo, setTrashDateTo] = useState('');
-
+  const [pendingImport, setPendingImport] = useState<PendingImportState | null>(null);
   const [oneDriveStatus, setOneDriveStatus] = useState<OneDriveStatus | null>(null);
-  const [isOneDriveBusy, setIsOneDriveBusy] = useState(false);
-  const [isExportingBackup, setIsExportingBackup] = useState(false);
-  const [backupDownloaded, setBackupDownloaded] = useState(false);
-  const [pendingImport, setPendingImport] = useState<{
-    fileName: string;
-    payload: unknown;
-    summary: string;
-  } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const isMountedRef = useRef(true);
 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
 
   useEffect(() => {
-    isMountedRef.current = true;
+    let active = true;
     void api
       .getOneDriveStatus()
       .then((st) => {
-        if (isMountedRef.current) setOneDriveStatus(st);
+        if (active) setOneDriveStatus(st);
       })
       .catch(() => {});
     return () => {
-      isMountedRef.current = false;
+      active = false;
     };
   }, []);
-
-  const handleSelectTab = useCallback((nextTab: SettingsTabId) => {
-    setActiveTab(nextTab);
-    setActiveLegalDoc(null);
-    setConfirmEmptyTrash(false);
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-    }
-  }, []);
-
-  const handleOneDriveConnectOrSync = async () => {
-    if (isOneDriveBusy) return;
-    setIsOneDriveBusy(true);
-    setImportError(null);
-    try {
-      const next = oneDriveStatus?.connected
-        ? await api.syncOneDrivePush()
-        : await api.connectOneDrive({ autoSync: true });
-      if (isMountedRef.current) setOneDriveStatus(next);
-      if (next.restoredBootstrap) {
-        if (onApplyRestoredBootstrap) {
-          onApplyRestoredBootstrap(next.restoredBootstrap);
-        } else {
-          await onImportBackup(next.restoredBootstrap);
-        }
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
-      }
-    } finally {
-      if (isMountedRef.current) setIsOneDriveBusy(false);
-    }
-  };
-
-  const handleDownloadBackup = async () => {
-    if (isExportingBackup) return;
-    setIsExportingBackup(true);
-    setImportError(null);
-    try {
-      const res = await fetch(`/api/export?lang=${encodeURIComponent(lang)}`);
-      if (!res.ok) {
-        throw new Error(t.operationFailedToast);
-      }
-      const blob = await res.blob();
-      const disp = res.headers.get('content-disposition') ?? '';
-      const match = /filename="([^"]+)"/i.exec(disp);
-      const fileName =
-        match?.[1] || `agendamea-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-      if (isMountedRef.current) {
-        setBackupDownloaded(true);
-        window.setTimeout(() => {
-          if (isMountedRef.current) setBackupDownloaded(false);
-        }, 4000);
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
-      }
-    } finally {
-      if (isMountedRef.current) setIsExportingBackup(false);
-    }
-  };
-
-  const handleOneDriveOpenFolder = async () => {
-    try {
-      await api.openOneDriveFolder(oneDriveStatus?.folderPath);
-    } catch {
-      // Ignore folder open errors
-    }
-  };
-
-  const handleOneDrivePickFolder = async () => {
-    if (isOneDriveBusy) return;
-    setImportError(null);
-    try {
-      const picked = await window.agendameaWindow?.pickCloudSyncFolder?.();
-      if (!picked || picked.canceled || !picked.folderPath) return;
-      setIsOneDriveBusy(true);
-      const next = await api.connectOneDrive({
-        folderPath: picked.folderPath,
-        autoSync: true,
-      });
-      if (isMountedRef.current) setOneDriveStatus(next);
-      if (next.restoredBootstrap) {
-        if (onApplyRestoredBootstrap) {
-          onApplyRestoredBootstrap(next.restoredBootstrap);
-        } else {
-          await onImportBackup(next.restoredBootstrap);
-        }
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
-      }
-    } finally {
-      if (isMountedRef.current) setIsOneDriveBusy(false);
-    }
-  };
-
-  const handleSelectCloudProvider = async (provider: DetectedCloudProvider) => {
-    if (isOneDriveBusy) return;
-    if (!provider.detected) {
-      await handleOneDrivePickFolder();
-      return;
-    }
-    setIsOneDriveBusy(true);
-    setImportError(null);
-    try {
-      const next = await api.connectOneDrive({
-        folderPath: provider.folderPath,
-        autoSync: true,
-      });
-      if (isMountedRef.current) setOneDriveStatus(next);
-      if (next.restoredBootstrap) {
-        if (onApplyRestoredBootstrap) {
-          onApplyRestoredBootstrap(next.restoredBootstrap);
-        } else {
-          await onImportBackup(next.restoredBootstrap);
-        }
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
-      }
-    } finally {
-      if (isMountedRef.current) setIsOneDriveBusy(false);
-    }
-  };
-
-  const handleCopyDiagnostics = async () => {
-    try {
-      const diag = await window.agendameaWindow?.getDiagnostics?.();
-      const lines = [
-        `Agendamea v${diag?.appVersion || '1.0.0'} (Vellium)`,
-        `OS: ${diag ? `${diag.platform} ${diag.arch} (${diag.osRelease})` : navigator.userAgent}`,
-        diag?.electronVersion
-          ? `Runtime: Electron ${diag.electronVersion} / Chrome ${diag.chromeVersion} / Node ${diag.nodeVersion}`
-          : 'Runtime: Web/PWA',
-        `Channel: ${diag?.isWindowsStore ? 'Microsoft Store' : 'Desktop'}`,
-        `Language: ${lang} (${meta.nativeName})`,
-        `Theme: ${themeId} (${themeMode}) | Icon: ${appIconId} | Zoom: ${zoomPercent}%`,
-        `Accessibility: HighContrast=${Boolean(highContrast)} | ReducedMotion=${Boolean(reducedMotion)}`,
-        `Startup: LaunchAtStartup=${Boolean(launchAtStartup)} | GlobalShortcut=${Boolean(globalQuickAddShortcut)} | Close=${closeBehavior}`,
-        `CloudSync: Connected=${Boolean(oneDriveStatus?.connected)} | AutoSync=${Boolean(oneDriveStatus?.autoSync)}`,
-        `LocalData: ActiveTasks=${totalTodoCount} | Completed=${completedTodoCount} | Trash=${trashedTodos.length + trashedCategories.length}`,
-      ];
-      await navigator.clipboard.writeText(lines.join('\n'));
-      if (isMountedRef.current) {
-        setDiagnosticsCopied(true);
-        window.setTimeout(() => {
-          if (isMountedRef.current) setDiagnosticsCopied(false);
-        }, 3000);
-      }
-    } catch {
-      // Ignore clipboard permission errors
-    }
-  };
-
-  const handleOneDriveRestore = async () => {
-    if (isOneDriveBusy) return;
-    setIsOneDriveBusy(true);
-    setImportError(null);
-    try {
-      const { status, bootstrap } = await api.syncOneDrivePull();
-      if (isMountedRef.current) setOneDriveStatus(status);
-      if (onApplyRestoredBootstrap) {
-        onApplyRestoredBootstrap(bootstrap);
-      } else {
-        await onImportBackup(bootstrap);
-      }
-    } catch (err) {
-      if (isMountedRef.current) {
-        setImportError(localizeErrorMessage(err, t.importRestoreFailedError, lang, t));
-      }
-    } finally {
-      if (isMountedRef.current) setIsOneDriveBusy(false);
-    }
-  };
-
-  const handleOneDriveToggleAutoSync = async () => {
-    if (isOneDriveBusy || !oneDriveStatus) return;
-    setIsOneDriveBusy(true);
-    try {
-      const nextAuto = !oneDriveStatus.autoSync;
-      await api.updateSettings({ onedriveAutoSync: nextAuto });
-      const refreshed = await api.getOneDriveStatus();
-      if (isMountedRef.current) setOneDriveStatus(refreshed);
-    } catch {
-      // Ignore toggle error
-    } finally {
-      if (isMountedRef.current) setIsOneDriveBusy(false);
-    }
-  };
-
-  const handleOneDriveDisconnect = async () => {
-    if (isOneDriveBusy) return;
-    setIsOneDriveBusy(true);
-    try {
-      const next = await api.disconnectOneDrive();
-      if (isMountedRef.current) setOneDriveStatus(next);
-    } catch {
-      // Ignore disconnect error
-    } finally {
-      if (isMountedRef.current) setIsOneDriveBusy(false);
-    }
-  };
 
   useEffect(() => {
     if (activeLegalDoc && scrollContainerRef.current) {
@@ -459,26 +183,11 @@ export function SettingsModal({
     }
   }, [activeLegalDoc]);
 
-  const trashCount = trashedCategories.length + trashedTodos.length;
-
-  const runTrashItemOp = useCallback(async (key: string, op: () => Promise<void>) => {
-    setBusyTrashIds((prev) => {
-      if (prev.has(key)) return prev;
-      const next = new Set(prev);
-      next.add(key);
-      return next;
-    });
-    try {
-      await op();
-    } finally {
-      if (isMountedRef.current) {
-        setBusyTrashIds((prev) => {
-          if (!prev.has(key)) return prev;
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
-        });
-      }
+  const handleSelectTab = useCallback((nextTab: SettingsTabId) => {
+    setActiveTab(nextTab);
+    setActiveLegalDoc(null);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
     }
   }, []);
 
@@ -506,62 +215,12 @@ export function SettingsModal({
     return () => document.removeEventListener('keydown', handleKey);
   }, [isImporting, activeLegalDoc, pendingImport, onClose]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
+  const trashCount = trashedCategories.length + trashedTodos.length;
 
-    setImportError(null);
-    setPendingImport(null);
-
-    if (file.size > MAX_IMPORT_BYTES) {
-      setImportError(t.importSizeExceededError);
-      return;
-    }
-
-    try {
-      const text = await file.text();
-      const parsed: unknown = JSON.parse(text);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        setImportError(t.importInvalidBackupError);
-        return;
-      }
-      const record = parsed as Record<string, unknown>;
-      const todoCount = Array.isArray(record.todos) ? record.todos.length : 0;
-      const catCount = Array.isArray(record.categories) ? record.categories.length : 0;
-      const trashCountInFile =
-        (Array.isArray(record.trashedTodos) ? record.trashedTodos.length : 0) +
-        (Array.isArray(record.trashedCategories) ? record.trashedCategories.length : 0);
-      const summaryParts = [
-        `${todoCount} ${t.tasksTitle.toLowerCase()}`,
-        `${catCount} ${t.categories.toLowerCase()}`,
-      ];
-      if (trashCountInFile > 0) {
-        summaryParts.push(`${trashCountInFile} ${t.tabTrash.toLowerCase()}`);
-      }
-      setPendingImport({
-        fileName: file.name,
-        payload: parsed,
-        summary: summaryParts.join(' · '),
-      });
-    } catch {
-      setImportError(t.importInvalidBackupError);
-    }
-  };
-
-  const handleConfirmImport = async () => {
-    if (!pendingImport || isImporting) return;
-    setImportError(null);
-    setIsImporting(true);
-    try {
-      await onImportBackup(pendingImport.payload);
-      setPendingImport(null);
-    } catch (err) {
-      setImportError(localizeErrorMessage(err, t.importRestoreFailedError, lang, t));
-    } finally {
-      setIsImporting(false);
-    }
-  };
+  const formatTimestamp = useCallback(
+    (iso: string | null) => formatTimestampForLocale(iso, meta.intlLocale),
+    [meta.intlLocale],
+  );
 
   const shortcuts = useMemo(
     () => [
@@ -579,53 +238,6 @@ export function SettingsModal({
       t.shortcutEscape,
     ],
   );
-
-  const legalItems = useMemo<Array<{ id: LegalDocId; title: string; Icon: typeof Shield }>>(
-    () => [
-      { id: 'privacy', title: t.legalPrivacyTitle, Icon: Shield },
-      { id: 'terms', title: t.legalTermsTitle, Icon: Scale },
-      { id: 'gdpr', title: t.legalKvkkGdprTitle, Icon: FileText },
-      { id: 'opensource', title: t.legalOpenSourceTitle, Icon: FileText },
-      { id: 'accessibility', title: t.legalAccessibilityTitle, Icon: Shield },
-    ],
-    [
-      t.legalPrivacyTitle,
-      t.legalTermsTitle,
-      t.legalKvkkGdprTitle,
-      t.legalOpenSourceTitle,
-      t.legalAccessibilityTitle,
-    ],
-  );
-
-  const filteredTrash = useMemo(
-    () =>
-      filterAndSortTrash(trashedCategories, trashedTodos, {
-        query: trashSearchQuery,
-        typeFilter: trashTypeFilter,
-        sortBy: trashSortBy,
-        dateFrom: trashDateFrom,
-        dateTo: trashDateTo,
-        locale: meta.intlLocale,
-      }),
-    [
-      trashedCategories,
-      trashedTodos,
-      trashSearchQuery,
-      trashTypeFilter,
-      trashSortBy,
-      trashDateFrom,
-      trashDateTo,
-      meta.intlLocale,
-    ],
-  );
-
-  const hasTrashFilters =
-    trashSearchQuery.trim().length > 0 ||
-    trashTypeFilter !== 'all' ||
-    trashDateFrom.length > 0 ||
-    trashDateTo.length > 0;
-
-  const filteredTrashCount = filteredTrash.categories.length + filteredTrash.todos.length;
 
   const navGroups = useMemo<
     Array<{
@@ -693,49 +305,13 @@ export function SettingsModal({
   const currentTabMeta = allNavItems.find((item) => item.id === activeTab) ?? allNavItems[0];
   const CurrentTabIcon = currentTabMeta.Icon;
 
-  const activeIconColors = resolveAppIconColors(
-    appIconId,
-    themeId,
-    themeMode,
-    customThemeColor,
-    customIconColor,
-  );
-  const activeIconLabel =
-    appIconId === 'match-theme'
-      ? t.appIconMatchTheme
-      : appIconId === 'obsidian'
-        ? t.appIconDarkMono
-        : appIconId === 'obsidian-light'
-          ? t.appIconLightMono
-          : appIconId === 'custom'
-            ? `${t.appIconCustom} (${customIconColor.toUpperCase()})`
-            : (() => {
-                const matched = COLOR_THEMES.find((item) => item.id === appIconId);
-                return matched
-                  ? getThemeDisplayName(matched.id, matched.name)
-                  : t.appIconMatchTheme;
-              })();
-
-  const cloudProviders = useMemo<DetectedCloudProvider[]>(
-    () =>
-      oneDriveStatus?.detectedProviders && oneDriveStatus.detectedProviders.length > 0
-        ? oneDriveStatus.detectedProviders
-        : [
-            { id: 'onedrive', label: 'OneDrive', folderPath: '', detected: false },
-            { id: 'googledrive', label: 'Google Drive', folderPath: '', detected: false },
-            { id: 'icloud', label: 'iCloud Drive', folderPath: '', detected: false },
-            { id: 'dropbox', label: 'Dropbox', folderPath: '', detected: false },
-          ],
-    [oneDriveStatus?.detectedProviders],
-  );
-
   return (
     <section
       data-testid="settings-page"
       aria-labelledby="settings-page-title"
       className="flex flex-1 min-h-0 min-w-0 flex-col lg:flex-row bg-[var(--canvas)] overflow-hidden"
     >
-      {/* Power-Pilot-Style Left Split Navigation Rail (Desktop >= 1024px) */}
+      {/* Left Split Navigation Rail (Desktop >= 1024px) */}
       <aside
         aria-label={t.settings}
         className="hidden lg:flex w-[224px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] select-none"
@@ -814,7 +390,6 @@ export function SettingsModal({
                 );
               })}
 
-              {/* Quick 1-click access to Welcome Guide inside the System group */}
               {groupIdx === navGroups.length - 1 && onOpenWelcomeGuide && (
                 <button
                   type="button"
@@ -931,7 +506,6 @@ export function SettingsModal({
 
       {/* Right Scrollable Settings Content Pane */}
       <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--canvas)]">
-        {/* Desktop Active Section Header Bar (pr-36 safely clears fixed WindowControls) */}
         <header className="hidden lg:flex app-drag-region h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)]/75 pl-8 pr-36 select-none">
           <div className="flex items-center gap-2.5 min-w-0">
             <CurrentTabIcon className="h-4 w-4 text-[var(--accent)] shrink-0" />
@@ -949,7 +523,6 @@ export function SettingsModal({
           </div>
         </header>
 
-        {/* Scrollable Content Body */}
         <div
           ref={scrollContainerRef}
           className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-7"
@@ -967,1441 +540,93 @@ export function SettingsModal({
                 />
               </div>
             ) : activeTab === 'appearance' ? (
-              <>
-                {/* Appearance Mode (Light / Dark / System Auto-Follow) */}
-                <section aria-label={t.appearanceModeTitle} className="space-y-2.5">
-                  <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                    {t.appearanceModeTitle}
-                  </h3>
-                  <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1.5">
-                    <button
-                      type="button"
-                      data-testid="theme-mode-light"
-                      onClick={() => onChangeMode('light')}
-                      aria-pressed={themeMode === 'light'}
-                      className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                        themeMode === 'light'
-                          ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] border border-[var(--accent)]/40'
-                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                      }`}
-                    >
-                      <Sun className="h-4 w-4" />
-                      <span>{t.lightMode}</span>
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="theme-mode-dark"
-                      onClick={() => onChangeMode('dark')}
-                      aria-pressed={themeMode === 'dark'}
-                      className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                        themeMode === 'dark'
-                          ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] border border-[var(--accent)]/40'
-                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                      }`}
-                    >
-                      <Moon className="h-4 w-4" />
-                      <span>{t.darkMode}</span>
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="theme-mode-system"
-                      onClick={() => onChangeMode('system')}
-                      aria-pressed={themeMode === 'system'}
-                      className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                        themeMode === 'system'
-                          ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] border border-[var(--accent)]/40'
-                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                      }`}
-                    >
-                      <Monitor className="h-4 w-4" />
-                      <span>{t.systemMode}</span>
-                    </button>
-                  </div>
-                </section>
-
-                {/* 14 Built-in Color Themes + Custom HEX Theme */}
-                <section aria-label={t.colorThemeTitle} className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                      {t.colorThemeTitle}
-                    </h3>
-                    <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                      {COLOR_THEMES.length + 1} {t.themesCountUnit}
-                    </span>
-                  </div>
-
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {COLOR_THEMES.map((theme) => {
-                        const isSelected = theme.id === themeId;
-                        const effectiveMode = resolveEffectiveThemeMode(themeMode);
-                        const swatch = effectiveMode === 'dark' ? theme.swatchDark : theme.swatch;
-                        return (
-                          <button
-                            key={theme.id}
-                            type="button"
-                            onClick={() => onChangeTheme(theme.id)}
-                            aria-pressed={isSelected}
-                            className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
-                              isSelected
-                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                            }`}
-                          >
-                            <span className="flex items-center gap-2 min-w-0">
-                              <span
-                                aria-hidden="true"
-                                className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
-                                style={{ backgroundColor: swatch }}
-                              />
-                              <span className="truncate whitespace-nowrap">
-                                {getThemeDisplayName(theme.id, theme.name)}
-                              </span>
-                            </span>
-                            {isSelected && (
-                              <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                            )}
-                          </button>
-                        );
-                      })}
-
-                      {/* Custom HEX Color Theme Slot */}
-                      <button
-                        type="button"
-                        data-testid="custom-theme-button"
-                        onClick={() => onChangeTheme('custom')}
-                        aria-pressed={themeId === 'custom'}
-                        className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
-                          themeId === 'custom'
-                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                            : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2 min-w-0">
-                          {themeId === 'custom' ? (
-                            <span
-                              aria-hidden="true"
-                              className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
-                              style={{ backgroundColor: customThemeColor }}
-                            />
-                          ) : (
-                            <span
-                              aria-hidden="true"
-                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--accent)]"
-                            >
-                              <Palette className="h-3.5 w-3.5" />
-                            </span>
-                          )}
-                          <span className="truncate whitespace-nowrap">
-                            {themeId === 'custom'
-                              ? customThemeColor.toUpperCase()
-                              : t.customThemeButton}
-                          </span>
-                        </span>
-                        {themeId === 'custom' && (
-                          <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                        )}
-                      </button>
-                    </div>
-
-                    {themeId === 'custom' && (
-                      <div
-                        data-testid="custom-theme-editor"
-                        className="animate-tab-enter rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-[var(--text-primary)]">
-                            {t.customThemeHexTitle}
-                          </p>
-                          <p className="text-[11px] text-[var(--text-muted)]">
-                            {t.customThemeHexHint}
-                          </p>
-                        </div>
-                        <ColorSpectrumPicker
-                          value={customThemeColor}
-                          onChange={onChangeCustomThemeColor}
-                          hexInputLabel={t.customColorHexLabel}
-                          hexInputTestId="custom-theme-hex-input"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </section>
-
-                {/* Collapsible Single-Button Dynamic System-Wide App Icon Selector */}
-                <section aria-label={t.appIconSectionTitle} className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                      {t.appIconSectionTitle}
-                    </h3>
-                    <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                      {activeIconColors.bg.toUpperCase()}
-                    </span>
-                  </div>
-
-                  <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                    <button
-                      type="button"
-                      data-testid="app-icon-toggle-btn"
-                      onClick={() => setIsAppIconOpen((prev) => !prev)}
-                      aria-expanded={isAppIconOpen}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-hover)]/60 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <BrandMark
-                          className="h-8 w-8 shrink-0"
-                          bgColor={activeIconColors.bg}
-                          fgColor={activeIconColors.fg}
-                          borderColor={activeIconColors.border}
-                        />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                            {activeIconLabel}
-                          </p>
-                          <p className="text-xs text-[var(--text-muted)] truncate">
-                            {t.appIconSectionDesc}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shrink-0">
-                        <span className="font-mono-tabular text-[11px]">
-                          {COLOR_THEMES.length + 1}
-                        </span>
-                        <ChevronDown
-                          className={`h-3.5 w-3.5 transition-transform ${
-                            isAppIconOpen ? 'rotate-180' : ''
-                          }`}
-                        />
-                      </span>
-                    </button>
-
-                    {isAppIconOpen && (
-                      <div
-                        data-testid="app-icon-panel"
-                        className="animate-tab-enter border-t border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5"
-                      >
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {(
-                            [
-                              { id: 'match-theme' as AppIconId, label: t.appIconMatchTheme },
-                              { id: 'obsidian-light' as AppIconId, label: t.appIconLightMono },
-                            ] as const
-                          ).map((opt) => {
-                            const selected = appIconId === opt.id;
-                            const previewColors = resolveAppIconColors(
-                              opt.id,
-                              themeId,
-                              themeMode,
-                              customThemeColor,
-                              customIconColor,
-                            );
-                            return (
-                              <button
-                                key={opt.id}
-                                type="button"
-                                data-testid={`app-icon-${opt.id}`}
-                                aria-pressed={selected}
-                                onClick={() => onChangeAppIcon(opt.id)}
-                                className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
-                                  selected
-                                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <span className="flex items-center gap-2 min-w-0">
-                                  <BrandMark
-                                    className="h-4 w-4 rounded-[5px] shrink-0"
-                                    bgColor={previewColors.bg}
-                                    fgColor={previewColors.fg}
-                                    borderColor={previewColors.border}
-                                  />
-                                  <span className="truncate whitespace-nowrap">{opt.label}</span>
-                                </span>
-                                {selected && (
-                                  <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                          {COLOR_THEMES.map((item) => {
-                            const selected = appIconId === item.id;
-                            const previewColors = resolveAppIconColors(
-                              item.id,
-                              themeId,
-                              themeMode,
-                              customThemeColor,
-                              customIconColor,
-                            );
-                            const label = getThemeDisplayName(item.id, item.name);
-                            return (
-                              <button
-                                key={item.id}
-                                type="button"
-                                data-testid={`app-icon-${item.id}`}
-                                aria-pressed={selected}
-                                onClick={() => onChangeAppIcon(item.id)}
-                                className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
-                                  selected
-                                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                <span className="flex items-center gap-2 min-w-0">
-                                  <BrandMark
-                                    className="h-4 w-4 rounded-[5px] shrink-0"
-                                    bgColor={previewColors.bg}
-                                    fgColor={previewColors.fg}
-                                    borderColor={previewColors.border}
-                                  />
-                                  <span className="truncate whitespace-nowrap">{label}</span>
-                                </span>
-                                {selected && (
-                                  <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                                )}
-                              </button>
-                            );
-                          })}
-
-                          <button
-                            type="button"
-                            data-testid="app-icon-custom"
-                            aria-pressed={appIconId === 'custom'}
-                            onClick={() => onChangeAppIcon('custom')}
-                            className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
-                              appIconId === 'custom'
-                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                            }`}
-                          >
-                            <span className="flex items-center gap-2 min-w-0">
-                              {appIconId === 'custom' ? (
-                                <BrandMark
-                                  className="h-4 w-4 rounded-[5px] shrink-0"
-                                  bgColor={activeIconColors.bg}
-                                  fgColor={activeIconColors.fg}
-                                  borderColor={activeIconColors.border}
-                                />
-                              ) : (
-                                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--accent)]">
-                                  <Palette className="h-3.5 w-3.5" />
-                                </span>
-                              )}
-                              <span className="truncate whitespace-nowrap">
-                                {appIconId === 'custom'
-                                  ? customIconColor.toUpperCase()
-                                  : t.appIconCustom}
-                              </span>
-                            </span>
-                            {appIconId === 'custom' && (
-                              <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                            )}
-                          </button>
-                        </div>
-
-                        {appIconId === 'custom' && (
-                          <div
-                            data-testid="custom-icon-editor"
-                            className="animate-tab-enter rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-[var(--text-primary)]">
-                                {t.appIconCustom} (HEX)
-                              </p>
-                              <p className="text-[11px] text-[var(--text-muted)]">
-                                {t.customThemeHexHint}
-                              </p>
-                            </div>
-                            <ColorSpectrumPicker
-                              value={customIconColor}
-                              onChange={onChangeCustomIconColor}
-                              hexInputLabel={`${t.appIconCustom} (HEX)`}
-                              hexInputTestId="custom-icon-hex-input"
-                              previewNode={
-                                <BrandMark
-                                  className="h-8 w-8 shrink-0"
-                                  bgColor={activeIconColors.bg}
-                                  fgColor={activeIconColors.fg}
-                                  borderColor={activeIconColors.border}
-                                />
-                              }
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </>
+              <AppearanceSettingsTab
+                themeMode={themeMode}
+                themeId={themeId}
+                customThemeColor={customThemeColor}
+                appIconId={appIconId}
+                customIconColor={customIconColor}
+                onChangeMode={onChangeMode}
+                onChangeTheme={onChangeTheme}
+                onChangeCustomThemeColor={onChangeCustomThemeColor}
+                onChangeAppIcon={onChangeAppIcon}
+                onChangeCustomIconColor={onChangeCustomIconColor}
+              />
             ) : activeTab === 'accessibility' ? (
-              <section aria-label={t.accessibilitySectionTitle} className="space-y-3">
-                <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                  {/* Zoom Percentage */}
-                  <div className="space-y-3 px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-[var(--text-primary)]">
-                          {t.zoomLevelTitle}
-                        </p>
-                        <p className="text-xs text-[var(--text-muted)]">{t.zoomLevelDesc}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          data-testid="zoom-decrease-btn"
-                          disabled={zoomPercent <= ZOOM_PRESETS[0]}
-                          aria-label="-"
-                          onClick={() => {
-                            const idx = ZOOM_PRESETS.indexOf(
-                              zoomPercent as (typeof ZOOM_PRESETS)[number],
-                            );
-                            if (idx > 0) onChangeZoomPercent(ZOOM_PRESETS[idx - 1]);
-                          }}
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </button>
-                        <span
-                          data-testid="zoom-percent-value"
-                          className="min-w-[46px] text-center font-mono-tabular text-xs font-semibold text-[var(--text-primary)]"
-                        >
-                          {zoomPercent}%
-                        </span>
-                        <button
-                          type="button"
-                          data-testid="zoom-increase-btn"
-                          disabled={zoomPercent >= ZOOM_PRESETS[ZOOM_PRESETS.length - 1]}
-                          aria-label="+"
-                          onClick={() => {
-                            const idx = ZOOM_PRESETS.indexOf(
-                              zoomPercent as (typeof ZOOM_PRESETS)[number],
-                            );
-                            if (idx >= 0 && idx < ZOOM_PRESETS.length - 1) {
-                              onChangeZoomPercent(ZOOM_PRESETS[idx + 1]);
-                            }
-                          }}
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {ZOOM_PRESETS.map((preset) => {
-                        const active = zoomPercent === preset;
-                        return (
-                          <button
-                            key={preset}
-                            type="button"
-                            data-testid={`zoom-preset-${preset}`}
-                            onClick={() => onChangeZoomPercent(preset)}
-                            className={`rounded-md border px-2.5 py-1 font-mono-tabular text-xs font-medium transition-colors whitespace-nowrap ${
-                              active
-                                ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]'
-                                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                            }`}
-                          >
-                            {preset}%
-                          </button>
-                        );
-                      })}
-                      {zoomPercent !== 100 && (
-                        <button
-                          type="button"
-                          onClick={() => onChangeZoomPercent(100)}
-                          className="ms-auto rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
-                        >
-                          {t.zoomResetButton}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* High Contrast */}
-                  <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-                    <div className="min-w-0">
-                      <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
-                        <Contrast className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
-                        <span>{t.highContrastTitle}</span>
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)]">{t.highContrastDesc}</p>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      data-testid="toggle-high-contrast"
-                      aria-checked={highContrast}
-                      onClick={() => onToggleHighContrast(!highContrast)}
-                      className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                        highContrast
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                      }`}
-                    >
-                      {highContrast ? t.enabledBadge : t.disabledBadge}
-                    </button>
-                  </div>
-
-                  {/* Reduced Motion */}
-                  <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">
-                        {t.reducedMotionTitle}
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)]">{t.reducedMotionDesc}</p>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      data-testid="toggle-reduced-motion"
-                      aria-checked={reducedMotion}
-                      onClick={() => onToggleReducedMotion(!reducedMotion)}
-                      className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                        reducedMotion
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                      }`}
-                    >
-                      {reducedMotion ? t.enabledBadge : t.disabledBadge}
-                    </button>
-                  </div>
-                </div>
-              </section>
+              <AccessibilitySettingsTab
+                zoomPercent={zoomPercent}
+                highContrast={highContrast}
+                reducedMotion={reducedMotion}
+                onChangeZoomPercent={onChangeZoomPercent}
+                onToggleHighContrast={onToggleHighContrast}
+                onToggleReducedMotion={onToggleReducedMotion}
+              />
             ) : activeTab === 'general' ? (
-              <>
-                {/* 73-Language Selector */}
-                <LanguageSelectorSection />
-
-                {/* Close Behavior, Windows Startup & Global Quick-Add */}
-                <section aria-label={t.closeBehaviorSectionTitle} className="space-y-2.5">
-                  <div>
-                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                      {t.closeBehaviorSectionTitle}
-                    </h3>
-                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      {t.closeBehaviorDesc}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2">
-                    {(
-                      [
-                        { id: 'ask' as CloseBehavior, label: t.closeBehaviorAsk, Icon: Sparkles },
-                        {
-                          id: 'tray' as CloseBehavior,
-                          label: t.closeBehaviorTray,
-                          Icon: ArrowDownToLine,
-                        },
-                        { id: 'quit' as CloseBehavior, label: t.closeBehaviorQuit, Icon: Power },
-                      ] as const
-                    ).map(({ id, label, Icon }) => {
-                      const selected = closeBehavior === id;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          data-testid={`close-behavior-${id}`}
-                          aria-pressed={selected}
-                          onClick={() => onChangeCloseBehavior(id)}
-                          className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
-                            selected
-                              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                              : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                          }`}
-                        >
-                          <Icon className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-[var(--text-primary)]">
-                          {t.launchAtStartupTitle}
-                        </p>
-                        <p className="text-xs text-[var(--text-muted)]">
-                          {t.launchAtStartupDesc}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        data-testid="toggle-launch-at-startup"
-                        aria-checked={launchAtStartup}
-                        onClick={() => onToggleLaunchAtStartup?.(!launchAtStartup)}
-                        className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                          launchAtStartup
-                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                            : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                        }`}
-                      >
-                        {launchAtStartup ? t.enabledBadge : t.disabledBadge}
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-[var(--text-primary)]">
-                          {t.globalQuickAddTitle}
-                        </p>
-                        <p className="text-xs text-[var(--text-muted)]">{t.globalQuickAddDesc}</p>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        data-testid="toggle-global-quick-add"
-                        aria-checked={globalQuickAddShortcut}
-                        onClick={() =>
-                          onToggleGlobalQuickAddShortcut?.(!globalQuickAddShortcut)
-                        }
-                        className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                          globalQuickAddShortcut
-                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                            : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                        }`}
-                      >
-                        {globalQuickAddShortcut ? t.enabledBadge : t.disabledBadge}
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-[var(--text-primary)]">
-                          {t.dragReorderTitle}
-                        </p>
-                        <p className="text-xs text-[var(--text-muted)]">
-                          {dragLocked ? t.dragLockedDesc : t.dragUnlockedDesc}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={!dragLocked}
-                        aria-label={t.dragReorderTitle}
-                        onClick={() => onToggleDragLock(!dragLocked)}
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                          dragLocked
-                            ? 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                            : 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                        }`}
-                      >
-                        {dragLocked ? (
-                          <>
-                            <Lock className="h-3.5 w-3.5" />
-                            <span>{t.lockedBadge}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Unlock className="h-3.5 w-3.5 text-[var(--accent)]" />
-                            <span>{t.unlockedBadge}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </section>
-
-                {/* Keyboard Shortcuts */}
-                <section aria-label={t.keyboardShortcutsTitle} className="space-y-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <Keyboard className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                      {t.keyboardShortcutsTitle}
-                    </h3>
-                  </div>
-                  <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                    {shortcuts.map((item) => (
-                      <div
-                        key={item.keys}
-                        className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs"
-                      >
-                        <span className="text-[var(--text-secondary)]">{item.label}</span>
-                        <kbd className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 font-mono-tabular text-[11px] text-[var(--text-primary)] whitespace-nowrap">
-                          {item.keys}
-                        </kbd>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </>
+              <GeneralSettingsTab
+                closeBehavior={closeBehavior}
+                launchAtStartup={launchAtStartup}
+                globalQuickAddShortcut={globalQuickAddShortcut}
+                dragLocked={dragLocked}
+                shortcuts={shortcuts}
+                onChangeCloseBehavior={onChangeCloseBehavior}
+                onToggleLaunchAtStartup={onToggleLaunchAtStartup}
+                onToggleGlobalQuickAddShortcut={onToggleGlobalQuickAddShortcut}
+                onToggleDragLock={onToggleDragLock}
+              />
             ) : activeTab === 'data' ? (
-              <section aria-label={t.dataAndBackupTitle} className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                    {t.dataAndBackupTitle}
-                  </h3>
-                  <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                    {totalTodoCount} {t.localRecordsBadge}
-                  </span>
-                </div>
-
-                {importError && (
-                  <div
-                    role="alert"
-                    className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-600 dark:text-red-400"
-                  >
-                    {importError}
-                  </div>
-                )}
-
-                {pendingImport && (
-                  <div
-                    role="alertdialog"
-                    aria-label={t.backupRestoreTitle}
-                    className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3.5 space-y-2.5"
-                  >
-                    <p className="text-xs leading-relaxed text-[var(--text-primary)]">
-                      <strong>{pendingImport.fileName}</strong> ({pendingImport.summary})
-                    </p>
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        disabled={isImporting}
-                        onClick={() => setPendingImport(null)}
-                        className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
-                      >
-                        {t.cancelButton}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isImporting}
-                        onClick={() => void handleConfirmImport()}
-                        className="rounded-lg px-3 py-1 text-xs font-medium transition-opacity disabled:opacity-40"
-                        style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
-                      >
-                        {isImporting ? t.restoringButton : t.overwriteAndRestore}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                  {/* JSON Backup & Restore */}
-                  <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">
-                        {t.backupRestoreTitle}
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)]">{t.backupRestoreDesc}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="application/json,.json"
-                        onChange={(e) => void handleFileChange(e)}
-                        aria-label={t.restoreButton}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        disabled={isImporting}
-                        onClick={() => fileInputRef.current?.click()}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                      >
-                        <Upload className="h-3.5 w-3.5" />
-                        <span>{isImporting ? t.restoringButton : t.restoreButton}</span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isExportingBackup}
-                        data-testid="download-backup-link"
-                        onClick={() => void handleDownloadBackup()}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                      >
-                        {backupDownloaded ? (
-                          <Check className="h-3.5 w-3.5 text-emerald-500" />
-                        ) : isExportingBackup ? (
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-[var(--accent)]" />
-                        ) : (
-                          <Download className="h-3.5 w-3.5" />
-                        )}
-                        <span>{t.downloadBackupButton}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Zero-Cost Multi-Cloud Folder Sync (OneDrive, Google Drive, iCloud Drive, Dropbox, Custom) */}
-                  <div data-testid="onedrive-sync-card" className="px-4 py-4 space-y-3.5">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Cloud className="h-4 w-4 text-[var(--accent)] shrink-0" />
-                          <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                            {t.cloudSyncSectionTitle}
-                          </p>
-                        </div>
-                        {oneDriveStatus?.connected && (
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)] whitespace-nowrap">
-                              <Check className="h-3 w-3 shrink-0" />
-                              <span>{t.enabledBadge}</span>
-                            </span>
-                            <button
-                              type="button"
-                              disabled={isOneDriveBusy}
-                              onClick={() => void handleOneDriveDisconnect()}
-                              className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                            >
-                              {t.onedriveDisconnectButton}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-xs leading-relaxed text-[var(--text-muted)]">
-                        {t.cloudSyncSectionDesc}
-                      </p>
-                    </div>
-
-                    {/* 1-Click Free Cloud Providers (OneDrive, Google Drive, iCloud Drive, Dropbox) */}
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
-                        {t.cloudSyncProvidersTitle}
-                      </p>
-                      <div className="grid grid-cols-2 gap-2" data-testid="cloud-providers-grid">
-                        {cloudProviders.map((provider) => {
-                          const isActive =
-                            Boolean(oneDriveStatus?.connected) &&
-                            oneDriveStatus?.activeProvider === provider.id;
-                          return (
-                            <button
-                              key={provider.id}
-                              type="button"
-                              data-testid={`cloud-provider-${provider.id}`}
-                              disabled={isOneDriveBusy}
-                              onClick={() => void handleSelectCloudProvider(provider)}
-                              className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-45 ${
-                                isActive
-                                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                  : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                              }`}
-                            >
-                              <div className="min-w-0">
-                                <p className="truncate text-xs font-semibold text-[var(--text-primary)]">
-                                  {provider.label}
-                                </p>
-                                <p className="truncate text-[10.5px] text-[var(--text-muted)]">
-                                  {provider.detected ? t.cloudDetectedBadge : t.cloudNotInstalledHint}
-                                </p>
-                              </div>
-                              {isActive ? (
-                                <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                              ) : provider.detected ? (
-                                <span
-                                  aria-hidden="true"
-                                  className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
-                                />
-                              ) : (
-                                <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {oneDriveStatus?.folderPath && (
-                      <div className="space-y-0.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2">
-                        <p
-                          data-testid="onedrive-folder-path"
-                          className="truncate font-mono-tabular text-[11px] text-[var(--text-secondary)]"
-                          title={oneDriveStatus.folderPath}
-                        >
-                          {oneDriveStatus.folderPath}
-                        </p>
-                        {oneDriveStatus.lastSyncedAt && (
-                          <p className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
-                            {t.onedriveLastSyncedPrefix}:{' '}
-                            {formatDeletedAt(oneDriveStatus.lastSyncedAt, meta.intlLocale)}
-                            {oneDriveStatus.hasRemoteBackup &&
-                            typeof oneDriveStatus.remoteTodoCount === 'number'
-                              ? ` · ${oneDriveStatus.remoteTodoCount} ${t.tasksTitle.toLowerCase()}`
-                              : ''}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                      <button
-                        type="button"
-                        disabled={isOneDriveBusy}
-                        onClick={() => void handleOneDriveConnectOrSync()}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-40 whitespace-nowrap shrink-0"
-                        style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
-                      >
-                        <RefreshCw
-                          className={`h-3.5 w-3.5 shrink-0 ${isOneDriveBusy ? 'animate-spin' : ''}`}
-                        />
-                        <span>
-                          {oneDriveStatus?.connected
-                            ? t.onedriveSyncNowButton
-                            : t.onedriveConnectButton}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={isOneDriveBusy || !oneDriveStatus?.hasRemoteBackup}
-                        onClick={() => void handleOneDriveRestore()}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
-                      >
-                        <Upload className="h-3.5 w-3.5 shrink-0" />
-                        <span>{t.onedriveRestoreButton}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        data-testid="onedrive-pick-folder-btn"
-                        disabled={isOneDriveBusy}
-                        onClick={() => void handleOneDrivePickFolder()}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
-                      >
-                        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                        <span>{t.cloudPickFolderButton}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => void handleOneDriveOpenFolder()}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
-                      >
-                        <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                        <span>{t.onedriveOpenFolderButton}</span>
-                      </button>
-                    </div>
-
-                    {oneDriveStatus?.connected && (
-                      <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2">
-                        <span className="text-xs font-medium text-[var(--text-secondary)]">
-                          {t.onedriveAutoSyncTitle}
-                        </span>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={oneDriveStatus.autoSync}
-                          disabled={isOneDriveBusy}
-                          onClick={() => void handleOneDriveToggleAutoSync()}
-                          className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors shrink-0 ${
-                            oneDriveStatus.autoSync
-                              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                              : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                          }`}
-                        >
-                          {oneDriveStatus.autoSync ? t.enabledBadge : t.disabledBadge}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Move Completed to Trash */}
-                  <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">
-                        {t.moveCompletedToTrashTitle}
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {completedTodoCount > 0
-                          ? `${completedTodoCount} ${t.completedCountLabel}`
-                          : t.moveCompletedToTrashEmptyDesc}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={completedTodoCount === 0 || isClearingCompleted}
-                      onClick={async () => {
-                        if (isClearingCompleted) return;
-                        setIsClearingCompleted(true);
-                        try {
-                          await onClearAllCompleted();
-                        } finally {
-                          setIsClearingCompleted(false);
-                        }
-                      }}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>{isClearingCompleted ? t.movingButton : t.moveButton}</span>
-                    </button>
-                  </div>
-                </div>
-              </section>
+              <DataBackupSettingsTab
+                totalTodoCount={totalTodoCount}
+                completedTodoCount={completedTodoCount}
+                oneDriveStatus={oneDriveStatus}
+                onOneDriveStatusChange={setOneDriveStatus}
+                isImporting={isImporting}
+                onImportingChange={setIsImporting}
+                pendingImport={pendingImport}
+                onPendingImportChange={setPendingImport}
+                onClearAllCompleted={onClearAllCompleted}
+                onImportBackup={onImportBackup}
+                onApplyRestoredBootstrap={onApplyRestoredBootstrap}
+                formatTimestamp={formatTimestamp}
+              />
             ) : activeTab === 'trash' ? (
-              <div className="space-y-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-[var(--text-muted)]">{t.trashIntroDesc}</p>
-
-                  {trashCount > 0 &&
-                    (confirmEmptyTrash ? (
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          disabled={isEmptyingTrash}
-                          onClick={() => setConfirmEmptyTrash(false)}
-                          className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 whitespace-nowrap"
-                        >
-                          {t.cancelButton}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isEmptyingTrash}
-                          onClick={async () => {
-                            if (isEmptyingTrash) return;
-                            setIsEmptyingTrash(true);
-                            try {
-                              await onEmptyTrash();
-                              setConfirmEmptyTrash(false);
-                            } finally {
-                              setIsEmptyingTrash(false);
-                            }
-                          }}
-                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40 transition-colors whitespace-nowrap"
-                        >
-                          {isEmptyingTrash ? t.deletingButton : t.confirmDeleteAllPermanent}
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmEmptyTrash(true)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors whitespace-nowrap shrink-0"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        <span>{t.emptyTrashButton}</span>
-                      </button>
-                    ))}
-                </div>
-
-                {trashCount === 0 ? (
-                  <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-14 text-center">
-                    <Trash2 className="mb-2.5 h-6 w-6 text-[var(--text-muted)]" />
-                    <p className="font-display text-sm font-semibold text-[var(--text-primary)]">
-                      {t.trashEmptyTitle}
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">{t.trashEmptyDesc}</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Search, Type Filter, Sort & Deleted Date-Range Toolbar */}
-                    <div
-                      data-testid="trash-filter-toolbar"
-                      className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5 space-y-3"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="relative flex flex-1 min-w-[200px] items-center">
-                          <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
-                          <input
-                            type="text"
-                            data-testid="trash-search-input"
-                            value={trashSearchQuery}
-                            onChange={(e) => setTrashSearchQuery(e.target.value)}
-                            placeholder={t.trashSearchPlaceholder}
-                            aria-label={t.trashSearchPlaceholder}
-                            className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
-                          />
-                          {trashSearchQuery && (
-                            <button
-                              type="button"
-                              onClick={() => setTrashSearchQuery('')}
-                              aria-label={t.clearSearch}
-                              className="absolute right-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        <select
-                          data-testid="trash-sort-select"
-                          value={trashSortBy}
-                          onChange={(e) => setTrashSortBy(e.target.value as TrashSortOption)}
-                          aria-label={t.trashSortNewest}
-                          className="h-8 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none cursor-pointer"
-                        >
-                          <option value="newest">{t.trashSortNewest}</option>
-                          <option value="oldest">{t.trashSortOldest}</option>
-                          <option value="az">{t.trashSortAZ}</option>
-                          <option value="za">{t.trashSortZA}</option>
-                        </select>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div
-                          role="tablist"
-                          aria-label={t.tabTrash}
-                          className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5"
-                        >
-                          {(
-                            [
-                              { id: 'all' as TrashTypeFilter, label: t.trashFilterAll },
-                              { id: 'todos' as TrashTypeFilter, label: t.trashFilterTodos },
-                              {
-                                id: 'categories' as TrashTypeFilter,
-                                label: t.trashFilterCategories,
-                              },
-                            ] as const
-                          ).map((opt) => {
-                            const active = trashTypeFilter === opt.id;
-                            return (
-                              <button
-                                key={opt.id}
-                                type="button"
-                                role="tab"
-                                data-testid={`trash-filter-${opt.id}`}
-                                aria-selected={active}
-                                onClick={() => setTrashTypeFilter(opt.id)}
-                                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-                                  active
-                                    ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
-                                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                                }`}
-                              >
-                                {opt.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <label className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
-                            <span>{t.trashDateFrom}</span>
-                            <input
-                              type="date"
-                              data-testid="trash-date-from"
-                              value={trashDateFrom}
-                              onChange={(e) => setTrashDateFrom(e.target.value)}
-                              aria-label={t.trashDateFrom}
-                              className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 font-mono-tabular text-[11px] text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
-                            />
-                          </label>
-                          <label className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)]">
-                            <span>{t.trashDateTo}</span>
-                            <input
-                              type="date"
-                              data-testid="trash-date-to"
-                              value={trashDateTo}
-                              onChange={(e) => setTrashDateTo(e.target.value)}
-                              aria-label={t.trashDateTo}
-                              className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 font-mono-tabular text-[11px] text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none"
-                            />
-                          </label>
-                          {hasTrashFilters && (
-                            <button
-                              type="button"
-                              data-testid="trash-clear-filters"
-                              onClick={() => {
-                                setTrashSearchQuery('');
-                                setTrashTypeFilter('all');
-                                setTrashDateFrom('');
-                                setTrashDateTo('');
-                              }}
-                              className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 text-[11px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
-                            >
-                              {t.zoomResetButton}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {filteredTrashCount === 0 ? (
-                      <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-10 text-center">
-                        <Search className="mb-2 h-5 w-5 text-[var(--text-muted)]" />
-                        <p className="font-display text-sm font-semibold text-[var(--text-primary)]">
-                          {t.trashNoMatchesTitle}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTrashSearchQuery('');
-                            setTrashTypeFilter('all');
-                            setTrashDateFrom('');
-                            setTrashDateTo('');
-                          }}
-                          className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
-                        >
-                          {t.clearSearch}
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                    {filteredTrash.categories.length > 0 && (
-                      <section aria-label={t.categories} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                            {t.categories}
-                          </h3>
-                          <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                            {filteredTrash.categories.length}
-                          </span>
-                        </div>
-                        <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                          {filteredTrash.categories.map((cat) => (
-                            <div
-                              key={cat.id}
-                              className="flex items-center justify-between gap-3 px-4 py-3"
-                            >
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <ColorDot color={cat.color} size="sm" />
-                                  <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                                    {cat.name}
-                                  </p>
-                                </div>
-                                <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
-                                  {t.deletedPrefix}:{' '}
-                                  {formatDeletedAt(cat.deletedAt, meta.intlLocale)}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  disabled={isEmptyingTrash || busyTrashIds.has(`cat:${cat.id}`)}
-                                  onClick={() =>
-                                    void runTrashItemOp(`cat:${cat.id}`, () =>
-                                      onRestoreCategory(cat.id),
-                                    )
-                                  }
-                                  aria-label={`${t.restoreItemButton}: ${cat.name}`}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                                >
-                                  <RotateCcw className="h-3 w-3" />
-                                  <span>{t.restoreItemButton}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isEmptyingTrash || busyTrashIds.has(`cat:${cat.id}`)}
-                                  onClick={() =>
-                                    void runTrashItemOp(`cat:${cat.id}`, () =>
-                                      onPermanentDeleteCategory(cat.id),
-                                    )
-                                  }
-                                  aria-label={`${t.permanentDeleteTitle}: ${cat.name}`}
-                                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
-                                  title={t.permanentDeleteTitle}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </section>
-                    )}
-
-                    {filteredTrash.todos.length > 0 && (
-                      <section aria-label={t.tasksTitle} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                            {t.tasksTitle}
-                          </h3>
-                          <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                            {filteredTrash.todos.length}
-                          </span>
-                        </div>
-                        <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                          {filteredTrash.todos.map((todo) => (
-                            <div
-                              key={todo.id}
-                              className="flex items-center justify-between gap-3 px-4 py-3"
-                            >
-                              <div className="min-w-0">
-                                <p
-                                  className={`truncate text-sm font-medium ${
-                                    todo.completed
-                                      ? 'line-through text-[var(--text-muted)]'
-                                      : 'text-[var(--text-primary)]'
-                                  }`}
-                                >
-                                  {todo.title}
-                                </p>
-                                <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
-                                  {t.deletedPrefix}:{' '}
-                                  {formatDeletedAt(todo.deletedAt, meta.intlLocale)}
-                                  {todo.subtasks.length > 0
-                                    ? ` · ${todo.subtasks.length} ${t.subtaskCountUnit}`
-                                    : ''}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  disabled={isEmptyingTrash || busyTrashIds.has(`todo:${todo.id}`)}
-                                  onClick={() =>
-                                    void runTrashItemOp(`todo:${todo.id}`, () =>
-                                      onRestoreTodo(todo.id),
-                                    )
-                                  }
-                                  aria-label={`${t.restoreItemButton}: ${todo.title}`}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                                >
-                                  <RotateCcw className="h-3 w-3" />
-                                  <span>{t.restoreItemButton}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isEmptyingTrash || busyTrashIds.has(`todo:${todo.id}`)}
-                                  onClick={() =>
-                                    void runTrashItemOp(`todo:${todo.id}`, () =>
-                                      onPermanentDeleteTodo(todo.id),
-                                    )
-                                  }
-                                  aria-label={`${t.permanentDeleteTitle}: ${todo.title}`}
-                                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
-                                  title={t.permanentDeleteTitle}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </section>
-                    )}
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
+              <TrashSettingsTab
+                trashedCategories={trashedCategories}
+                trashedTodos={trashedTodos}
+                onRestoreTodo={onRestoreTodo}
+                onPermanentDeleteTodo={onPermanentDeleteTodo}
+                onRestoreCategory={onRestoreCategory}
+                onPermanentDeleteCategory={onPermanentDeleteCategory}
+                onEmptyTrash={onEmptyTrash}
+                formatTimestamp={formatTimestamp}
+              />
             ) : activeTab === 'docs' ? (
               <DocsSettingsSection shortcuts={shortcuts} />
             ) : (
-              /* About, Updates & Legal Tab */
-              <>
-                <UpdatesSection
-                  autoUpdateCheck={autoUpdateCheck}
-                  onToggleAutoUpdateCheck={onToggleAutoUpdateCheck}
-                  updateState={updateState}
-                  onCheckForUpdates={onCheckForUpdates}
-                  onDownloadAndInstall={onDownloadAndInstall}
-                  onQuitAndInstall={onQuitAndInstallUpdate}
-                />
-
-                {/* Legal Pages & Microsoft Store Compliance */}
-                <section aria-label={t.legalSectionTitle} className="space-y-2.5">
-                  <div>
-                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                      {t.legalSectionTitle}
-                    </h3>
-                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                      {t.legalSectionSubtitle}
-                    </p>
-                  </div>
-
-                  <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-                    {legalItems.map(({ id, title, Icon }) => (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setActiveLegalDoc(id)}
-                        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
-                      >
-                        <span className="flex items-center gap-2.5 min-w-0">
-                          <Icon className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
-                          <span className="truncate">{title}</span>
-                        </span>
-                        <ChevronRight className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                {/* About & Diagnostics Card (Proper Agendamea BrandMark + Razor-Sharp 34x27 Vellium Mark) */}
-                <section
-                  aria-label="Agendamea"
-                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <BrandMark
-                        className="h-10 w-10 rounded-xl shrink-0"
-                        bgColor={activeIconColors.bg}
-                        fgColor={activeIconColors.fg}
-                        borderColor={activeIconColors.border}
-                      />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-display text-sm font-bold text-[var(--text-primary)]">
-                            Agendamea
-                          </span>
-                          <span className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-1.5 py-0.5 font-mono-tabular text-[11px] text-[var(--text-muted)]">
-                            v1.0.0
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-xs text-[var(--text-muted)] truncate">
-                          © 2026 Vellium · vellium.dev
-                        </p>
-                      </div>
-                    </div>
-
-                    <a
-                      href="https://vellium.dev"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Vellium"
-                      title="Vellium (vellium.dev)"
-                      data-testid="about-vellium-logo"
-                      className="flex items-center justify-center rounded-lg px-2 py-1.5 text-[var(--text-primary)] opacity-85 hover:opacity-100 hover:bg-[var(--surface-hover)] transition-all shrink-0"
-                    >
-                      <VelliumLogo className="h-[27px] w-[34px]" />
-                    </a>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-[var(--text-muted)]">
-                      <a
-                        href="https://vellium.dev"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
-                      >
-                        vellium.dev
-                      </a>
-                      <a
-                        href="mailto:support@vellium.dev"
-                        className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
-                      >
-                        support@vellium.dev
-                      </a>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        data-testid="copy-diagnostics-btn"
-                        onClick={() => void handleCopyDiagnostics()}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
-                      >
-                        {diagnosticsCopied ? (
-                          <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                        ) : (
-                          <Copy className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
-                        )}
-                        <span>
-                          {diagnosticsCopied ? t.diagnosticsCopiedToast : t.copyDiagnosticsButton}
-                        </span>
-                      </button>
-                      {onOpenWelcomeGuide && (
-                        <button
-                          type="button"
-                          data-testid="settings-open-welcome-guide"
-                          onClick={onOpenWelcomeGuide}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
-                        >
-                          <Sparkles className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
-                          <span>{t.welcomeReplayButton}</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              </>
+              <AboutLegalSettingsTab
+                themeMode={themeMode}
+                themeId={themeId}
+                customThemeColor={customThemeColor}
+                appIconId={appIconId}
+                customIconColor={customIconColor}
+                zoomPercent={zoomPercent}
+                highContrast={highContrast}
+                reducedMotion={reducedMotion}
+                closeBehavior={closeBehavior}
+                launchAtStartup={launchAtStartup}
+                globalQuickAddShortcut={globalQuickAddShortcut}
+                oneDriveStatus={oneDriveStatus}
+                totalTodoCount={totalTodoCount}
+                completedTodoCount={completedTodoCount}
+                trashCount={trashCount}
+                autoUpdateCheck={autoUpdateCheck}
+                onToggleAutoUpdateCheck={onToggleAutoUpdateCheck}
+                updateState={updateState}
+                onCheckForUpdates={onCheckForUpdates}
+                onDownloadAndInstall={onDownloadAndInstall}
+                onQuitAndInstallUpdate={onQuitAndInstallUpdate}
+                onOpenLegalDoc={setActiveLegalDoc}
+                onOpenWelcomeGuide={onOpenWelcomeGuide}
+              />
             )}
           </div>
         </div>

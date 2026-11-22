@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TodoDatabase, ValidationError } from './src/db/database.ts';
 import type { CloudProviderId, DetectedCloudProvider, OneDriveStatus } from './src/types.ts';
-import { compareSemver, getLocalDateString } from './src/utils/todoLogic.ts';
+import { getLocalDateString } from './src/utils/todoLogic.ts';
+import releaseUtils from './shared/releaseUtils.cjs';
 
 const APP_VERSION = '1.0.0';
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/emirtdede/agendamea/releases/latest';
@@ -822,50 +823,13 @@ async function startServer() {
         });
         return;
       }
-      const data = (await response.json()) as {
-        tag_name?: string;
-        name?: string;
-        body?: string;
-        published_at?: string;
-        html_url?: string;
-        assets?: Array<{ name?: string; browser_download_url?: string }>;
-      };
-      const latestVersion = String(data.tag_name ?? APP_VERSION).replace(/^v/i, '') || APP_VERSION;
-      const updateAvailable = compareSemver(latestVersion, APP_VERSION) > 0;
-      const assets = Array.isArray(data.assets) ? data.assets : [];
-      const setupAsset = assets.find(
-        (a) => typeof a?.name === 'string' && /setup.*\.exe$/i.test(a.name),
-      );
-      const portableAsset = assets.find(
-        (a) => typeof a?.name === 'string' && /portable.*\.exe$/i.test(a.name),
-      );
-      const msixAsset = assets.find(
-        (a) => typeof a?.name === 'string' && /\.(msix|appx)$/i.test(a.name),
-      );
-      const resultPayload = {
-        ok: true,
-        currentVersion: APP_VERSION,
-        latestVersion,
-        updateAvailable,
-        releaseName: typeof data.name === 'string' && data.name ? data.name : `Agendamea v${latestVersion}`,
-        releaseNotes: typeof data.body === 'string' ? data.body.slice(0, 4000) : '',
-        publishedAt: typeof data.published_at === 'string' ? data.published_at : null,
-        releaseUrl:
-          typeof data.html_url === 'string' && data.html_url ? data.html_url : GITHUB_RELEASES_HTML,
-        setupUrl:
-          typeof setupAsset?.browser_download_url === 'string'
-            ? setupAsset.browser_download_url
-            : null,
-        portableUrl:
-          typeof portableAsset?.browser_download_url === 'string'
-            ? portableAsset.browser_download_url
-            : null,
-        msixUrl:
-          typeof msixAsset?.browser_download_url === 'string'
-            ? msixAsset.browser_download_url
-            : null,
+      const data = (await response.json()) as Record<string, unknown>;
+      const resultPayload = releaseUtils.parseGitHubRelease(
+        data,
+        APP_VERSION,
+        GITHUB_RELEASES_HTML,
         checkedAt,
-      };
+      );
       updateCheckCache = {
         expiresAt: Date.now() + 30_000,
         payload: resultPayload,
