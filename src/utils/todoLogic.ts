@@ -263,6 +263,25 @@ function matchesMultilingualSearch(haystack: string, qTr: string, qStd: string):
   );
 }
 
+export function matchesTodoDateRange(
+  todo: Pick<Todo, 'startDate' | 'dueDate'>,
+  dateFrom?: string,
+  dateTo?: string,
+): boolean {
+  const validFrom = dateFrom && isValidIsoDateString(dateFrom.trim()) ? dateFrom.trim() : '';
+  const validTo = dateTo && isValidIsoDateString(dateTo.trim()) ? dateTo.trim() : '';
+  if (!validFrom && !validTo) return true;
+  const minBound = validFrom && validTo && validFrom > validTo ? validTo : validFrom;
+  const maxBound = validFrom && validTo && validFrom > validTo ? validFrom : validTo;
+  const { startDate, dueDate } = normalizeDateRange(todo.startDate, todo.dueDate);
+  const taskStart = startDate ?? dueDate;
+  const taskEnd = dueDate ?? startDate;
+  if (!taskStart || !taskEnd) return false;
+  if (minBound && taskEnd < minBound) return false;
+  if (maxBound && taskStart > maxBound) return false;
+  return true;
+}
+
 export function filterAndSortTodos(params: {
   todos: Todo[];
   activeView: ActiveView;
@@ -271,6 +290,8 @@ export function filterAndSortTodos(params: {
   sortBy: SortOption;
   todayStr?: string;
   tagFilter?: string | null;
+  dateFrom?: string;
+  dateTo?: string;
 }): Todo[] {
   const {
     todos,
@@ -280,6 +301,8 @@ export function filterAndSortTodos(params: {
     sortBy,
     todayStr = getLocalDateString(),
     tagFilter = null,
+    dateFrom = '',
+    dateTo = '',
   } = params;
 
   const q = normalizeTurkish(searchQuery);
@@ -312,6 +335,11 @@ export function filterAndSortTodos(params: {
     if (normalizedTagFilter) {
       const hasTag = (todo.tags ?? []).some((tg) => tg.toLowerCase() === normalizedTagFilter);
       if (!hasTag) return false;
+    }
+
+    // Optional date range filter (startDate / dueDate overlap)
+    if (dateFrom || dateTo) {
+      if (!matchesTodoDateRange(todo, dateFrom, dateTo)) return false;
     }
 
     // Search query matching title, notes, subtasks, or tags (supports both Turkish İ/ı and international I/i)
@@ -509,11 +537,15 @@ function getDeletedDateKey(iso: string | null): string {
 }
 
 function matchesDeletedDateRange(iso: string | null, dateFrom: string, dateTo: string): boolean {
-  if (!dateFrom && !dateTo) return true;
+  const validFrom = dateFrom && isValidIsoDateString(dateFrom.trim()) ? dateFrom.trim() : '';
+  const validTo = dateTo && isValidIsoDateString(dateTo.trim()) ? dateTo.trim() : '';
+  if (!validFrom && !validTo) return true;
+  const minBound = validFrom && validTo && validFrom > validTo ? validTo : validFrom;
+  const maxBound = validFrom && validTo && validFrom > validTo ? validFrom : validTo;
   const key = getDeletedDateKey(iso);
   if (!key) return false;
-  if (dateFrom && key < dateFrom) return false;
-  if (dateTo && key > dateTo) return false;
+  if (minBound && key < minBound) return false;
+  if (maxBound && key > maxBound) return false;
   return true;
 }
 
@@ -523,7 +555,8 @@ export function filterAndSortTrash(
   options: TrashFilterOptions,
 ): { categories: Category[]; todos: Todo[] } {
   const locale = options.locale || 'tr';
-  const normalizedQuery = options.query.trim().toLocaleLowerCase(locale);
+  const qTr = normalizeTurkish(options.query);
+  const qStd = options.query.toLowerCase().trim();
   const { typeFilter, sortBy, dateFrom, dateTo } = options;
 
   const sortDeleted = <T extends { deletedAt: string | null }>(
@@ -552,8 +585,8 @@ export function filterAndSortTrash(
       : sortDeleted(
           trashedCategories.filter((cat) => {
             if (!matchesDeletedDateRange(cat.deletedAt, dateFrom, dateTo)) return false;
-            if (!normalizedQuery) return true;
-            return cat.name.toLocaleLowerCase(locale).includes(normalizedQuery);
+            if (!qTr) return true;
+            return matchesMultilingualSearch(cat.name, qTr, qStd);
           }),
           (cat) => cat.name,
         );
@@ -564,10 +597,12 @@ export function filterAndSortTrash(
       : sortDeleted(
           trashedTodos.filter((todo) => {
             if (!matchesDeletedDateRange(todo.deletedAt, dateFrom, dateTo)) return false;
-            if (!normalizedQuery) return true;
+            if (!qTr) return true;
             return (
-              todo.title.toLocaleLowerCase(locale).includes(normalizedQuery) ||
-              todo.notes.toLocaleLowerCase(locale).includes(normalizedQuery)
+              matchesMultilingualSearch(todo.title, qTr, qStd) ||
+              matchesMultilingualSearch(todo.notes, qTr, qStd) ||
+              todo.subtasks.some((s) => matchesMultilingualSearch(s.title, qTr, qStd)) ||
+              (todo.tags ?? []).some((tg) => matchesMultilingualSearch(tg, qTr, qStd))
             );
           }),
           (todo) => todo.title,

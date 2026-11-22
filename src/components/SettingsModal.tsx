@@ -78,6 +78,7 @@ interface SettingsModalProps {
   onClearAllCompleted: () => Promise<void>;
   onImportBackup: (payload: unknown) => Promise<void>;
   onApplyRestoredBootstrap?: (restored: BootstrapPayload) => void;
+  onResetAllData?: (resetSettings: boolean) => Promise<void>;
   trashedCategories: Category[];
   trashedTodos: Todo[];
   onRestoreTodo: (id: string) => Promise<void>;
@@ -86,6 +87,14 @@ interface SettingsModalProps {
   onPermanentDeleteCategory: (id: string) => Promise<void>;
   onEmptyTrash: () => Promise<void>;
   onOpenWelcomeGuide?: () => void;
+  webhookEnabled?: boolean;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  onSaveWebhook?: (patch: {
+    webhookEnabled: boolean;
+    webhookUrl: string;
+    webhookSecret: string;
+  }) => Promise<void>;
 }
 
 function formatTimestampForLocale(iso: string | null, intlLocale: string): string {
@@ -143,6 +152,7 @@ export function SettingsModal({
   onClearAllCompleted,
   onImportBackup,
   onApplyRestoredBootstrap,
+  onResetAllData,
   trashedCategories,
   trashedTodos,
   onRestoreTodo,
@@ -151,6 +161,10 @@ export function SettingsModal({
   onPermanentDeleteCategory,
   onEmptyTrash,
   onOpenWelcomeGuide,
+  webhookEnabled = false,
+  webhookUrl = '',
+  webhookSecret = '',
+  onSaveWebhook,
 }: SettingsModalProps) {
   const { t, meta, legalDocs } = useI18n();
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
@@ -586,6 +600,7 @@ export function SettingsModal({
                 onClearAllCompleted={onClearAllCompleted}
                 onImportBackup={onImportBackup}
                 onApplyRestoredBootstrap={onApplyRestoredBootstrap}
+                onResetAllData={onResetAllData}
                 formatTimestamp={formatTimestamp}
               />
             ) : activeTab === 'trash' ? (
@@ -600,7 +615,18 @@ export function SettingsModal({
                 formatTimestamp={formatTimestamp}
               />
             ) : activeTab === 'docs' ? (
-              <DocsSettingsSection shortcuts={shortcuts} />
+              <DocsSettingsSection
+                shortcuts={shortcuts}
+                webhookEnabled={webhookEnabled}
+                webhookUrl={webhookUrl}
+                webhookSecret={webhookSecret}
+                onSaveWebhook={
+                  onSaveWebhook ??
+                  (async (patch) => {
+                    await api.updateSettings(patch);
+                  })
+                }
+              />
             ) : (
               <AboutLegalSettingsTab
                 themeMode={themeMode}

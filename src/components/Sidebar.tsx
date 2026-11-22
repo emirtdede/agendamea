@@ -438,12 +438,13 @@ export const Sidebar = React.memo(function Sidebar({
         {/* Categories Section */}
         <section aria-label={t.categories}>
           {!compact && (
-            <div className="mb-2 flex items-center justify-between px-3">
+            <div className="mb-2 flex items-center justify-between pl-3 pr-1">
               <h2 className="font-display text-xs font-semibold tracking-wide text-[var(--text-muted)]">
                 {t.categories}
               </h2>
               <button
                 type="button"
+                data-testid="sidebar-add-category-btn"
                 onClick={() => {
                   if (isAddingCategory) {
                     closeAddCategoryForm();
@@ -691,7 +692,7 @@ export const Sidebar = React.memo(function Sidebar({
                     <span className="truncate whitespace-nowrap">{cat.name}</span>
                   </button>
 
-                  <div className="flex items-center gap-0.5 pr-1.5">
+                  <div className="flex items-center gap-0.5 pr-2">
                     <button
                       type="button"
                       onClick={() => void onTogglePinCategory(cat.id, !cat.pinned)}
@@ -811,16 +812,16 @@ export const Sidebar = React.memo(function Sidebar({
                 </button>
               </div>
             </form>
-          ) : (
+          ) : categories.length === 0 ? (
             <button
               type="button"
               onClick={() => openAddCategoryForm(false)}
-              className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+              className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-[13px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
             >
               <FolderPlus className="h-4 w-4 shrink-0" />
               <span className="whitespace-nowrap">{t.newCategory}</span>
             </button>
-          )}
+          ) : null}
         </section>
       </div>
 

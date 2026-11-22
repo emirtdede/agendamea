@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, ChevronDown, Monitor, Moon, Palette, Sun } from 'lucide-react';
+import { Check, ChevronDown, Copy, Monitor, Moon, Palette, Sun } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { AppIconId, ThemeId, ThemeMode } from '../../types';
 import {
@@ -36,7 +36,18 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
   onChangeCustomIconColor,
 }: AppearanceSettingsTabProps) {
   const { t, getThemeDisplayName } = useI18n();
-  const [isAppIconOpen, setIsAppIconOpen] = useState(false);
+  const [isAppIconOpen, setIsAppIconOpen] = useState(true);
+  const [copiedHexTarget, setCopiedHexTarget] = useState<'theme' | 'icon' | null>(null);
+
+  const effectiveMode = resolveEffectiveThemeMode(themeMode);
+  const activeThemeItem = COLOR_THEMES.find((item) => item.id === themeId);
+  const activeThemeHex = (
+    themeId === 'custom'
+      ? customThemeColor
+      : effectiveMode === 'dark'
+        ? activeThemeItem?.swatchDark ?? '#fafafa'
+        : activeThemeItem?.swatch ?? '#18181b'
+  ).toUpperCase();
 
   const activeIconColors = resolveAppIconColors(
     appIconId,
@@ -45,6 +56,19 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
     customThemeColor,
     customIconColor,
   );
+  const activeIconHex = activeIconColors.bg.toUpperCase();
+
+  const handleCopyHex = async (target: 'theme' | 'icon', hex: string) => {
+    try {
+      await navigator.clipboard.writeText(hex);
+      setCopiedHexTarget(target);
+      window.setTimeout(() => {
+        setCopiedHexTarget((prev) => (prev === target ? null : prev));
+      }, 1800);
+    } catch {
+      // Ignore clipboard restrictions
+    }
+  };
   const activeIconLabel =
     appIconId === 'match-theme'
       ? t.appIconMatchTheme
@@ -120,9 +144,27 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
           <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
             {t.colorThemeTitle}
           </h3>
-          <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-            {COLOR_THEMES.length + 1} {t.themesCountUnit}
-          </span>
+          <button
+            type="button"
+            data-testid="copy-theme-hex-btn"
+            onClick={() => void handleCopyHex('theme', activeThemeHex)}
+            title={`${t.docsCopyButton}: ${activeThemeHex}`}
+            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono-tabular text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+          >
+            {copiedHexTarget === 'theme' ? (
+              <>
+                <Check className="h-3 w-3 text-emerald-500" />
+                <span className="text-emerald-500 font-sans text-[11px] font-medium">
+                  {t.docsCopiedLabel}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>{activeThemeHex}</span>
+                <Copy className="h-3 w-3 opacity-65" />
+              </>
+            )}
+          </button>
         </div>
 
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5">
@@ -217,15 +259,33 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
         </div>
       </section>
 
-      {/* Unified Collapsible Dynamic System-Wide App Icon Selector */}
+      {/* Unified Dynamic System-Wide App Icon Selector (Expanded by Default) */}
       <section aria-label={t.appIconSectionTitle} className="space-y-2.5">
         <div className="flex items-center justify-between">
           <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
             {t.appIconSectionTitle}
           </h3>
-          <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-            {activeIconColors.bg.toUpperCase()}
-          </span>
+          <button
+            type="button"
+            data-testid="copy-icon-hex-btn"
+            onClick={() => void handleCopyHex('icon', activeIconHex)}
+            title={`${t.docsCopyButton}: ${activeIconHex}`}
+            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono-tabular text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+          >
+            {copiedHexTarget === 'icon' ? (
+              <>
+                <Check className="h-3 w-3 text-emerald-500" />
+                <span className="text-emerald-500 font-sans text-[11px] font-medium">
+                  {t.docsCopiedLabel}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>{activeIconHex}</span>
+                <Copy className="h-3 w-3 opacity-65" />
+              </>
+            )}
+          </button>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
@@ -250,8 +310,7 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
                 <p className="text-xs text-[var(--text-muted)] truncate">{t.appIconSectionDesc}</p>
               </div>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shrink-0">
-              <span className="font-mono-tabular text-[11px]">{COLOR_THEMES.length + 1}</span>
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] shrink-0">
               <ChevronDown
                 className={`h-3.5 w-3.5 transition-transform ${isAppIconOpen ? 'rotate-180' : ''}`}
               />

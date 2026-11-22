@@ -6,7 +6,7 @@
 
 <br /><br />
 
-# <img src="assets/icons/spark.svg" width="20" height="20" align="absmiddle" alt="" /> Agendamea - Offline-First Minimalist Task & Daily Planner
+# <img src="assets/icons/spark.svg" width="20" height="20" align="absmiddle" alt="" /> Agendamea - Local-First Windows Task Manager, CLI &amp; MCP Automation
 
 </div>
 
@@ -31,9 +31,12 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-7.0-000000?style=flat-square&logo=typescript&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-000000?style=flat-square&logo=sqlite&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-000000?style=flat-square&logo=tailwindcss&logoColor=white)
-![OneDrive](https://img.shields.io/badge/OneDrive-Serverless_Sync-000000?style=flat-square)
+![MCP](https://img.shields.io/badge/MCP-20_Tools_Built--in-000000?style=flat-square)
+![CLI](https://img.shields.io/badge/CLI-ag_Headless-000000?style=flat-square)
+![Webhooks](https://img.shields.io/badge/Webhooks-Bi--Directional-000000?style=flat-square)
+![Cloud Sync](https://img.shields.io/badge/Cloud_Sync-Multi--Provider-000000?style=flat-square)
 ![Languages](https://img.shields.io/badge/Languages-73_Supported-000000?style=flat-square)
-![Themes](https://img.shields.io/badge/Themes-28_Palettes-000000?style=flat-square)
+![Themes](https://img.shields.io/badge/Themes-28%2B_Custom_HEX-000000?style=flat-square)
 ![Windows](https://img.shields.io/badge/Windows-10%2F11_x64-000000?style=flat-square&logo=windows&logoColor=white)
 ![Security](https://img.shields.io/badge/Security-Hardened-000000?style=flat-square&logo=shield&logoColor=white)
 
@@ -47,10 +50,10 @@
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/logos/agendamea-mark-dark.svg" />
-    <img src="public/logos/agendamea-mark-light.svg" alt="Agendamea Logo" width="96" />
+    <img src="public/logos/agendamea-mark-light.svg" alt="Agendamea Logo" width="108" height="108" />
   </picture>
-  <h3>Agendamea - Fast, Offline-First Windows Task &amp; Daily Planner</h3>
-  <p><em>4-Way Views (List, Kanban, Calendar, Eisenhower Matrix), Self-Healing SQLite WAL, Zero-Cost OneDrive Sync, 73 Languages &amp; 28 Theme Palettes</em></p>
+  <h3>Agendamea - Fast, Local-First Windows Task Manager &amp; Headless Automation Suite</h3>
+  <p><em>4-Way Planning Views, Built-in 20-Tool MCP Server, Short Terminal CLI (ag), Headless Webhook Daemon, Zero-Cost Multi-Cloud Sync, Custom HEX Themes, Dynamic App Icons &amp; 73 Languages</em></p>
   <p><strong>Developed &amp; Published by <a href="https://vellium.dev">Vellium</a></strong></p>
 </div>
 
@@ -58,11 +61,11 @@
 
 ## <img src="assets/icons/overview.svg" width="20" height="20" align="absmiddle" alt="" /> Project Overview
 
-**Agendamea (`v1.0.0`)** is a local-first, offline-first task manager and daily planner built for **Windows Desktop (Electron 45)** and **Progressive Web App (PWA)** environments using **React 19**, **TypeScript 7**, **Express 4**, and **SQLite (`better-sqlite3`)**.
+**Agendamea (`v1.0.0`)** is a local-first, offline-first daily task manager and automation suite built for **Windows Desktop (Electron 45)** and **PWA** environments with **React 19**, **TypeScript 7**, **Express 4**, and **WAL-mode SQLite (`better-sqlite3`)**. Every change - tasks, optional start/due date ranges, due times, `#tags`, subtasks, auto-saving notes, categories, drag-and-drop order, and settings - saves instantaneously to your device with zero accounts, subscriptions, or external telemetry.
 
-Designed around zero-friction daily planning, Agendamea persists every change - task creation, date ranges, due times, `#tags`, subtasks, auto-saving notes, drag-and-drop ordering, categories, and theme settings - immediately to a local **WAL-mode SQLite** database. No cloud accounts, subscriptions, internet connection, or external telemetry are required.
+It goes far beyond a standalone checklist. For developers, power users, and AI coding agents, Agendamea ships with **100% headless control** even when the desktop window has never been opened: a **short quote-free terminal CLI** (`ag`, `agenda`, `agendamea`), a **built-in 20-tool Model Context Protocol (MCP) server** (`ag mcp`), a **headless local API & webhook daemon** (`ag serve`), **bi-directional HMAC-SHA256 webhooks** (Discord, Slack, n8n, Zapier, Make, custom servers) with multi-URL retry and persistent delivery logs, and **live SSE UI synchronization**.
 
-For cross-device continuity and OS-reinstall safety without vendor lock-in, Agendamea includes **Zero-Cost Serverless OneDrive Cloud Sync**: it writes atomic JSON snapshots and maintains **15-day rolling daily backups** inside your own local Microsoft OneDrive folder, detects existing backups automatically on a fresh installation, and falls back seamlessly to the previous daily snapshot if a primary sync file is ever corrupted.
+For effortless cross-device backup without vendor lock-in or server costs, Agendamea provides **Zero-Cost Multi-Cloud Folder Sync** across **OneDrive**, **Google Drive**, **iCloud Drive**, **Dropbox**, or any custom folder with atomic temp-file swaps, **15-day rolling daily backups**, automatic corrupt-primary fallback, and reinstall recovery.
 
 > **Documentation:** architecture, keyboard shortcuts, 73-language localization, release process, and Microsoft Store packaging checklists are indexed in [`docs/README.md`](docs/README.md).
 
@@ -71,35 +74,38 @@ For cross-device continuity and OS-reinstall safety without vendor lock-in, Agen
 ## <img src="assets/icons/features.svg" width="20" height="20" align="absmiddle" alt="" /> Key Features
 
 ### <img src="assets/icons/bolt.svg" width="20" height="20" align="absmiddle" alt="" /> 4-Way Workspace Views & Daily Planning
-- **Flat List View**: Smart views (`All`, `Today`, `Important`, `Completed`), custom categories with 8 curated colors + custom HEX picker, pinning, instant search, and drag-and-drop or `Alt+Up/Down` keyboard ordering.
+- **Flat List View**: Smart views (`All`, `Today`, `Important`, `Completed`), custom categories with 8 curated colors + custom spectrum HEX picker, pinning, instant search across titles/notes/subtasks/`#tags` with automatic **Date Range filtering**, and drag-and-drop or `Alt+Up/Down` keyboard ordering.
 - **Kanban Board**: Group tasks dynamically by **Priority** (`High`, `Normal`, `Low`) or **Status** (`Active`, `Completed`) with drag-and-drop transitions and optional drag lock protection.
-- **Calendar Planner**: Monthly calendar grid with chronological `HH:mm` time sorting per day and a collapsible **Undated Tasks** drawer supporting drag-to-schedule directly onto dates.
+- **Calendar Planner**: Monthly calendar grid with chronological `HH:mm` time sorting per day, multi-day date spans, and a collapsible **Undated Tasks** drawer supporting drag-to-schedule directly onto dates.
 - **Eisenhower Matrix**: Automatic 4-quadrant classification (`Q1 Urgent & Important`, `Q2 Important`, `Q3 Urgent`, `Q4 Later`) with drag-and-drop reprioritization across quadrants.
-- **Rich Task Details**: Optional start/due date ranges (`YYYY-MM-DD`), optional due times (`HH:mm`, auto-assigning today when date is empty), post-creation `#tag` management (batch entry, deduplication, 12-tag limit, instant chip filtering), ordered inline subtasks, and auto-saving notes with `keepalive` unmount flush.
+- **Rich Task Details**: Optional start/due date ranges (`YYYY-MM-DD`), optional due times (`HH:mm`), post-creation `#tag` management (batch entry, deduplication, 12-tag limit, instant chip filtering), inline subtasks, and auto-saving notes with `keepalive` unmount flush.
 
-### <img src="assets/icons/database.svg" width="20" height="20" align="absmiddle" alt="" /> Self-Healing SQLite Engine & Safe Recovery
+### <img src="assets/icons/terminal.svg" width="20" height="20" align="absmiddle" alt="" /> Built-in 20-Tool MCP Server, Short Terminal CLI (`ag`) & Headless Daemon
+- **20-Tool Built-in MCP Server (`mcp/server.cjs` / `ag mcp`)**: JSON-RPC 2.0 over stdio for **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf**, and **VS Code** - works with zero external Node.js installation via bundled `Agendamea.exe` (`ELECTRON_RUN_AS_NODE=1`) in both **Live API** and **Cold-Start Offline SQLite** modes.
+- **Short Quote-Free Terminal CLI (`ag` / `agenda` / `agendamea`)**: 1-click PATH installation (`Terminale Kur` in Settings or `ag install` headlessly), numbered 1-2-3 lists, natural token parsing (`@today`, `@tomorrow`, `@YYYY-MM-DD..YYYY-MM-DD`, `14:30`, `!`, `*`, `^`, `#tag`, `/Category`, `--note`, `--sub`), batch operations (`ag ok 1 2 3`, `ag rm 1 2`), stdin piping (`ag import -`, `ag +`), terminal views (`ag cal`, `ag kanban`, `ag matris`), and raw `-j` / `--json` output.
+- **Headless Background Daemon (`ag serve start|stop|status`)**: Run the local `127.0.0.1` REST API, SSE stream, and incoming webhook listener in the background without opening the Electron GUI window.
+- **Bi-Directional Webhooks (Multi-URL, Retry, HMAC-SHA256 & Logs)**: Automatic Discord (`content`), Slack (`text`), and generic JSON notifications across all task/subtask/category/trash/reset events with 2-attempt retry, event filtering (`webhookEvents`), persistent SQLite `webhook_logs` (`ag hook logs`), and a full-featured incoming trigger (`POST /api/webhook/incoming`) supporting both `X-Agendamea-Secret` and `X-Agendamea-Signature` HMAC verification.
+
+### <img src="assets/icons/database.svg" width="20" height="20" align="absmiddle" alt="" /> Self-Healing SQLite Engine, Advanced Trash & Clean Start
 - **WAL-Mode SQLite (`better-sqlite3`)**: Runs with `journal_mode = WAL`, `synchronous = NORMAL`, `foreign_keys = ON`, `busy_timeout = 5000`, and versioned migrations (`PRAGMA user_version = 3`).
-- **Corruption Self-Healing**: If a local database file is damaged by power loss, Agendamea automatically preserves the broken file as `.corrupt-<timestamp>.bak` and initializes a clean database rather than crashing on startup.
-- **Soft-Delete Trash & 12-Second Undo**: Deleted tasks and categories move to a recoverable Trash bin paired with a **12-second Undo toast** that automatically pauses its countdown on hover or focus.
-- **Atomic JSON Backup & Restore**: One-click export (`/api/export`) and validated atomic import (`/api/import`, strict 5 MB cap, preview confirmation before overwrite).
+- **Corruption Self-Healing**: If a local database file is damaged by power loss, Agendamea preserves the broken file as `.corrupt-<timestamp>.bak` and initializes a clean database automatically.
+- **Searchable Trash Bin & 12-Second Undo**: Soft-deleted tasks and categories support instant search, type filters (`All`, `Tasks`, `Categories`), sorting (`Newest`, `Oldest`, `A-Z`, `Z-A`), and deletion date-range filtering, paired with a **12-second hover-pausing Undo toast**.
+- **Atomic Backup, Restore & Clean Start Reset**: One-click JSON export (`/api/export`), 5 MB validated atomic import (`/api/import`), and a 2-step **Reset All Data (Clean Start)** action with optional settings reset (`/api/reset`).
 
-### <img src="assets/icons/plug.svg" width="20" height="20" align="absmiddle" alt="" /> Zero-Cost Serverless OneDrive Cloud Sync
-- **Automatic Local OneDrive Detection**: Discovers `OneDriveCommercial`, `OneDriveConsumer`, `OneDrive`, or user-selected folders and stores sync files under `Agendamea/agendamea-sync.json`.
-- **Crash-Safe Atomic Writes & 15-Day Rolling History**: Writes via temporary `.tmp` swap and keeps daily history under `Agendamea/backups/agendamea-YYYY-MM-DD.json`.
-- **Corrupt-Primary Fallback**: If `agendamea-sync.json` is truncated or damaged during sync, restoring automatically falls back to the latest valid daily snapshot.
-- **First-Launch Reinstall Recovery Banner**: On a freshly installed or formatted PC with an empty local database, Agendamea detects existing OneDrive backups and prompts to **Restore Backup** or **Start Fresh**, plus a one-click **Open Folder** button in Settings.
+### <img src="assets/icons/plug.svg" width="20" height="20" align="absmiddle" alt="" /> Zero-Cost Multi-Cloud Folder Sync
+- **Automatic Multi-Provider Detection**: Auto-detects **OneDrive**, **Google Drive** (including virtual drive letters `D:`-`Z:` and localized names), **iCloud Drive**, and **Dropbox** (`info.json`), or connects to any custom local/network folder.
+- **Crash-Safe Atomic Writes & 15-Day Rolling History**: Uses atomic `.tmp` rename swaps, preserves `agendamea-onedrive-previous.json`, keeps **15 rolling daily snapshots**, and automatically falls back if a primary sync file is interrupted.
+- **Reinstall Recovery Banner & Headless Cloud Pull**: Detects existing cloud backups on fresh installs to prompt **Restore Backup** vs **Start Fresh**, plus headless `ag sync auto|set|pull|status` support.
 
-### <img src="assets/icons/palette.svg" width="20" height="20" align="absmiddle" alt="" /> 28+ Theme Palettes, Custom HEX Themes, Dynamic App Icons & 73 Languages
-- **14 Dual-Mode Themes + Custom HEX Theme Generator**: `Obsidian`, `Slate`, `Navy`, `Blue`, `Cyan`, `Indigo`, `Purple`, `Pink`, `Red`, `Orange`, `Yellow`, `Emerald`, `Grass`, `Lime`, plus an unlimited **Custom HEX (`#RRGGBB`)** theme creator with automatic WCAG AA light/dark contrast tokens and anti-FOUC `localStorage` caching.
-- **Dynamic System-Wide App Icons**: Match the active theme automatically or pick Monochrome Dark/Light, any theme color, or a **Custom HEX icon** - synchronized live across the in-app BrandMark, main window, Windows taskbar, system tray, and Desktop / Start Menu shortcuts (`.lnk`).
-- **Accessibility & Close-to-Tray Ergonomics**: Built-in **Zoom Level (`80% - 150%`, `Ctrl +/-/0`)**, **High Contrast Mode**, **Reduced Motion**, persistent **System Tray**, and a close confirmation dialog (**Minimize to Tray** vs **Quit Completely**, configurable anytime in Settings).
-- **73 Fully Localized Languages (Zero Leakage)**: Upfront **73-language selector in the Windows Setup `.exe`** (pre-selecting Windows display language with English fallback), OS locale auto-detection on first launch, and full **RTL** mirroring for Arabic (`ar`), Persian (`fa`), Hebrew (`he`), and Urdu (`ur`).
-- **5 Built-In Localized Legal Documents**: Privacy Policy, Terms of Service, KVKK / GDPR Notice, Open Source Licenses, and Accessibility Statement accessible offline inside Settings.
+### <img src="assets/icons/palette.svg" width="20" height="20" align="absmiddle" alt="" /> 28+ Theme Palettes, Custom HEX, Dynamic App Icons & 73 Languages
+- **14 Dual-Mode Themes + Custom HEX Theme Generator**: `Obsidian`, `Slate`, `Navy`, `Blue`, `Cyan`, `Indigo`, `Purple`, `Pink`, `Red`, `Orange`, `Yellow`, `Emerald`, `Grass`, `Lime`, plus unlimited **Custom HEX (`#RRGGBB`)** themes with one-click copyable HEX badges, WCAG AA contrast tokens, and anti-FOUC caching.
+- **Dynamic System-Wide App Icons**: Match theme automatically or choose Monochrome Dark/Light, any palette color, or a **Custom HEX icon** - synchronized live across the BrandMark, main window, Windows taskbar, system tray, Jump List, and Desktop / Start Menu shortcuts (`.lnk`).
+- **Full-Page Tabbed Settings & 7-Step Welcome Guide**: Split-navigation Settings covering *Appearance & Theme*, *Accessibility* (`80%-150%` zoom, High Contrast, Reduced Motion), *General & Language* (Windows startup, global `Ctrl+Alt+N` quick add, close-to-tray behavior), *Data & Backup*, *Trash*, *Documentation* (CLI/MCP/Webhooks/Shortcuts), and *Updates & Legal*.
+- **73 Fully Localized Languages (Zero Leakage)**: Upfront multi-language Windows Setup `.exe` selector, OS locale auto-detection, full **RTL** mirroring (`ar`, `fa`, `he`, `ur`), and 5 offline localized legal documents.
 
-### <img src="assets/icons/shield.svg" width="20" height="20" align="absmiddle" alt="" /> Hardened Localhost Security & Native Windows Integration
-- **Loopback Isolation & CSRF Defense**: Server binds exclusively to `127.0.0.1` (`47821` with automatic Hyper-V/WinNAT `EACCES` port fallback), enforces Host DNS-rebinding allowlists, validates `Sec-Fetch-Site` and `Origin` headers on state-changing requests, and ships strict security headers (`CSP`, `nosniff`, `SAMEORIGIN`, `no-referrer`).
-- **Gzip-Cached Static Assets**: Production `dist/` bundles are served with built-in `node:zlib` memory-cached gzip compression for instant startup and low memory overhead.
-- **Native Electron 45 Shell**: Single-instance lock (`requestSingleInstanceLock`), frameless custom window controls, context-isolated preload bridge (`contextIsolation: true`, `nodeIntegration: false`), external URL allowlist (`vellium.dev`, `github.com`), and channel-aware update handling (`isWindowsStore` compliant).
+### <img src="assets/icons/shield.svg" width="20" height="20" align="absmiddle" alt="" /> Hardened Localhost Security & Zero-Cost Delta Auto-Updates
+- **Loopback Isolation & CSRF Defense**: Binds exclusively to `127.0.0.1` (`38721` / `47821` with Hyper-V/WinNAT `EACCES` fallback), enforces Host DNS-rebinding checks, validates `Sec-Fetch-Site` and `Origin` on mutations, and applies strict security headers (`CSP`, `nosniff`, `SAMEORIGIN`, `no-referrer`).
+- **Native Electron 45 Shell & Delta Updater**: Single-instance lock with portable handoff, `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, external URL allowlist (`vellium.dev`, `github.com`), SHA-512 verified `electron-updater` silent/delta updates on GitHub builds, and strict Microsoft Store Policy 10.2.7 isolation (`!process.windowsStore`).
 
 ---
 
@@ -107,30 +113,30 @@ For cross-device continuity and OS-reinstall safety without vendor lock-in, Agen
 
 <div align="center">
 
-![Electron](https://img.shields.io/badge/Electron_45-000000?style=flat-square&logo=electron&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron_45.4-000000?style=flat-square&logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React_19-000000?style=flat-square&logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript_7-000000?style=flat-square&logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite_8-000000?style=flat-square&logo=vite&logoColor=white)
-![SQLite](https://img.shields.io/badge/better--sqlite3-000000?style=flat-square&logo=sqlite&logoColor=white)
+![SQLite](https://img.shields.io/badge/better--sqlite3_13-000000?style=flat-square&logo=sqlite&logoColor=white)
 ![Express](https://img.shields.io/badge/Express_4-000000?style=flat-square&logo=express&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_v4-000000?style=flat-square&logo=tailwindcss&logoColor=white)
 
 </div>
 
 ### Desktop & Local Backend
-- **Electron 45.4 & electron-builder 26.18**: Frameless Windows desktop shell, single-instance lock, NSIS installer, Portable build, and Microsoft Store `.appx`/MSIX packaging
-- **Express 4.21 & Node.js 22+**: Loopback REST API (`127.0.0.1:47821`) with gzip-cached SPA delivery, CSRF/Origin guards, and OneDrive folder sync endpoints
-- **better-sqlite3 13.2**: High-throughput synchronous SQLite engine with WAL journaling, `user_version` migrations, and automatic corruption recovery
+- **Electron 45.4 & electron-builder 26.18** - Frameless Windows desktop shell, system tray, Jump List, global `Ctrl+Alt+N` hotkey, dynamic `.ico` generator, NSIS installer, Portable build, and Microsoft Store `.appx`/MSIX packaging
+- **Express 4.21 & Node.js 22+** - Loopback REST API (`127.0.0.1`), SSE live change stream (`/api/events`), bi-directional HMAC webhooks, multi-cloud folder sync, and in-memory gzip static delivery
+- **better-sqlite3 13.2** - High-throughput synchronous SQLite WAL engine with `user_version` migrations, `webhook_logs`, and `.corrupt-*.bak` self-healing
 
-### Frontend & UI
-- **React 19 & TypeScript 7**: Modular component architecture (`Sidebar`, `QuickAddBar`, `TodoItem`, `TaskBoardViews`, `TodoDetailPanel`, `SettingsModal`, `ErrorBoundary`)
-- **Tailwind CSS v4 & `themes.ts`**: 14 dual-mode CSS token palettes (28 total) with anti-FOUC initialization
-- **Vite 8 & `vite-plugin-pwa`**: Fast client bundling and offline Workbox service worker
+### Headless Automation, CLI & MCP
+- **`shared/localStore.cjs`** - Unified Live-API + Cold-Start Offline SQLite engine with automatic schema init, cloud auto-detection, OS preference bridge, and headless daemon management
+- **`cli/agendamea.cjs` (`ag` / `agenda` / `agendamea`)** - Zero-dependency natural-language terminal CLI with Windows interactive stdout wrapper (`run-cli.ps1`)
+- **`mcp/server.cjs` (`ag mcp`)** - Built-in JSON-RPC 2.0 stdio MCP server exposing 20 complete headless tools
 
-### Build, Test & Release
-- **Node.js `node:test` via `tsx`**: Unit tests covering filtering, sorting, tags, date ranges, 73-language zero-leakage validation, and repo-wide typography/hygiene checks
-- **esbuild 0.28 & sharp 0.35**: Standalone server bundler (`dist-server/server.mjs`) and automated multi-platform icon/NSIS bitmap generation
-- **GitHub Actions**: Automated CI (`ci.yml`) and tagged Windows release pipeline (`release.yml`) with SHA-256 checksums
+### Frontend, Build & Release
+- **React 19, TypeScript 7, Tailwind CSS v4 & Vite 8** - Modular component architecture with Workbox PWA support and 73-language compact locale builder
+- **Node.js `node:test` via `tsx`** - 31 comprehensive unit, security, i18n zero-leakage, webhook, CLI, MCP, and performance test suites
+- **GitHub Actions & `electron-updater`** - Automated CI (`ci.yml`) and tagged Windows release pipeline (`release.yml`) with `latest.yml`, `.blockmap`, `SHA256SUMS.txt`, and `winget` manifests
 
 ---
 
@@ -139,45 +145,42 @@ For cross-device continuity and OS-reinstall safety without vendor lock-in, Agen
 ```tree
 Agendamea/
 ├── .github/workflows/
-│   ├── ci.yml                       # Automated tests, TypeScript lint & build checks
-│   └── release.yml                  # Tagged Windows x64 Setup, Portable, Store .appx & SHA256SUMS
+│   ├── ci.yml                       # Automated tests, TypeScript lint & production build gate
+│   └── release.yml                  # Tagged Windows x64 Setup, Portable, Store .appx, latest.yml & SHA256SUMS
 ├── assets/
 │   ├── vellium-banner.svg           # Monochrome Vellium header banner
 │   └── icons/                       # Monochrome 20x20 documentation SVG icons
-├── docs/                            # Indexed architecture, i18n, release & Store documentation
-│   ├── README.md                    # Documentation hub
-│   ├── architecture/                # System architecture, API, security & keyboard shortcuts
-│   ├── i18n/                        # 73-language localization & RTL specification
-│   ├── release/                     # Release pipeline, versioning & update channel docs
-│   └── store/                       # Microsoft Store packaging & submission checklist
+├── cli/
+│   └── agendamea.cjs                # Short quote-free CLI (ag / agenda / agendamea) + daemon & views
+├── mcp/
+│   └── server.cjs                   # Built-in JSON-RPC 2.0 stdio MCP server (20 headless tools)
+├── shared/
+│   ├── localStore.cjs               # Unified Live API + Cold-Start Offline WAL SQLite engine
+│   ├── cliInstaller.cjs             # Shared Windows PATH shim installer (ag.cmd + run-cli.ps1)
+│   └── releaseUtils.cjs             # Shared SemVer comparator & GitHub release parser
+├── docs/                            # Indexed architecture, i18n, release & Microsoft Store documentation
 ├── electron/
-│   ├── main.cjs                     # Electron main process, single-instance lock, IPC & updater
-│   └── preload.cjs                  # Context-isolated renderer IPC bridge
-├── electron-resources/              # NSIS installer icons, bitmaps, installer.nsh & APPX tiles
-├── public/                          # PWA manifest icons, Windows tiles & Agendamea SVG/PNG logos
-├── scripts/
-│   ├── build-server.mjs             # esbuild production server bundler
-│   ├── build-windows.bat            # Windows local build script
-│   ├── create-windows-shortcut.ps1  # Windows shortcut helper
-│   ├── generate-icons.mjs           # Sharp multi-platform icon generator
-│   ├── generate-installer-assets.mjs# NSIS sidebar & header BMP generator
-│   └── start-app.bat                # Local Windows launcher
+│   ├── main.cjs                     # Electron main process, tray, Jump List, IPC, CLI shims & delta updater
+│   ├── preload.cjs                  # Context-isolated renderer IPC bridge
+│   └── iconGenerator.cjs            # Pure-Node multi-resolution Windows .ico & .lnk updater
+├── electron-resources/              # Multi-language NSIS installer.nsh, BMPs, icons & APPX tiles
+├── public/                          # PWA manifest icons, Windows tiles & Agendamea SVG/PNG marks
+├── scripts/                         # esbuild server bundler, icon & NSIS bitmap generators
+├── winget/manifests/                # WinGet 1.6.0 manifests (Vellium.Agendamea 1.0.0)
 ├── src/
 │   ├── api/client.ts                # Typed REST API client
-│   ├── components/                  # UI views, Kanban/Calendar/Matrix boards, Detail & Settings
-│   ├── db/database.ts               # TodoDatabase (SQLite WAL, migrations, CRUD, backup/restore)
+│   ├── components/                  # Workspace views, Detail panel, WelcomeModal, Settings tabs & Docs
+│   ├── db/database.ts               # TodoDatabase (SQLite WAL, migrations, CRUD, reset, webhook_logs)
 │   ├── hooks/                       # useOnlineStatus, useToast, useTodayDate, useDelayedFocus
-│   ├── i18n/                        # 73-language catalog, compact builder, RTL & legal documents
-│   ├── utils/                       # themes.ts, todoLogic.ts, todoLogic.test.ts, id.ts
-│   ├── App.tsx                      # Root application state, shortcuts & layout
-│   ├── main.tsx                     # React 19 entry point
+│   ├── i18n/                        # 73-language catalog, compact builder, RTL & 5 legal documents
+│   ├── utils/                       # themes.ts, todoLogic.ts, todoLogic.test.ts (31 suites)
+│   ├── App.tsx                      # Root state, SSE external sync listener, shortcuts & layout
 │   └── types.ts                     # Shared domain models
-├── server.ts                        # Express loopback REST API, OneDrive sync & gzip static server
+├── server.ts                        # Express loopback API, SSE stream, bi-directional webhooks & cloud sync
 ├── electron-builder.yml             # Windows NSIS, Portable & Microsoft Store APPX packaging config
-├── vite.config.ts                   # Vite 8 + Tailwind v4 + VitePWA configuration
-├── CHANGELOG.md                     # Version history (v1.0.0)
+├── CHANGELOG.md                     # Version history
 ├── LICENSE                          # MIT License (Vellium Teknoloji Anonim Sirketi)
-└── package.json                     # Scripts, dependencies & v1.0.0 metadata
+└── package.json                     # Scripts, bin (agendamea) & v1.0.0 metadata
 ```
 
 ---
@@ -186,38 +189,51 @@ Agendamea/
 
 ```mermaid
 flowchart TD
-    subgraph UI["Renderer Process (React 19 + Tailwind v4)"]
+    subgraph UI["Sandboxed Renderer (React 19 + Tailwind v4)"]
         VIEWS["List / Kanban / Calendar / Matrix"]
-        STATE["App State + 73-Lang i18n + 28 Themes"]
+        STATE["App State + SSE Live Sync + 73-Lang i18n + 28+ Themes"]
         PRE["preload.cjs (contextBridge)"]
     end
 
     subgraph MAIN["Electron Main Process (electron/main.cjs)"]
-        WIN["Frameless Window + Single-Instance Lock"]
-        IPC["IPC Handlers (Window, Updater, OneDrive Folder)"]
-        UPD["Channel-Aware Updater (Store vs GitHub)"]
+        WIN["Frameless Window + Tray + Jump List + Single-Instance Lock"]
+        IPC["IPC Handlers (Window, Dynamic .ico, CLI Shims, Updater)"]
+        UPD["Channel-Aware Delta Updater (Store vs GitHub)"]
     end
 
-    subgraph API["Loopback Express Server (127.0.0.1:47821)"]
+    subgraph API["Loopback Express Server (127.0.0.1:38721 | GUI or ag serve)"]
         GUARD["Host Allowlist + CSRF/Origin Guard + CSP"]
-        REST["REST /api/* Endpoints + Gzip Static Assets"]
-        SYNC["OneDrive Atomic Sync & 15-Day Snapshot Manager"]
+        REST["REST /api/* + SSE /api/events + Gzip Static Assets"]
+        HOOK["Bi-Directional Webhooks (HMAC-SHA256, Multi-URL, Retry, Logs)"]
+        SYNC["Multi-Cloud Atomic Sync & 15-Day Snapshot Manager"]
+    end
+
+    subgraph HEADLESS["Headless Clients (Live API -> Offline SQLite Fallback)"]
+        CLI["Terminal CLI (ag / agenda / agendamea)"]
+        MCP["Built-in MCP Server (20 Tools · JSON-RPC 2.0 stdio)"]
+        EXT["n8n / Zapier / Discord / Slack / Scripts"]
     end
 
     subgraph STORAGE["Local & User-Owned Storage"]
-        DB[("agendamea.db (SQLite WAL · v3)")]
-        OD["OneDrive/Agendamea/ (agendamea-sync.json + backups/)"]
+        DB[("agendamea.db (SQLite WAL · v3 + webhook_logs)")]
+        CLOUD["OneDrive / Google Drive / iCloud / Dropbox Folder"]
     end
 
     VIEWS --> STATE --> PRE --> IPC
     IPC --> WIN
     IPC --> UPD
-    STATE -->|"REST /api/*"| GUARD --> REST
+    STATE -->|"REST + SSE"| GUARD --> REST
+    CLI --> GUARD
+    MCP --> GUARD
+    CLI -.->|"Offline WAL"| DB
+    MCP -.->|"Offline WAL"| DB
+    EXT -->|"POST /api/webhook/incoming"| HOOK
     REST --> DB
-    REST --> SYNC --> OD
+    REST --> HOOK
+    REST --> SYNC --> CLOUD
 ```
 
-**Security model.** The renderer never receives Node.js privileges (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`). External links are strictly limited to an explicit domain allowlist (`vellium.dev`, `github.com`). The embedded Express API listens strictly on loopback (`127.0.0.1`), blocks DNS rebinding via `Host` validation, enforces `Sec-Fetch-Site` / `Origin` CSRF checks on all mutations, caps import payloads at `5 MB`, and performs all file/database writes atomically without sending any telemetry or user data to third-party servers.
+**Security model.** The renderer never receives Node.js access (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`). External links are restricted to an explicit domain allowlist (`vellium.dev`, `github.com`). The embedded Express API listens exclusively on loopback (`127.0.0.1`), enforces Host DNS-rebinding checks and `Sec-Fetch-Site` / `Origin` CSRF guards, validates incoming webhooks with constant-time `X-Agendamea-Signature` HMAC-SHA256 verification (`crypto.timingSafeEqual`), caps import payloads at `5 MB`, and performs all file/database writes atomically without collecting telemetry.
 
 ---
 
@@ -225,11 +241,70 @@ flowchart TD
 
 | Path / Boundary | Protection | Contents |
 | :--- | :--- | :--- |
-| `%APPDATA%\Agendamea\data\agendamea.db` | SQLite WAL, `foreign_keys = ON`, `.corrupt-*.bak` recovery | `categories`, `todos`, `subtasks`, and `settings` tables (`user_version = 3`) |
-| `<OneDrive>\Agendamea\agendamea-sync.json` | Atomic `.tmp` rename swap, schema validation | Optional serverless cross-device sync snapshot |
-| `<OneDrive>\Agendamea\backups\` | 15-day rolling retention, corrupt-primary fallback | Daily snapshots (`agendamea-YYYY-MM-DD.json`) |
-| Loopback API (`127.0.0.1:47821`) | Host allowlist, CSRF/Origin guard, CSP, 5 MB limit | Local REST CRUD, export/import, and OneDrive sync routes |
-| Renderer <-> Main IPC | `contextIsolation`, `preload.cjs` allowlisted channels | Window controls, update checks, and OneDrive folder explorer |
+| `%APPDATA%\Agendamea\agendamea.db` | SQLite WAL, `foreign_keys = ON`, `.corrupt-*.bak` recovery | `categories`, `todos`, `subtasks`, `settings`, and `webhook_logs` tables (`user_version = 3`) |
+| `%APPDATA%\Agendamea\runtime-port.json` | Loopback port discovery & headless PID metadata | Active local API port for live CLI/MCP routing |
+| `%APPDATA%\Agendamea\dynamic-icons\` | Generated multi-resolution `.ico` & tray `.png` | Active system-wide custom/themed Agendamea icons |
+| `%LOCALAPPDATA%\Agendamea\bin\` | User-scoped PATH shims (no UAC required) | `ag.cmd`, `agenda.cmd`, `agendamea.cmd`, and `run-cli.ps1` |
+| `<CloudFolder>\Agendamea\` | Atomic `.tmp` swap, 15-day rolling backups, corrupt fallback | `agendamea-onedrive-sync.json`, previous & daily snapshots |
+| Loopback API (`127.0.0.1`) | Host allowlist, CSRF/Origin guard, HMAC-SHA256 webhooks, CSP | Local REST CRUD, `/api/events` SSE, `/api/webhook/incoming`, cloud sync |
+
+---
+
+## <img src="assets/icons/terminal.svg" width="20" height="20" align="absmiddle" alt="" /> CLI & Built-in MCP Server Usage
+
+### Terminal & PowerShell CLI (`ag` / `agenda` / `agendamea`)
+
+Install once via **Settings -> Documentation -> Install CLI (`ag`)** or headlessly via `node cli/agendamea.cjs install`:
+
+```powershell
+# List active tasks numbered 1, 2, 3 (works with GUI open OR closed!)
+ag
+
+# Add a task naturally without quotes (date range, time, priority, important, pin, tags, category, subtasks)
+ag + Prepare launch deck @2026-11-22..2026-11-25 14:30 ! * ^ #store /Work --sub "Verify MSIX"
+
+# Inspect full task details, complete multiple tasks in one command, or restore from Trash
+ag show 1
+ag ok 1 2 3
+ag undo
+
+# Terminal planning views (Calendar agenda, Kanban board, Eisenhower Matrix)
+ag cal
+ag kanban
+ag matrix
+
+# Headless local API & incoming webhook daemon (receive n8n/Zapier/curl webhooks without opening GUI)
+ag serve start
+ag hook set https://discord.com/api/webhooks/... my-hmac-secret
+ag hook logs
+
+# Auto-connect cloud folder, export/import backups (supports stdin pipe), or check updates
+ag sync auto
+ag export backup.json
+ag update
+```
+
+### Model Context Protocol (MCP) Server (`ag mcp` - 20 Built-in Tools)
+
+Add Agendamea to **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf**, or **VS Code** (no global Node.js required):
+
+```json
+{
+  "mcpServers": {
+    "agendamea": {
+      "command": "ag",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+<details>
+<summary>View all 20 built-in MCP tools</summary>
+
+`agendamea_status` · `agendamea_list_tasks` · `agendamea_get_task` · `agendamea_add_task` · `agendamea_update_task` · `agendamea_complete_task` · `agendamea_pin_task` · `agendamea_delete_task` · `agendamea_clear_completed` · `agendamea_manage_subtask` · `agendamea_list_categories` · `agendamea_manage_category` · `agendamea_list_trash` · `agendamea_manage_trash` · `agendamea_eisenhower_matrix` · `agendamea_views` · `agendamea_get_settings` · `agendamea_update_settings` · `agendamea_backup_and_sync` · `agendamea_webhook_and_server`
+
+</details>
 
 ---
 
@@ -237,45 +312,43 @@ flowchart TD
 
 ### Installing as an End User (Windows)
 
-1. Download **`Agendamea-Setup-1.0.0-win-x64.exe`** (or portable **`Agendamea-Portable-1.0.0-win-x64.exe`**) from [GitHub Releases](https://github.com/emirtdede/agendamea/releases), or install via the Microsoft Store package.
+1. Download **`Agendamea-Setup-1.0.0-win-x64.exe`** (or portable **`Agendamea-Portable-1.0.0-win-x64.exe`**) from [GitHub Releases](https://github.com/emirtdede/agendamea/releases), or install via the [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ).
 2. Run the setup file. **No administrator (UAC) elevation is required** - it installs per-user (`asInvoker`, `perMachine: false`) into `%LOCALAPPDATA%\Programs\Agendamea`.
-3. Choose your preferred install location in the custom Vellium setup wizard.
-4. Launch **Agendamea** from the Start Menu or Desktop shortcut.
+3. Select your language in the multi-language Vellium setup wizard and choose your install directory.
+4. Launch **Agendamea** from the Start Menu or Desktop shortcut (or run `ag` from any terminal after installing the CLI shim).
 
-**SmartScreen on direct GitHub downloads:** For unsigned direct downloads outside the Microsoft Store, Windows SmartScreen may display "Windows protected your PC" on first run. Select **More info -> Run anyway**. The Microsoft Store package is signed by Microsoft and installs without SmartScreen prompts.
+**SmartScreen on unsigned direct downloads:** For direct GitHub downloads outside the Microsoft Store, Windows SmartScreen may show "Windows protected your PC" on first run. Select **More info -> Run anyway**. The Microsoft Store package is signed by Microsoft and installs without SmartScreen prompts.
 
-**Uninstall:** Windows Settings -> Apps -> Agendamea -> Uninstall. Local user data under `%APPDATA%\Agendamea` is preserved by default (`deleteAppDataOnUninstall: false`) so your tasks remain safe across reinstalls.
+**Uninstall:** Windows Settings -> Apps -> Agendamea -> Uninstall. Local user data under `%APPDATA%\Agendamea` is preserved by default (`deleteAppDataOnUninstall: false`) with an interactive choice in the custom uninstaller.
 
 ### Prerequisites (Building from Source)
 - **Windows 10 (1809+) or Windows 11** (64-bit) for desktop builds (or Linux/macOS for web/PWA development)
-- **Node.js 20+** (Node.js 22 recommended) and **npm**
+- **Node.js 22+** and **npm**
 - **Git**
 
-### Step-by-Step Developer Setup
+### Run from Source
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/emirtdede/agendamea.git
 cd agendamea
-
-# 2. Install dependencies
 npm install
 
-# 3. Run unit tests & TypeScript check
-npm test
-npm run lint
-
-# 4. Start development mode
-npm run dev           # Web + API dev server (http://localhost:3000)
-npm run electron:dev  # Electron desktop mode
+# Run Web + API dev server or Electron desktop app
+npm run dev
+npm run electron:dev
 ```
 
-### Build Windows Packages
+### Tests & Quality Gates
 
 ```bash
-# Production frontend + esbuild server bundle
-npm run build
+npm test          # 31 unit, SQLite, security, 73-language, CLI, MCP & webhook E2E suites
+npm run lint      # Strict TypeScript type-check (tsc --noEmit)
+npm run build     # Production Vite frontend + esbuild server bundle
+```
 
+### Build Windows Installers
+
+```bash
 # Windows x64 NSIS Setup + Portable builds (release/)
 npm run dist:win
 
@@ -290,15 +363,15 @@ npm run dist:win:dir
 
 ## <img src="assets/icons/package.svg" width="20" height="20" align="absmiddle" alt="" /> Distribution Packages
 
-Build outputs are generated inside `release/`:
+Build artifacts are produced under `release/`:
 
-- **NSIS Setup Installer** - `Agendamea-Setup-1.0.0-win-x64.exe`
+- **NSIS Setup Installer** - `Agendamea-Setup-1.0.0-win-x64.exe` (with `.blockmap` & `latest.yml` for silent delta updates)
 - **Portable Executable** - `Agendamea-Portable-1.0.0-win-x64.exe`
 - **Microsoft Store Package** - `Agendamea-Store-1.0.0-win-x64.appx`
 - **Unpacked Build** - `release/win-unpacked/` via `npm run dist:win:dir`
-- **Checksums** - `SHA256SUMS.txt` generated automatically by GitHub Actions on tagged releases
+- **Checksums & WinGet** - `SHA256SUMS.txt` and `winget/manifests/v/Vellium/Agendamea/1.0.0/`
 
-Published installers and release notes are available on the [GitHub Releases](https://github.com/emirtdede/agendamea/releases) page.
+Published builds and release notes are available on the [GitHub Releases](https://github.com/emirtdede/agendamea/releases) page.
 
 ---
 
@@ -309,9 +382,9 @@ Published installers and release notes are available on the [GitHub Releases](ht
 See [`LICENSE`](LICENSE) for the full MIT license text. Distributions delivered through the Microsoft Store are also subject to the Microsoft Store Standard Application License Terms.
 
 - **Publisher:** Vellium Teknoloji Anonim Şirketi ([Company Information](https://vellium.dev/en/legal/company-information))
-- **Official Website & Repository:** [vellium.dev](https://vellium.dev) &bull; [GitHub Repository](https://github.com/emirtdede/agendamea) &bull; [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ)
+- **Official Website & Product Links:** [vellium.dev](https://vellium.dev) &bull; [GitHub Repository](https://github.com/emirtdede/agendamea) &bull; [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ)
 - **Legal Hub:** [Privacy Policy](https://vellium.dev/en/legal/privacy) &bull; [Terms of Service](https://vellium.dev/en/legal/terms) &bull; [Support Policy](https://vellium.dev/en/legal/support) &bull; [Security Disclosure](https://vellium.dev/en/legal/security-disclosure) &bull; [KVKK Notice](https://vellium.dev/en/legal/kvkk-notice)
-- **Official Emails:** General [contact@vellium.dev](mailto:contact@vellium.dev) &bull; Support [support@vellium.dev](mailto:support@vellium.dev) &bull; Privacy [privacy@vellium.dev](mailto:privacy@vellium.dev) &bull; Legal [legal@vellium.dev](mailto:legal@vellium.dev) &bull; Security [security@vellium.dev](mailto:security@vellium.dev)
+- **Official Emails:** General [contact@vellium.dev](mailto:contact@vellium.dev) &bull; Support [support@vellium.dev](mailto:support@vellium.dev) &bull; Privacy [privacy@vellium.dev](mailto:privacy@vellium.dev) &bull; Legal [legal@vellium.dev](mailto:legal@vellium.dev) &bull; Security [security@vellium.dev](mailto:security@vellium.dev) &bull; Billing [billing@vellium.dev](mailto:billing@vellium.dev)
 - **Official Social & Community Channels:** [GitHub @VelliumHQ](https://github.com/VelliumHQ) &bull; [LinkedIn](https://www.linkedin.com/company/vellium/) &bull; [X @VelliumDev](https://x.com/VelliumDev) &bull; [Product Hunt @vellium](https://www.producthunt.com/@vellium) &bull; [Instagram @velliumdev](https://www.instagram.com/velliumdev/) &bull; [Threads @velliumdev](https://www.threads.com/@velliumdev) &bull; [Reddit u/VelliumDev](https://www.reddit.com/user/VelliumDev/) &bull; [Discord](https://discord.gg/ur9KBZBEdj)
 
 ---
@@ -326,10 +399,10 @@ See [`LICENSE`](LICENSE) for the full MIT license text. Distributions delivered 
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="public/logos/agendamea-mark-dark.svg" />
-    <img src="public/logos/agendamea-mark-light.svg" alt="Agendamea Logosu" width="96" />
+    <img src="public/logos/agendamea-mark-light.svg" alt="Agendamea Logosu" width="108" height="108" />
   </picture>
-  <h3>Agendamea - İnternetsiz Çalışan Sade ve Hızlı Windows Görev Yöneticisi</h3>
-  <p><em>4 Farklı Görünüm (Liste, Kanban, Takvim, Eisenhower Matrisi), Kendini Onaran SQLite WAL, Ücretsiz OneDrive Eşitleme, 73 Dil ve 28 Tema Paleti</em></p>
+  <h3>Agendamea - Windows İçin Yerel Öncelikli Görev Yöneticisi, CLI ve MCP Otomasyon Paketi</h3>
+  <p><em>4 Farklı Planlama Görünümü, Yerleşik 20 Araçlı MCP Sunucusu, Kısa Terminal CLI (ag), Arayüzsüz Webhook Servisi, Ücretsiz Çoklu Bulut Eşitleme, Özel HEX Temalar, Dinamik İkonlar ve 73 Dil</em></p>
   <p><strong>Geliştirici ve Yayıncı: <a href="https://vellium.dev">Vellium</a></strong></p>
 </div>
 
@@ -337,11 +410,11 @@ See [`LICENSE`](LICENSE) for the full MIT license text. Distributions delivered 
 
 ## <img src="assets/icons/overview.svg" width="20" height="20" align="absmiddle" alt="" /> Proje Genel Bakışı
 
-**Agendamea (`v1.0.0`)**, **React 19**, **TypeScript 7**, **Express 4** ve **SQLite (`better-sqlite3`)** ile geliştirilmiş; hem **Windows Masaüstü (Electron 45)** hem de **PWA** olarak çalışan, tamamen çevrimdışı öncelikli (offline-first) günlük görev ve ajanda yöneticisidir.
+**Agendamea (`v1.0.0`)**, **React 19**, **TypeScript 7**, **Express 4** ve **WAL modlu SQLite (`better-sqlite3`)** ile geliştirilmiş; **Windows Masaüstü (Electron 45)** ve **PWA** için tamamen yerel öncelikli (local-first) görev yöneticisi ve otomasyon aracıdır. Görevler, isteğe bağlı tarih aralıkları, saatler, `#etiketler`, alt görevler, otomatik kaydedilen notlar, kategoriler ve ayarlar; hesap, abonelik veya telemetri olmadan anında cihazınıza kaydedilir.
 
-Sıfır sürtünmeli günlük planlama için tasarlanan Agendamea; oluşturduğunuz görevleri, başlangıç/bitiş tarihlerini, saat bilgisini, `#etiket` listelerini, alt görevleri, otomatik kaydedilen notları, sürükle-bırak sıralamasını ve tema tercihlerinizi anında yerel **WAL modlu SQLite** veritabanına kaydeder. Bulut hesabı, abonelik, internet bağlantısı veya telemetri gerektirmez.
+Agendamea yalnızca görsel bir arayüzle sınırlı değildir. Geliştiriciler, ileri düzey kullanıcılar ve yapay zekâ ajanları için uygulama penceresi hiç açılmadan **%100 arayüzsüz tam kontrol** sunar: tırnaksız kısa **terminal CLI** (`ag`, `agenda`, `agendamea`), yerleşik **20 araçlı Model Context Protocol (MCP) sunucusu** (`ag mcp`), arka planda çalışan **arayüzsüz API ve Webhook servisi** (`ag serve`), çoklu URL, otomatik yeniden deneme ve SQLite teslimat günlüklerine sahip **çift yönlü HMAC-SHA256 webhook motoru** ve açık arayüz için **canlı SSE senkronizasyonu**.
 
-Cihazlar arası süreklilik ve format sonrası veri güvenliği için **Sunucusuz ve Ücretsiz OneDrive Bulut Eşitleme** sunar: kendi yerel Microsoft OneDrive klasörünüze atomik JSON yedekleri ve **15 günlük döngüsel tarihli yedekler** yazar, temiz kurulum sonrası mevcut yedeği ilk açılışta otomatik algılayarak geri yükleme önerir ve ana dosya bozulsa bile bir önceki sağlıklı günlük yedeğe otomatik geçiş yapar.
+Sunucu maliyeti olmadan cihazlar arası yedekleme için **OneDrive**, **Google Drive**, **iCloud Drive**, **Dropbox** veya dilediğiniz klasörle atomik **15 günlük döngüsel bulut eşitleme** sunar.
 
 > **Dokümantasyon:** mimari, klavye kısayolları, 73 dil desteği, sürüm süreci ve Microsoft Store kontrol listesi [`docs/README.md`](docs/README.md) içinde indekslenmiştir.
 
@@ -350,35 +423,31 @@ Cihazlar arası süreklilik ve format sonrası veri güvenliği için **Sunucusu
 ## <img src="assets/icons/features.svg" width="20" height="20" align="absmiddle" alt="" /> Öne Çıkan Özellikler
 
 ### <img src="assets/icons/bolt.svg" width="20" height="20" align="absmiddle" alt="" /> 4 Farklı Çalışma Görünümü ve Günlük Planlama
-- **Düz Liste Görünümü**: Akıllı görünümler (`Tümü`, `Bugün`, `Önemli`, `Tamamlananlar`), 8 hazır renk + özel HEX seçicili kategoriler, sabitleme, anlık arama ve sürükle-bırak veya `Alt+Yukarı/Aşağı` ile klavye sıralama.
-- **Kanban Panosu**: Görevleri **Önceliğe** (`Yüksek`, `Normal`, `Düşük`) veya **Duruma** (`Aktif`, `Tamamlanan`) göre dinamik sütunlarda yönetme, sürükle-bırak ile geçiş ve sürükleme kilidi desteği.
-- **Takvim Planlayıcı**: Gün içi saatlere (`SS:dd`) göre kronolojik sıralanan aylık takvim ızgarası ve tarihsiz görevleri doğrudan takvim gününe sürükleyerek planlayabileceğiniz daraltılabilir **Tarihsiz Görevler** çekmecesi.
-- **Eisenhower Matrisi**: 4 kadranlı (`I Acil ve Önemli`, `II Önemli`, `III Acil`, `IV Sonra`) otomatik sınıflandırma ve sürükle-bırak ile öncelik aktarımı.
-- **Zengin Görev Detayları**: İsteğe bağlı başlangıç/bitiş tarih aralığı (`YYYY-AA-GG`), saat planlama (`SS:dd`, tarih boşsa bugünü otomatik atar), görev oluşturulduktan sonra eklenebilen `#etiket` sistemi (çoklu giriş, tekrar engelleme, 12 etiket sınırı, tek tıkla filtreleme), sıralı alt görevler ve kapanışta `keepalive` güvenceli otomatik kaydedilen notlar.
+- **Düz Liste Görünümü**: Akıllı görünümler (`Tümü`, `Bugün`, `Önemli`, `Tamamlananlar`), 8 hazır renk + özel renk spektrumlu kategoriler, sabitleme, başlık/not/alt görev/`#etiket` aramasıyla birlikte otomatik **Tarih Aralığı filtresi** ve sürükle-bırak veya `Alt+Yukarı/Aşağı` klavye sıralama.
+- **Kanban Panosu**: Görevleri **Önceliğe** veya **Duruma** göre sütunlarda yönetme, sürükle-bırak geçişleri ve sürükleme kilidi.
+- **Takvim Planlayıcı**: Gün içi `SS:dd` kronolojik sıralamalı aylık takvim ızgarası, çok günlü görev şeritleri ve sürükle-bırak tarihlendirme destekli **Tarihsiz Görevler** çekmecesi.
+- **Eisenhower Matrisi**: 4 kadranlı (`I Acil ve Önemli`, `II Önemli`, `III Acil`, `IV Sonra`) otomatik sınıflandırma ve sürükle-bırak önceliklendirme.
+- **Zengin Görev Detayları**: Başlangıç/bitiş tarih aralığı, saat planlama, çoklu `#etiket` yönetimi, sıralı alt görevler ve kapanışta `keepalive` güvenceli otomatik not kaydı.
 
-### <img src="assets/icons/database.svg" width="20" height="20" align="absmiddle" alt="" /> Kendini Onaran SQLite Motoru ve Güvenli Geri Yükleme
-- **WAL Modlu SQLite (`better-sqlite3`)**: `journal_mode = WAL`, `synchronous = NORMAL`, `foreign_keys = ON`, `busy_timeout = 5000` ve sürüm takipli şema göçleri (`PRAGMA user_version = 3`).
-- **Bozulma Koruması**: Ani elektrik kesintisinde veritabanı zarar görürse uygulama çökmez; bozuk dosya `.corrupt-<zaman>.bak` olarak saklanır ve temiz veritabanı otomatik başlatılır.
-- **Çöp Kutusu ve 12 Saniyelik Geri Alma**: Silinen görev ve kategoriler Çöp Kutusu'na taşınır; fareyle üzerine gelindiğinde veya odaklanıldığında geri sayımı durduran **12 saniyelik Geri Al** bildirimi sunulur.
-- **Atomik JSON Yedekleme ve Geri Yükleme**: Tek tıkla JSON yedek indirme (`/api/export`) ve 5 MB sınırlı, önizleme onaylı atomik geri yükleme (`/api/import`).
+### <img src="assets/icons/terminal.svg" width="20" height="20" align="absmiddle" alt="" /> Yerleşik 20 Araçlı MCP Sunucusu, Kısa Terminal CLI (`ag`) ve Arayüzsüz Servis
+- **20 Araçlı Yerleşik MCP Sunucusu (`mcp/server.cjs` / `ag mcp`)**: **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf** ve **VS Code** için harici Node.js gerektirmeyen stdio JSON-RPC 2.0 sunucusu (hem **Canlı API** hem **Soğuk Başlangıç Çevrimdışı SQLite** desteği).
+- **Kısa ve Tırnaksız Terminal CLI (`ag` / `agenda` / `agendamea`)**: Ayarlar'dan tek tıkla veya `ag install` ile sıfır-GUI PATH kurulumu; 1-2-3 numaralama, doğal söz dizimi (`@bugun`, `@yarin`, `@YYYY-AA-GG..YYYY-AA-GG`, `14:30`, `!`, `*`, `^`, `#etiket`, `/Kategori`, `--note`, `--sub`), toplu işlemler (`ag ok 1 2 3`, `ag rm 1 2`), `stdin` boru hattı (`ag import -`), terminal görünümleri (`ag cal`, `ag kanban`, `ag matris`) ve `-j` JSON çıktısı.
+- **Arayüzsüz Arka Plan Servisi (`ag serve start|stop|status`)**: Electron penceresi açmadan `127.0.0.1` yerel REST API ve gelen webhook dinleyicisini arka planda çalıştırır.
+- **Çift Yönlü Webhook Otomasyonu**: Discord, Slack, n8n, Zapier, Make ve özel sunucular için çoklu URL desteği, otomatik retry, olay filtresi (`webhookEvents`), SQLite teslimat günlüğü (`ag hook logs`) ve `X-Agendamea-Secret` / `X-Agendamea-Signature` HMAC doğrulamalı tam kapsamlı gelen webhook (`POST /api/webhook/incoming`).
 
-### <img src="assets/icons/plug.svg" width="20" height="20" align="absmiddle" alt="" /> Ücretsiz ve Sunucusuz OneDrive Bulut Eşitleme
-- **Otomatik OneDrive Klasör Algılama**: `OneDriveCommercial`, `OneDriveConsumer`, `OneDrive` veya özel seçilen klasörü algılayıp `Agendamea/agendamea-sync.json` altında eşitleme yapar.
-- **Çökme Korumalı Atomik Yazım ve 15 Günlük Tarihli Yedek**: Geçici `.tmp` takasıyla güvenli yazım ve `Agendamea/backups/agendamea-YYYY-AA-GG.json` altında son 15 günün günlük anlık görüntüleri.
-- **Bozuk Dosya Otomatik Yedek Düşüşü**: Ana eşitleme dosyası zarar görmüşse geri yükleme sırasında en güncel sağlam günlük yedek otomatik kullanılır.
-- **Format Sonrası İlk Açılış Kurtarma Bandı**: Yeni kurulmuş veya formatlanmış bilgisayarda OneDrive'da mevcut yedek tespit edildiğinde kullanıcıya **Yedeği Geri Yükle** veya **Yeni Başlangıç** seçeneği sunulur; Ayarlar'dan tek butonla **Klasörü Aç** yapılabilir.
+### <img src="assets/icons/database.svg" width="20" height="20" align="absmiddle" alt="" /> Kendini Onaran SQLite Motoru, Gelişmiş Çöp Kutusu ve Temiz Başlangıç
+- **WAL Modlu SQLite (`better-sqlite3`)**: `journal_mode = WAL`, `foreign_keys = ON`, sürüm takipli göçler (`user_version = 3`) ve bozulma durumunda `.corrupt-*.bak` koruyarak otomatik kurtarma.
+- **Aramalı Çöp Kutusu ve 12 Saniyelik Geri Al**: Anlık arama, tür filtresi, sıralama ve silinme tarih aralığı seçimi + fareyle duraklayan 12 saniyelik Geri Al bildirimi.
+- **Atomik Yedekleme ve Temiz Başlangıç (Verileri Sıfırla)**: 5 MB doğrulamalı JSON yedekleme/geri yükleme ve isteğe bağlı ayar sıfırlamalı 2 adımlı **Verileri Sıfırla** aracı.
 
-### <img src="assets/icons/palette.svg" width="20" height="20" align="absmiddle" alt="" /> 28+ Tema Paleti, Özel HEX Tema, Dinamik Uygulama İkonu ve 73 Dil
-- **14 Çift Modlu Tema + Özel HEX Tema Oluşturucu**: Açık ve Koyu modlarda 14 hazır renk paletine ek olarak sınırsız **Özel HEX (`#RRGGBB`)** tema oluşturma, otomatik WCAG kontrast hesaplama ve anti-FOUC `localStorage` önbelleği.
-- **Sistem Geneli Dinamik Uygulama İkonları**: Aktif temayla otomatik eşleşen, Koyu/Açık Monokrom, 13 renkli veya **Özel HEX renkli** Agendamea ikonu seçimi - pencere, görev çubuğu, sistem tepsisi ve Masaüstü / Başlat Menüsü kısayollarıyla (`.lnk`) anlık eşzamanlı.
-- **Erişilebilirlik ve Sistem Tepsisi Kapanış Yönetimi**: **Yakınlaştırma Yüzdesi (`%80 - %150`, `Ctrl +/-/0`)**, **Yüksek Kontrast Modu**, **Azaltılmış Hareket**, kalıcı **Sistem Tepsisi** ve kapanış seçim penceresi (**Sistem Tepsisine Küçült** veya **Tamamen Kapat**, Ayarlar'dan değiştirilebilir).
-- **73 Tam Yerelleştirilmiş Dil (Sıfır Dil Sızıntısı)**: Windows Setup `.exe` başlangıcında Windows dilini algılayan (İngilizce yedekli) **73 dilli kurulum seçicisi**, ilk açılışta sistem dili algılama ve Arapça (`ar`), Farsça (`fa`), İbranice (`he`), Urduca (`ur`) için eksiksiz **RTL** desteği.
-- **5 Yerleşik Yasal Belge**: Gizlilik Politikası, Kullanım Koşulları, KVKK / GDPR Aydınlatma Metni, Açık Kaynak Lisansları ve Erişilebilirlik Beyanı çevrimdışı olarak Ayarlar içinde yer alır.
+### <img src="assets/icons/plug.svg" width="20" height="20" align="absmiddle" alt="" /> Ücretsiz Çoklu Bulut Klasör Eşitleme
+- **Otomatik Sağlayıcı Algılama**: **OneDrive**, **Google Drive**, **iCloud Drive** ve **Dropbox** klasörlerini otomatik tanır; eşit genişlikte çoklu bulut kontrolleri ve arayüzsüz `ag sync auto|set|pull` desteği sunar.
+- **15 Günlük Döngüsel Yedek ve Kurtarma Bandı**: Atomik `.tmp` yazım, bozuk dosya otomatik geri dönüşü ve format sonrası ilk açılışta tek tıkla kurtarma.
 
-### <img src="assets/icons/shield.svg" width="20" height="20" align="absmiddle" alt="" /> Sıkılaştırılmış Yerel Güvenlik ve Yerel Windows Entegrasyonu
-- **Loopback İzolasyonu ve CSRF Koruması**: Yalnızca `127.0.0.1` üzerinde çalışır (`47821` portu + Windows Hyper-V/WinNAT `EACCES` otomatik yedek port seçimi), DNS rebinding koruması, `Sec-Fetch-Site` / `Origin` doğrulaması ve katı güvenlik başlıkları (`CSP`, `nosniff`, `SAMEORIGIN`, `no-referrer`) uygular.
-- **Gzip Önbellekli Statik Dağıtım**: Üretim `dist/` dosyaları yerleşik `node:zlib` bellek önbellekli gzip sıkıştırmasıyla anında sunulur.
-- **Yerel Electron 45 Masaüstü Kabuğu**: Tekil süreç kilidi (`requestSingleInstanceLock`), özel çerçevesiz pencere kontrolleri, izole preload köprüsü (`contextIsolation: true`, `nodeIntegration: false`), dış bağlantı izin listesi ve dağıtım kanalına duyarlı güncelleme kontrolü (`isWindowsStore` uyumlu).
+### <img src="assets/icons/palette.svg" width="20" height="20" align="absmiddle" alt="" /> 28+ Tema, Özel HEX, Dinamik Uygulama İkonu ve 73 Dil
+- **14 Çift Modlu Tema + Özel HEX Oluşturucu**: Tek tıkla kopyalanabilir HEX kodları, otomatik WCAG kontrast hesaplama ve anti-FOUC önbellek.
+- **Sistem Geneli Dinamik İkonlar**: Pencere, görev çubuğu, sistem tepsisi, Jump List ve Masaüstü/Başlat kısayollarıyla anlık eşzamanlı.
+- **73 Dil, Tam Sekmeli Ayarlar ve 7 Adımlı Karşılama Rehberi**: Sıfır dil sızıntısı, çok dilli Windows Setup seçicisi, 4 RTL dili (`ar`, `fa`, `he`, `ur`), `%80-%150` yakınlaştırma, yüksek kontrast, azaltılmış hareket ve 5 çevrimdışı yasal belge.
 
 ---
 
@@ -386,14 +455,10 @@ Cihazlar arası süreklilik ve format sonrası veri güvenliği için **Sunucusu
 
 ### Son Kullanıcı İçin Kurulum (Windows)
 
-1. [GitHub Releases](https://github.com/emirtdede/agendamea/releases) sayfasından **`Agendamea-Setup-1.0.0-win-x64.exe`** (veya taşınabilir **`Agendamea-Portable-1.0.0-win-x64.exe`**) dosyasını indirin ya da Microsoft Store paketini kurun.
-2. Kurulum dosyasını çalıştırın. **Yönetici (UAC) izni istenmez** - kullanıcı hesabına (`%LOCALAPPDATA%\Programs\Agendamea`) kurulur.
-3. Özel Vellium kurulum sihirbazında dilerseniz farklı bir kurulum dizini seçebilirsiniz.
-4. Kurulumdan sonra Başlat menüsü veya Masaüstü kısayolundan **Agendamea**'yı başlatın.
-
-**Doğrudan indirmelerde SmartScreen uyarısı:** Microsoft Store dışından indirilen imzasız paketlerde Windows ilk çalıştırmada "Windows kişisel bilgisayarınızı korudu" uyarısı gösterebilir. **Ek bilgi -> Yine de çalıştır** seçeneğini kullanabilirsiniz. Microsoft Store paketi Microsoft tarafından imzalanır ve bu uyarıyı göstermez.
-
-**Kaldırma:** Windows Ayarlar -> Uygulamalar -> Agendamea -> Kaldır. Görev verilerinizin güvenliği için `%APPDATA%\Agendamea` altındaki yerel veritabanınız kaldırılırken varsayılan olarak korunur.
+1. [GitHub Releases](https://github.com/emirtdede/agendamea/releases) sayfasından **`Agendamea-Setup-1.0.0-win-x64.exe`** (veya taşınabilir **`Agendamea-Portable-1.0.0-win-x64.exe`**) dosyasını indirin ya da [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ) üzerinden kurun.
+2. Kurulum dosyasını çalıştırın. **Yönetici (UAC) izni istenmez** - kullanıcı profiline (`%LOCALAPPDATA%\Programs\Agendamea`) kurulur.
+3. Çok dilli Vellium kurulum sihirbazında dil ve kurulum klasörünü seçin.
+4. Başlat menüsü veya Masaüstü kısayolundan başlatın; terminal kullanımı için Ayarlar -> Dokümantasyon -> **Terminale Kur (ag)** veya `node cli/agendamea.cjs install` komutunu kullanın.
 
 ### Kaynaktan Çalıştırma ve Derleme
 
@@ -402,13 +467,13 @@ git clone https://github.com/emirtdede/agendamea.git
 cd agendamea
 npm install
 
-# Test ve Tip Kontrolü
+# Testler ve Tip Kontrolü (31 test paketi)
 npm test
 npm run lint
 
 # Geliştirici Modu
-npm run dev           # Web + API sunucusu (http://localhost:3000)
-npm run electron:dev  # Electron masaüstü uygulaması
+npm run dev
+npm run electron:dev
 
 # Windows Kurulum, Taşınabilir ve Store Paket Derleme (v1.0.0)
 npm run dist:win
@@ -419,15 +484,12 @@ npm run dist:win:appx
 
 ## <img src="assets/icons/package.svg" width="20" height="20" align="absmiddle" alt="" /> Dağıtım Paketleri
 
-Derleme çıktıları `release/` klasörü altında üretilir:
+Derleme çıktıları `release/` altında üretilir:
 
-- **NSIS Kurulum Paketi** - `Agendamea-Setup-1.0.0-win-x64.exe`
+- **NSIS Kurulum Paketi** - `Agendamea-Setup-1.0.0-win-x64.exe` (`latest.yml` ve `.blockmap` delta güncelleme dosyalarıyla)
 - **Taşınabilir (Portable) Sürüm** - `Agendamea-Portable-1.0.0-win-x64.exe`
 - **Microsoft Store Paketi** - `Agendamea-Store-1.0.0-win-x64.appx`
-- **Açık (Unpacked) Derleme** - `release/win-unpacked/` (`npm run dist:win:dir`)
-- **Doğrulama Özetleri** - Etiketli sürümlerde GitHub Actions tarafından üretilen `SHA256SUMS.txt`
-
-Yayınlanan paketlere ve sürüm notlarına [GitHub Releases](https://github.com/emirtdede/agendamea/releases) sayfasından ulaşabilirsiniz.
+- **Doğrulama Özetleri ve WinGet** - `SHA256SUMS.txt` ve `winget/manifests/v/Vellium/Agendamea/1.0.0/`
 
 ---
 
@@ -438,7 +500,7 @@ Yayınlanan paketlere ve sürüm notlarına [GitHub Releases](https://github.com
 Tam lisans metni için [`LICENSE`](LICENSE) dosyasına bakın. Microsoft Store üzerinden sunulan dağıtımlar ayrıca Microsoft Store Standart Uygulama Lisans Koşullarına tabidir.
 
 - **Yayıncı:** Vellium Teknoloji Anonim Şirketi ([Şirket Bilgileri](https://vellium.dev/tr/yasal/sirket-bilgileri))
-- **Resmi Web Sitesi ve Depo:** [vellium.dev](https://vellium.dev) &bull; [GitHub Deposu](https://github.com/emirtdede/agendamea) &bull; [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ)
+- **Resmi Web Sitesi ve Ürün Bağlantıları:** [vellium.dev](https://vellium.dev) &bull; [GitHub Deposu](https://github.com/emirtdede/agendamea) &bull; [Microsoft Store](https://apps.microsoft.com/detail/9MT5X1NGZJXZ)
 - **Yasal Merkez:** [Gizlilik Politikası](https://vellium.dev/tr/yasal/gizlilik-politikasi) &bull; [Hizmet Koşulları](https://vellium.dev/tr/yasal/hizmet-kosullari) &bull; [Destek Politikası](https://vellium.dev/tr/yasal/destek-politikasi) &bull; [Güvenlik Açığı Bildirimi](https://vellium.dev/tr/yasal/guvenlik-acigi-bildirimi) &bull; [KVKK Aydınlatma Metni](https://vellium.dev/tr/yasal/kvkk-aydinlatma-metni)
-- **Resmi E-Posta Kanalları:** Genel [contact@vellium.dev](mailto:contact@vellium.dev) &bull; Destek [support@vellium.dev](mailto:support@vellium.dev) &bull; Gizlilik [privacy@vellium.dev](mailto:privacy@vellium.dev) &bull; Hukuk [legal@vellium.dev](mailto:legal@vellium.dev) &bull; Güvenlik [security@vellium.dev](mailto:security@vellium.dev)
+- **Resmi E-Posta Kanalları:** Genel [contact@vellium.dev](mailto:contact@vellium.dev) &bull; Destek [support@vellium.dev](mailto:support@vellium.dev) &bull; Gizlilik [privacy@vellium.dev](mailto:privacy@vellium.dev) &bull; Hukuk [legal@vellium.dev](mailto:legal@vellium.dev) &bull; Güvenlik [security@vellium.dev](mailto:security@vellium.dev) &bull; Faturalandırma [billing@vellium.dev](mailto:billing@vellium.dev)
 - **Resmi Sosyal Medya ve Topluluk Hesapları:** [GitHub @VelliumHQ](https://github.com/VelliumHQ) &bull; [LinkedIn](https://www.linkedin.com/company/vellium/) &bull; [X @VelliumDev](https://x.com/VelliumDev) &bull; [Product Hunt @vellium](https://www.producthunt.com/@vellium) &bull; [Instagram @velliumdev](https://www.instagram.com/velliumdev/) &bull; [Threads @velliumdev](https://www.threads.com/@velliumdev) &bull; [Reddit u/VelliumDev](https://www.reddit.com/user/VelliumDev/) &bull; [Discord](https://discord.gg/ur9KBZBEdj)

@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Calendar,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -81,8 +80,6 @@ export function WelcomeModal({
   const { lang, onChangeLanguage, t, meta, getThemeDisplayName } = useI18n();
   const [step, setStep] = useState(0);
   const [langSearch, setLangSearch] = useState('');
-  const [isQuickLangOpen, setIsQuickLangOpen] = useState(false);
-  const quickLangRef = useRef<HTMLDivElement>(null);
 
   const filteredLanguages = useMemo(() => {
     const q = langSearch.trim().toLowerCase();
@@ -96,17 +93,6 @@ export function WelcomeModal({
   }, [langSearch]);
 
   useEffect(() => {
-    if (!isQuickLangOpen) return;
-    const handlePointerDown = (e: MouseEvent) => {
-      if (quickLangRef.current && !quickLangRef.current.contains(e.target as Node)) {
-        setIsQuickLangOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
-  }, [isQuickLangOpen]);
-
-  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const isInput =
@@ -116,14 +102,10 @@ export function WelcomeModal({
 
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (isQuickLangOpen) {
-          setIsQuickLangOpen(false);
-          return;
-        }
         onComplete(false);
         return;
       }
-      if (isInput || isQuickLangOpen) return;
+      if (isInput) return;
 
       const forwardKey = meta.dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
       const backKey = meta.dir === 'rtl' ? 'ArrowRight' : 'ArrowLeft';
@@ -139,7 +121,7 @@ export function WelcomeModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onComplete, meta.dir, isQuickLangOpen]);
+  }, [onComplete, meta.dir]);
 
   const featuredThemes = FEATURED_THEME_IDS.map((id) =>
     COLOR_THEMES.find((item) => item.id === id),
@@ -245,10 +227,7 @@ export function WelcomeModal({
                 role="tab"
                 aria-selected={active}
                 aria-label={`${idx + 1} / ${TOTAL_STEPS}`}
-                onClick={() => {
-                  setIsQuickLangOpen(false);
-                  setStep(idx);
-                }}
+                onClick={() => setStep(idx)}
                 className="h-1 w-full rounded-full transition-colors"
                 style={{
                   backgroundColor:
@@ -281,9 +260,9 @@ export function WelcomeModal({
                 </p>
               </div>
 
-              {/* Search Input (Left) + Compact Quick Dropdown (Right, Max 5 Rows) */}
-              <div className="mt-4 flex items-center gap-2.5 shrink-0">
-                <div className="relative flex flex-1 items-center">
+              {/* Search Input (Cols 1-2) + Selected Language Display (Col 3, pixel-aligned with tile grid below) */}
+              <div className="mt-4 grid grid-cols-3 items-center gap-2 pr-2 shrink-0">
+                <div className="relative col-span-2 flex items-center">
                   <Search className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-[var(--text-muted)]" />
                   <input
                     type="text"
@@ -295,57 +274,21 @@ export function WelcomeModal({
                   />
                 </div>
 
-                {/* Compact Quick Language Selector (Popover capped at 5 rows) */}
-                <div ref={quickLangRef} className="relative w-[196px] shrink-0">
-                  <button
-                    type="button"
-                    data-testid="welcome-language-select"
-                    aria-haspopup="listbox"
-                    aria-expanded={isQuickLangOpen}
-                    onClick={() => setIsQuickLangOpen((prev) => !prev)}
-                    className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 text-xs font-medium text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"
-                  >
-                    <span className="truncate">{meta.nativeName}</span>
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 shrink-0 text-[var(--text-muted)] transition-transform ${
-                        isQuickLangOpen ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-
-                  {isQuickLangOpen && (
-                    <div
-                      role="listbox"
-                      aria-label={t.languageSectionTitle}
-                      className="absolute right-0 top-10 z-20 max-h-[168px] w-full overflow-y-auto rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] p-1 shadow-xl"
-                    >
-                      {SUPPORTED_LANGUAGES.map((item) => {
-                        const selected = item.code === lang;
-                        return (
-                          <button
-                            key={item.code}
-                            type="button"
-                            role="option"
-                            aria-selected={selected}
-                            onClick={() => {
-                              onChangeLanguage(item.code as LanguageCode);
-                              setIsQuickLangOpen(false);
-                            }}
-                            className={`flex h-8 w-full items-center justify-between gap-2 rounded-md px-2.5 text-left text-xs transition-colors ${
-                              selected
-                                ? 'bg-[var(--accent-soft)] font-semibold text-[var(--text-primary)]'
-                                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                            }`}
-                          >
-                            <span className="truncate">{item.nativeName}</span>
-                            {selected && (
-                              <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                {/* Non-interactive Selected Language Readout aligned 1:1 with the 3rd column tile underneath */}
+                <div
+                  data-testid="welcome-selected-language"
+                  aria-live="polite"
+                  className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-soft)] px-3 select-none"
+                >
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <span className="truncate text-xs font-semibold text-[var(--text-primary)]">
+                      {meta.nativeName}
+                    </span>
+                    <span className="rounded bg-[var(--surface)] px-1.5 py-0.5 font-mono-tabular text-[9px] font-semibold uppercase text-[var(--text-muted)] shrink-0">
+                      {meta.code}
+                    </span>
+                  </span>
+                  <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                 </div>
               </div>
 
@@ -923,10 +866,7 @@ export function WelcomeModal({
               <button
                 type="button"
                 data-testid="welcome-step-next"
-                onClick={() => {
-                  setIsQuickLangOpen(false);
-                  setStep((prev) => Math.min(TOTAL_STEPS - 1, prev + 1));
-                }}
+                onClick={() => setStep((prev) => Math.min(TOTAL_STEPS - 1, prev + 1))}
                 className="inline-flex h-9 select-none items-center gap-1.5 rounded-lg border border-transparent px-4 font-display text-xs font-semibold transition-opacity hover:opacity-90 whitespace-nowrap shrink-0"
                 style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
               >

@@ -10,6 +10,7 @@ import type {
   Todo,
   TodoPatch,
   UpdateCheckResult,
+  WebhookTestResult,
 } from '../types';
 
 const DEFAULT_TIMEOUT_MS = 10000;
@@ -33,6 +34,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
       ...options,
       signal,
       headers: {
+        'X-Agendamea-Source': 'ui',
         ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
         ...(options?.headers ?? {}),
       },
@@ -279,6 +281,20 @@ export const api = {
     return request<{ ok: boolean; path?: string }>('/api/onedrive/open-folder', {
       method: 'POST',
       body: JSON.stringify({ folderPath: folderPath ?? undefined }),
+    });
+  },
+
+  testWebhook(input?: { url?: string; secret?: string }): Promise<WebhookTestResult> {
+    return request<WebhookTestResult>('/api/webhooks/test', {
+      method: 'POST',
+      body: JSON.stringify(input ?? {}),
+    });
+  },
+
+  resetAllData(options?: { resetSettings?: boolean }): Promise<BootstrapPayload> {
+    return request<BootstrapPayload>('/api/reset', {
+      method: 'POST',
+      body: JSON.stringify(options ?? {}),
     });
   },
 };

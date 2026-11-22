@@ -1,5 +1,15 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Check, Cloud, Download, FolderOpen, RefreshCw, Trash2, Upload } from 'lucide-react';
+import {
+  AlertTriangle,
+  Check,
+  Cloud,
+  Download,
+  FolderOpen,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import { api } from '../../api/client';
 import { useI18n } from '../../i18n/I18nContext';
 import { localizeErrorMessage } from '../../i18n/translations';
@@ -25,6 +35,7 @@ export interface DataBackupSettingsTabProps {
   onClearAllCompleted: () => Promise<void>;
   onImportBackup: (payload: unknown) => Promise<void>;
   onApplyRestoredBootstrap?: (restored: BootstrapPayload) => void;
+  onResetAllData?: (resetSettings: boolean) => Promise<void>;
   formatTimestamp: (iso: string | null) => string;
 }
 
@@ -40,6 +51,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   onClearAllCompleted,
   onImportBackup,
   onApplyRestoredBootstrap,
+  onResetAllData,
   formatTimestamp,
 }: DataBackupSettingsTabProps) {
   const { lang, t } = useI18n();
@@ -47,6 +59,9 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [backupDownloaded, setBackupDownloaded] = useState(false);
   const [isClearingCompleted, setIsClearingCompleted] = useState(false);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [resetIncludeSettings, setResetIncludeSettings] = useState(false);
+  const [isResettingData, setIsResettingData] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isMountedRef = useRef(true);
@@ -82,6 +97,13 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
 
   const handleOneDriveConnectOrSync = async () => {
     if (isOneDriveBusy) return;
+    if (!oneDriveStatus?.connected) {
+      const firstDetected = cloudProviders.find((p) => p.detected);
+      if (!firstDetected && window.agendameaWindow?.pickCloudSyncFolder) {
+        await handleOneDrivePickFolder();
+        return;
+      }
+    }
     setIsOneDriveBusy(true);
     setImportError(null);
     try {
@@ -477,18 +499,24 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <div
+            data-testid="cloud-sync-actions-grid"
+            className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5"
+          >
             <button
               type="button"
               disabled={isOneDriveBusy}
+              title={
+                oneDriveStatus?.connected ? t.onedriveSyncNowButton : t.onedriveConnectButton
+              }
               onClick={() => void handleOneDriveConnectOrSync()}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity disabled:opacity-40 whitespace-nowrap shrink-0"
+              className="inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-opacity disabled:opacity-40"
               style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 shrink-0 ${isOneDriveBusy ? 'animate-spin' : ''}`}
               />
-              <span>
+              <span className="truncate">
                 {oneDriveStatus?.connected ? t.onedriveSyncNowButton : t.onedriveConnectButton}
               </span>
             </button>
@@ -496,31 +524,34 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
             <button
               type="button"
               disabled={isOneDriveBusy || !oneDriveStatus?.hasRemoteBackup}
+              title={t.onedriveRestoreButton}
               onClick={() => void handleOneDriveRestore()}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+              className="inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
             >
               <Upload className="h-3.5 w-3.5 shrink-0" />
-              <span>{t.onedriveRestoreButton}</span>
+              <span className="truncate">{t.onedriveRestoreButton}</span>
             </button>
 
             <button
               type="button"
               data-testid="onedrive-pick-folder-btn"
               disabled={isOneDriveBusy}
+              title={t.cloudPickFolderButton}
               onClick={() => void handleOneDrivePickFolder()}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+              className="inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
             >
               <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-              <span>{t.cloudPickFolderButton}</span>
+              <span className="truncate">{t.cloudPickFolderButton}</span>
             </button>
 
             <button
               type="button"
+              title={t.onedriveOpenFolderButton}
               onClick={() => void api.openOneDriveFolder(oneDriveStatus?.folderPath).catch(() => {})}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
+              className="inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
             >
               <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-              <span>{t.onedriveOpenFolderButton}</span>
+              <span className="truncate">{t.onedriveOpenFolderButton}</span>
             </button>
           </div>
 
@@ -577,6 +608,105 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
             <span>{isClearingCompleted ? t.movingButton : t.moveButton}</span>
           </button>
         </div>
+
+        {/* Clean Start / Reset All Data */}
+        {onResetAllData && (
+          <div data-testid="reset-all-data-section" className="px-4 py-3.5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  {t.resetDataSectionTitle}
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">{t.resetDataSectionDesc}</p>
+              </div>
+              {!confirmResetOpen && (
+                <button
+                  type="button"
+                  data-testid="reset-all-data-open-btn"
+                  disabled={isResettingData || isImporting}
+                  onClick={() => setConfirmResetOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/15 disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>{t.resetDataButton}</span>
+                </button>
+              )}
+            </div>
+
+            {confirmResetOpen && (
+              <div
+                role="alertdialog"
+                data-testid="reset-all-data-confirm-box"
+                aria-label={t.resetDataSectionTitle}
+                className="animate-tab-enter rounded-xl border border-red-500/35 bg-red-500/10 p-3.5 space-y-3"
+              >
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                  <p className="text-xs leading-relaxed text-[var(--text-primary)]">
+                    {t.resetDataConfirmWarning}
+                  </p>
+                </div>
+
+                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    data-testid="reset-include-settings-checkbox"
+                    checked={resetIncludeSettings}
+                    onChange={(e) => setResetIncludeSettings(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-red-600 cursor-pointer"
+                  />
+                  <span>{t.resetDataIncludeSettingsLabel}</span>
+                </label>
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={isResettingData}
+                    onClick={() => {
+                      setConfirmResetOpen(false);
+                      setResetIncludeSettings(false);
+                    }}
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
+                  >
+                    {t.cancelButton}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="reset-all-data-confirm-btn"
+                    disabled={isResettingData}
+                    onClick={async () => {
+                      if (isResettingData) return;
+                      setIsResettingData(true);
+                      setImportError(null);
+                      try {
+                        await onResetAllData(resetIncludeSettings);
+                        if (isMountedRef.current) {
+                          setConfirmResetOpen(false);
+                          setResetIncludeSettings(false);
+                          const refreshed = await api.getOneDriveStatus().catch(() => null);
+                          if (isMountedRef.current && refreshed) {
+                            onOneDriveStatusChange(refreshed);
+                          }
+                        }
+                      } catch (err) {
+                        if (isMountedRef.current) {
+                          setImportError(
+                            localizeErrorMessage(err, t.operationFailedToast, lang, t),
+                          );
+                        }
+                      } finally {
+                        if (isMountedRef.current) setIsResettingData(false);
+                      }
+                    }}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40 transition-colors"
+                  >
+                    {isResettingData ? t.deletingButton : t.resetDataConfirmButton}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

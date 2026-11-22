@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { Category, Todo } from '../../types';
 import {
@@ -192,18 +192,24 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                 )}
               </div>
 
-              <select
-                data-testid="trash-sort-select"
-                value={trashSortBy}
-                onChange={(e) => setTrashSortBy(e.target.value as TrashSortOption)}
-                aria-label={t.trashSortNewest}
-                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:border-[var(--border-strong)] focus:outline-none cursor-pointer"
-              >
-                <option value="newest">{t.trashSortNewest}</option>
-                <option value="oldest">{t.trashSortOldest}</option>
-                <option value="az">{t.trashSortAZ}</option>
-                <option value="za">{t.trashSortZA}</option>
-              </select>
+              <div className="relative inline-flex items-center">
+                <select
+                  data-testid="trash-sort-select"
+                  value={trashSortBy}
+                  onChange={(e) => setTrashSortBy(e.target.value as TrashSortOption)}
+                  aria-label={t.trashSortNewest}
+                  className="h-8 appearance-none rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-2.5 pr-7 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] focus:border-[var(--border-strong)] focus:outline-none cursor-pointer transition-colors"
+                >
+                  <option value="newest">{t.trashSortNewest}</option>
+                  <option value="oldest">{t.trashSortOldest}</option>
+                  <option value="az">{t.trashSortAZ}</option>
+                  <option value="za">{t.trashSortZA}</option>
+                </select>
+                <ChevronDown
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-[var(--text-muted)]"
+                />
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">

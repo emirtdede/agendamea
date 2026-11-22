@@ -11,10 +11,10 @@ InstallModes:
   - silent
   - silentWithProgress
 UpgradeBehavior: install
-ReleaseDate: 2026-11-21
+ReleaseDate: 2026-11-22
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/emirtdede/agendamea/releases/download/v1.0.0/Agendamea-Setup-1.0.0-win-x64.exe
-    InstallerSha256: F7864D2EFFD5E7FF163AC9FDEF22C5FD5BB6CABAE5B88CB498C1778D2A2688DE
+    InstallerSha256: D2DBC55C0D2E93F8ACBE818A6BC1F67A363C208F5AAEF0022346FD6372711B92
 ManifestType: installer
 ManifestVersion: 1.6.0

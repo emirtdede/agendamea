@@ -1747,8 +1747,9 @@ test('QA: Trash search/sort/date-range, CLI & MCP server protocol, zero icon/aut
   const { execFileSync, spawn } = await import('node:child_process');
   const cliPath = path.join(process.cwd(), 'cli', 'agendamea.cjs');
   const helpOut = execFileSync(process.execPath, [cliPath, '--help'], { encoding: 'utf8' });
-  assert.ok(helpOut.includes('agendamea list'), 'CLI help must list simple commands');
-  assert.ok(helpOut.includes('agendamea mcp'), 'CLI help must document MCP command');
+  assert.ok(helpOut.includes('ag +'), 'CLI help must list short simple commands');
+  assert.ok(helpOut.includes('ag mcp'), 'CLI help must document MCP command');
+  assert.ok(helpOut.includes('ag hook'), 'CLI help must document webhook command');
 
   // 3. MCP JSON-RPC 2.0 stdio server responds cleanly to initialize & tools/list
   const mcpPath = path.join(process.cwd(), 'mcp', 'server.cjs');
@@ -1892,6 +1893,1082 @@ test('QA: Trash search/sort/date-range, CLI & MCP server protocol, zero icon/aut
   assert.ok(ciYml.includes('npm run lint'));
   assert.ok(ciYml.includes('npm test'));
   assert.ok(ciYml.includes('npm run build'));
+});
+
+test('QA: Task search date range, short ag CLI, race-free MCP update tool, live bi-directional webhooks & UI refinements', async () => {
+  const { execFileSync, spawn } = await import('node:child_process');
+  const cryptoMod = await import('node:crypto');
+  const httpMod = await import('node:http');
+  const netMod = await import('node:net');
+
+  const buildSampleTodo = (overrides: Partial<Todo>): Todo => ({
+    id: overrides.id ?? 't-sample',
+    title: overrides.title ?? 'Sample',
+    notes: overrides.notes ?? '',
+    completed: overrides.completed ?? false,
+    important: overrides.important ?? false,
+    pinned: overrides.pinned ?? false,
+    priority: overrides.priority ?? 'normal',
+    startDate: overrides.startDate ?? null,
+    dueDate: overrides.dueDate ?? null,
+    dueTime: overrides.dueTime ?? null,
+    tags: overrides.tags ?? [],
+    categoryId: overrides.categoryId ?? null,
+    sortOrder: overrides.sortOrder ?? 0,
+    createdAt: overrides.createdAt ?? '2026-03-01T08:00:00.000Z',
+    updatedAt: overrides.updatedAt ?? '2026-03-01T08:00:00.000Z',
+    deletedAt: overrides.deletedAt ?? null,
+    subtasks: overrides.subtasks ?? [],
+  });
+
+  // 1. filterAndSortTodos date-range filtering (single date, span overlap, inverted range, undated exclusion)
+  const sampleTodos: Todo[] = [
+    buildSampleTodo({ id: 'd1', title: 'Mart gorevi', dueDate: '2026-03-10' }),
+    buildSampleTodo({ id: 'd2', title: 'Aralik span gorevi', startDate: '2026-03-15', dueDate: '2026-03-25' }),
+    buildSampleTodo({ id: 'd3', title: 'Nisan gorevi', dueDate: '2026-04-05' }),
+    buildSampleTodo({ id: 'd4', title: 'Tarihsiz gorev', dueDate: null, startDate: null }),
+  ];
+
+  const inRange = filterAndSortTodos({
+    todos: sampleTodos,
+    activeView: { type: 'smart', id: 'all' },
+    statusFilter: 'all',
+    searchQuery: '',
+    sortBy: 'manual',
+    dateFrom: '2026-03-12',
+    dateTo: '2026-03-20',
+  });
+  assert.deepEqual(
+    inRange.map((x) => x.id),
+    ['d2'],
+  );
+
+  // Inverted bounds still normalize safely
+  const invertedRange = filterAndSortTodos({
+    todos: sampleTodos,
+    activeView: { type: 'smart', id: 'all' },
+    statusFilter: 'all',
+    searchQuery: '',
+    sortBy: 'manual',
+    dateFrom: '2026-03-16',
+    dateTo: '2026-03-09',
+  });
+  assert.deepEqual(
+    invertedRange.map((x) => x.id),
+    ['d1', 'd2'],
+  );
+
+  // 2. Short CLI commands (ag, ag +, ag ok, ag rm, ag stat) + MCP update tool over piped stdio (strictly isolated DB)
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agendamea-ux-e2e-'));
+  const dbPath = path.join(tmpDir, 'agendamea.db');
+  const seed = new TodoDatabase(dbPath);
+  seed.close();
+
+  const cliScript = path.join(process.cwd(), 'cli', 'agendamea.cjs');
+  const mcpScript = path.join(process.cwd(), 'mcp', 'server.cjs');
+  const isolatedEnv = {
+    ...process.env,
+    AGENDAMEA_DATA_DIR: tmpDir,
+    AGENDAMEA_FORCE_OFFLINE: '1',
+  };
+
+  try {
+    const addedRaw = execFileSync(process.execPath, [cliScript, '+', 'Kisa CLI Gorevi', '-h', '-d', '2026-05-10', '-j'], {
+      env: isolatedEnv,
+      encoding: 'utf8',
+    });
+    const addedTask = JSON.parse(addedRaw);
+    assert.equal(addedTask.title, 'Kisa CLI Gorevi');
+    assert.equal(addedTask.priority, 'high');
+    assert.equal(addedTask.dueDate, '2026-05-10');
+
+    // Bare "ag -j" lists active tasks directly
+    const bareList = JSON.parse(
+      execFileSync(process.execPath, [cliScript, '-j'], {
+        env: isolatedEnv,
+        encoding: 'utf8',
+      }),
+    );
+    assert.equal(bareList.length, 1);
+
+    // MCP piped stdio: initialize + tools/list + update_task + list_tasks with dateFrom/dateTo
+    const mcpPayload = [
+      JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }),
+      JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: {
+          name: 'agendamea_update_task',
+          arguments: { id: addedTask.id.slice(0, 12), title: 'MCP Guncellendi', important: true },
+        },
+      }),
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 4,
+        method: 'tools/call',
+        params: {
+          name: 'agendamea_list_tasks',
+          arguments: { filter: 'active', dateFrom: '2026-05-01', dateTo: '2026-05-31' },
+        },
+      }),
+    ].join('\n') + '\n';
+
+    const mcpOut = execFileSync(process.execPath, [mcpScript], {
+      env: isolatedEnv,
+      input: mcpPayload,
+      encoding: 'utf8',
+    });
+    const mcpLines = mcpOut.trim().split(/\r?\n/).map((line) => JSON.parse(line));
+    assert.equal(mcpLines.length, 4, 'Piped MCP stdio must flush every async response before exiting');
+    const toolNames = mcpLines[1].result.tools.map((tool: { name: string }) => tool.name);
+    assert.ok(toolNames.includes('agendamea_update_task'));
+    const updatedFromMcp = JSON.parse(mcpLines[2].result.content[0].text);
+    assert.equal(updatedFromMcp.title, 'MCP Guncellendi');
+    assert.equal(updatedFromMcp.important, true);
+    const listedFromMcp = JSON.parse(mcpLines[3].result.content[0].text);
+    assert.equal(listedFromMcp.length, 1);
+
+    // Natural quote-free add with @yarin, !, *, #tag + numbered list + ag ara + ag ok 1 + ag rm 1 + ag geri + Turkish output!
+    const naturalRaw = execFileSync(
+      process.execPath,
+      [cliScript, '+', 'Raporu', 'gonder', '@yarin', '!', '*', '#finans', '-j'],
+      { env: isolatedEnv, encoding: 'utf8' },
+    );
+    const naturalTask = JSON.parse(naturalRaw);
+    assert.equal(naturalTask.title, 'Raporu gonder');
+    assert.equal(naturalTask.priority, 'high');
+    assert.equal(naturalTask.important, true);
+    assert.deepEqual(naturalTask.tags, ['finans']);
+    assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(naturalTask.dueDate));
+
+    // Turkish interactive output renders numbered list ("1.") and Turkish localized messages
+    const trListText = execFileSync(process.execPath, [cliScript], {
+      env: { ...isolatedEnv, AGENDAMEA_CLI_LANG: 'tr' },
+      encoding: 'utf8',
+    });
+    assert.ok(trListText.includes('1.'), 'CLI list must use human-friendly 1, 2, 3 numbering');
+    assert.ok(trListText.includes('#finans'), 'CLI list must render #tags');
+
+    // ag ara searches titles & tags
+    const searchJson = JSON.parse(
+      execFileSync(process.execPath, [cliScript, 'ara', '#finans', '-j'], {
+        env: isolatedEnv,
+        encoding: 'utf8',
+      }),
+    );
+    assert.equal(searchJson.length, 1);
+    assert.equal(searchJson[0].id, naturalTask.id);
+
+    // Complete & trash by 1-based number ("ag ok 1" / "ag rm 1"), then restore via "ag geri"!
+    const okByNum = JSON.parse(
+      execFileSync(process.execPath, [cliScript, 'ok', '1', '-j'], {
+        env: isolatedEnv,
+        encoding: 'utf8',
+      }),
+    );
+    assert.equal(okByNum.completed, true);
+
+    const rmByKeyword = JSON.parse(
+      execFileSync(process.execPath, [cliScript, 'rm', 'Raporu', '-j'], {
+        env: isolatedEnv,
+        encoding: 'utf8',
+      }),
+    );
+    assert.equal(rmByKeyword.movedToTrash, true);
+
+    const undoText = execFileSync(process.execPath, [cliScript, 'geri'], {
+      env: { ...isolatedEnv, AGENDAMEA_CLI_LANG: 'tr' },
+      encoding: 'utf8',
+    });
+    assert.ok(undoText.includes('geri yüklendi'), 'ag geri must restore last trashed task in Turkish');
+
+    // Short ok & rm commands by ID prefix still work cleanly
+    const okOut = JSON.parse(
+      execFileSync(process.execPath, [cliScript, 'ok', addedTask.id.slice(0, 12), '-j'], {
+        env: isolatedEnv,
+        encoding: 'utf8',
+      }),
+    );
+    assert.equal(okOut.completed, true);
+
+    const rmOut = JSON.parse(
+      execFileSync(process.execPath, [cliScript, 'rm', addedTask.id.slice(0, 12), '-j'], {
+        env: isolatedEnv,
+        encoding: 'utf8',
+      }),
+    );
+    assert.equal(rmOut.movedToTrash, true);
+
+    // 3. Real Bi-Directional Webhooks (Outgoing HMAC-SHA256 + Test Endpoint + Incoming Trigger)
+    const receivedHooks: Array<{
+      event: string;
+      sig: string;
+      rawBody: string;
+      parsed: Record<string, unknown>;
+    }> = [];
+    const hookReceiver = httpMod.createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c: Buffer) => chunks.push(c));
+      req.on('end', () => {
+        const rawBody = Buffer.concat(chunks).toString('utf8');
+        receivedHooks.push({
+          event: String(req.headers['x-agendamea-event'] ?? ''),
+          sig: String(req.headers['x-agendamea-signature'] ?? ''),
+          rawBody,
+          parsed: JSON.parse(rawBody),
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ received: true }));
+      });
+    });
+
+    await new Promise<void>((resolve) => hookReceiver.listen(0, '127.0.0.1', () => resolve()));
+    const hookPort = (hookReceiver.address() as { port: number }).port;
+    const hookUrl = `http://127.0.0.1:${hookPort}/hook`;
+    const hookSecret = 'top-secret-ag-key';
+
+    const appPort = await new Promise<number>((resolve, reject) => {
+      const probe = netMod.createServer();
+      probe.listen(0, '127.0.0.1', () => {
+        const addr = probe.address() as { port: number };
+        probe.close(() => resolve(addr.port));
+      });
+      probe.on('error', reject);
+    });
+    const appBase = `http://127.0.0.1:${appPort}`;
+    const webhookDataDir = path.join(tmpDir, 'webhook-srv');
+    fs.mkdirSync(webhookDataDir, { recursive: true });
+    const tsxCli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
+    const srvChild = spawn(process.execPath, [tsxCli, path.join(process.cwd(), 'server.ts')], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        HOST: '127.0.0.1',
+        PORT: String(appPort),
+        AGENDAMEA_DATA_DIR: webhookDataDir,
+      },
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+
+    let serverReady = false;
+    for (let i = 0; i < 40; i += 1) {
+      try {
+        const health = await fetch(`${appBase}/api/health`);
+        if (health.ok) {
+          serverReady = true;
+          break;
+        }
+      } catch {
+        // Wait for startup
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    assert.equal(serverReady, true, 'Isolated Express server must start cleanly');
+
+    try {
+      // Save webhook config
+      const setRes = await fetch(`${appBase}/api/settings`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webhookEnabled: true,
+          webhookUrl: hookUrl,
+          webhookSecret: hookSecret,
+        }),
+      });
+      assert.equal(setRes.status, 200);
+      const savedSettings = await setRes.json();
+      assert.equal(savedSettings.webhookEnabled, true);
+      assert.equal(savedSettings.webhookUrl, hookUrl);
+
+      // Test outgoing webhook endpoint
+      const testRes = await fetch(`${appBase}/api/webhooks/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const testJson = await testRes.json();
+      assert.equal(testJson.ok, true);
+      assert.equal(testJson.statusCode, 200);
+      assert.equal(receivedHooks.length, 1);
+      assert.equal(receivedHooks[0].event, 'webhook.test');
+      const expectedSig = `sha256=${cryptoMod.createHmac('sha256', hookSecret).update(receivedHooks[0].rawBody).digest('hex')}`;
+      assert.equal(receivedHooks[0].sig, expectedSig);
+      assert.ok(String(receivedHooks[0].parsed.content).includes('Agendamea'));
+
+      // Incoming webhook without secret must reject 401
+      const badIncoming = await fetch(`${appBase}/api/webhook/incoming`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Yetkisiz' }),
+      });
+      assert.equal(badIncoming.status, 401);
+
+      // Incoming webhook with valid secret creates task & fires outgoing todo.created webhook
+      const goodIncoming = await fetch(`${appBase}/api/webhook/incoming`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Agendamea-Secret': hookSecret,
+        },
+        body: JSON.stringify({ action: 'add', title: 'Webhook Gorevi', priority: 'high' }),
+      });
+      assert.equal(goodIncoming.status, 201);
+      const createdHookResp = await goodIncoming.json();
+      assert.equal(createdHookResp.ok, true);
+      assert.equal(createdHookResp.todo.title, 'Webhook Gorevi');
+
+      // Wait briefly for fire-and-forget outgoing todo.created delivery
+      for (let i = 0; i < 20 && receivedHooks.length < 2; i += 1) {
+        await new Promise((r) => setTimeout(r, 30));
+      }
+      assert.ok(receivedHooks.some((h) => h.event === 'todo.created'));
+    } finally {
+      srvChild.kill();
+      await new Promise<void>((resolve) => {
+        if (srvChild.exitCode !== null) resolve();
+        else {
+          srvChild.once('exit', () => resolve());
+          setTimeout(resolve, 600);
+        }
+      });
+      hookReceiver.close();
+    }
+
+    // 4. UI Refinement Regression Checks
+    const appearanceSrc = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'components', 'settings', 'AppearanceSettingsTab.tsx'),
+      'utf8',
+    );
+    assert.ok(appearanceSrc.includes('useState(true)'), 'App icons panel must open expanded by default');
+    assert.ok(!appearanceSrc.includes('t.themesCountUnit'), '15 tema label must be removed');
+    assert.ok(appearanceSrc.includes('copy-theme-hex-btn'), 'Theme HEX copy button must exist');
+    assert.ok(appearanceSrc.includes('copy-icon-hex-btn'), 'Icon HEX copy button must exist');
+
+    const welcomeSrc = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'components', 'WelcomeModal.tsx'),
+      'utf8',
+    );
+    assert.ok(welcomeSrc.includes('welcome-selected-language'), 'Welcome Step 1 selected-language display must exist');
+    assert.ok(!welcomeSrc.includes('welcome-language-select'), 'Welcome Step 1 right-side dropdown button must be removed');
+
+    // 5. Clean Start / Reset All Data (preserves theme by default; optional full settings reset)
+    const resetDb = new TodoDatabase(path.join(tmpDir, 'reset-test.db'));
+    try {
+      resetDb.updateSettings({ themeMode: 'dark', themeId: 'purple', webhookUrl: 'https://example.com/hook', webhookEnabled: true });
+      const rCat = resetDb.createCategory({ name: 'Silinecek', color: '#2563eb' });
+      const rTodo = resetDb.createTodo({ title: 'Silinecek gorev', categoryId: rCat.id });
+      resetDb.createSubtask(rTodo.id, 'Alt gorev');
+      const rTrash = resetDb.createTodo({ title: 'Copteki gorev' });
+      resetDb.softDeleteTodo(rTrash.id);
+
+      const wipedDataOnly = resetDb.resetAllData({ resetSettings: false });
+      assert.equal(wipedDataOnly.todos.length, 0);
+      assert.equal(wipedDataOnly.categories.length, 0);
+      assert.equal(wipedDataOnly.trashedTodos.length, 0);
+      assert.equal(wipedDataOnly.settings.themeId, 'purple');
+      assert.equal(wipedDataOnly.settings.themeMode, 'dark');
+
+      const wipedAll = resetDb.resetAllData({ resetSettings: true });
+      assert.equal(wipedAll.settings.themeId, 'obsidian');
+      assert.equal(wipedAll.settings.themeMode, 'light');
+      assert.equal(wipedAll.settings.webhookEnabled ?? false, false);
+      assert.equal(wipedAll.settings.webhookUrl ?? '', '');
+    } finally {
+      resetDb.close();
+    }
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 80 });
+    } catch {
+      // Ignore transient Windows WAL handle release delay in OS temp dir
+    }
+  }
+});
+
+test('QA: 100/100 True Headless Control - Cold-Start Zero-GUI CLI, All 18 MCP Tools (Offline & Live), Reorder, Cloud Push/Pull & Offline Signed Webhooks', async () => {
+  const { execFile, execFileSync, spawn } = await import('node:child_process');
+  const cryptoMod = await import('node:crypto');
+  const httpMod = await import('node:http');
+  const netMod = await import('node:net');
+
+  const cliScript = path.join(process.cwd(), 'cli', 'agendamea.cjs');
+  const mcpScript = path.join(process.cwd(), 'mcp', 'server.cjs');
+
+  // 1. Cold-Start Zero-GUI Directory: agendamea.db does NOT exist yet!
+  const coldDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agendamea-headless-cold-'));
+  const cloudDir = path.join(coldDir, 'cloud-sync');
+  const exportFile = path.join(coldDir, 'exports', 'full-backup.json');
+  const coldEnv = {
+    ...process.env,
+    AGENDAMEA_DATA_DIR: coldDir,
+    AGENDAMEA_FORCE_OFFLINE: '1',
+    AGENDAMEA_CLI_LANG: 'tr',
+  };
+
+  // Async runner keeps in-process hookServer event loop responsive during offline webhook delivery
+  const runCli = (args: string[], envOverride: NodeJS.ProcessEnv = coldEnv) =>
+    new Promise<string>((resolve, reject) => {
+      execFile(
+        process.execPath,
+        [cliScript, ...args],
+        { env: envOverride, encoding: 'utf8', windowsHide: true },
+        (err, stdout, stderr) => {
+          if (err) {
+            reject(new Error(`CLI failed (${args.join(' ')}): ${stderr || err.message}`));
+            return;
+          }
+          resolve(stdout);
+        },
+      );
+    });
+
+  // Local webhook receiver to verify offline HMAC-SHA256 webhook delivery
+  const offlineHooks: Array<{ event: string; sig: string; rawBody: string }> = [];
+  const hookServer = httpMod.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      offlineHooks.push({
+        event: String(req.headers['x-agendamea-event'] ?? ''),
+        sig: String(req.headers['x-agendamea-signature'] ?? ''),
+        rawBody: Buffer.concat(chunks).toString('utf8'),
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"ok":true}');
+    });
+  });
+  await new Promise<void>((resolve) => hookServer.listen(0, '127.0.0.1', () => resolve()));
+  const hookPort = (hookServer.address() as { port: number }).port;
+  const hookUrl = `http://127.0.0.1:${hookPort}/offline-hook`;
+  const hookSecret = 'headless-offline-secret';
+
+  try {
+    // 1A. Cold-start creates schema automatically on first command without GUI!
+    const initStat = JSON.parse(await runCli(['stat', '-j']));
+    assert.equal(initStat.ok, true);
+    assert.equal(initStat.mode, 'offline-sqlite');
+    assert.equal(initStat.activeTasks, 0);
+    assert.ok(fs.existsSync(path.join(coldDir, 'agendamea.db')), 'Cold-start CLI must initialize SQLite DB automatically');
+
+    // 1B. Full Help documents all headless sections
+    const fullHelp = await runCli(['help', 'all']);
+    for (const token of ['ag bak', 'ag edit', 'ag sub', 'ag cat', 'ag cop', 'ag matris', 'ag sync', 'ag config', 'ag reset', 'ag move']) {
+      assert.ok(fullHelp.includes(token), `ag help all must include "${token}"`);
+    }
+
+    // 1C. Offline Webhook Configuration & Live Test + Event Dispatch
+    await runCli(['hook', 'set', hookUrl, hookSecret]);
+    const hookTestRes = JSON.parse(await runCli(['hook', 'test', '-j']));
+    assert.equal(hookTestRes.ok, true);
+    assert.equal(hookTestRes.statusCode, 200);
+    assert.equal(offlineHooks.length, 1);
+    assert.equal(offlineHooks[0].event, 'webhook.test');
+    const expectedTestSig = `sha256=${cryptoMod.createHmac('sha256', hookSecret).update(offlineHooks[0].rawBody).digest('hex')}`;
+    assert.equal(offlineHooks[0].sig, expectedTestSig);
+
+    // 1D. Categories CRUD & Reorder
+    const catWork = JSON.parse(await runCli(['cat', '+', 'Proje', '#7c3aed', '-j']));
+    const catHome = JSON.parse(await runCli(['cat', '+', 'Kisisel', '--color', '#16a34a', '-j']));
+    assert.equal(catWork.name, 'Proje');
+    assert.equal(catWork.color, '#7c3aed');
+    const catRenamed = JSON.parse(await runCli(['cat', 'edit', 'Proje', '--name', 'Urun', '--color', '#2563eb', '-j']));
+    assert.equal(catRenamed.name, 'Urun');
+    assert.equal(catRenamed.color, '#2563eb');
+    const catMoved = JSON.parse(await runCli(['cat', 'move', 'Kisisel', '1', '-j']));
+    assert.equal(catMoved.position, 1);
+    const catsListed = JSON.parse(await runCli(['cat', '-j']));
+    assert.equal(catsListed[0].id, catHome.id);
+
+    // 1E. Rich Natural Task Creation (@start..due, HH:mm, !, *, ^, #tag, /Category, --note, --sub) + Offline Webhook Fired
+    const richTask = JSON.parse(
+      await runCli([
+        '+', 'Lansman', 'plani',
+        '@2026-11-20..2026-11-25', '14:30', '!', '*', '^', '#store', '/Urun',
+        '--note', 'Tum paketler hazirlanacak',
+        '--sub', 'MSIX dogrula',
+        '--sub', 'SHA256 kontrol',
+        '-j',
+      ]),
+    );
+    assert.equal(richTask.title, 'Lansman plani');
+    assert.equal(richTask.startDate, '2026-11-20');
+    assert.equal(richTask.dueDate, '2026-11-25');
+    assert.equal(richTask.dueTime, '14:30');
+    assert.equal(richTask.priority, 'high');
+    assert.equal(richTask.important, true);
+    assert.equal(richTask.pinned, true);
+    assert.deepEqual(richTask.tags, ['store']);
+    assert.equal(richTask.categoryId, catWork.id);
+    assert.equal(richTask.notes, 'Tum paketler hazirlanacak');
+    assert.equal(richTask.subtasks.length, 2);
+    assert.ok(offlineHooks.some((h) => h.event === 'todo.created'), 'Offline CLI add must dispatch configured webhook');
+
+    // Second task for reorder, sort, search with --from/--to, and matrix
+    const secondTask = JSON.parse(await runCli(['+', 'Fatura', 'odeme', '@bugun', '#finans', '/Kisisel', '-j']));
+    assert.equal(secondTask.categoryId, catHome.id);
+
+    // 1F. Task Detail (ag bak), Edit (ag edit), Pin (ag pin), Reorder (ag move)
+    const detail = JSON.parse(await runCli(['bak', 'Lansman', '-j']));
+    assert.equal(detail.categoryName, 'Urun');
+    assert.equal(detail.subtasks.length, 2);
+
+    const edited = JSON.parse(await runCli(['edit', 'Lansman', '--time', '16:45', '--note', 'Guncel not', '-j']));
+    assert.equal(edited.dueTime, '16:45');
+    assert.equal(edited.notes, 'Guncel not');
+
+    const unpinned = JSON.parse(await runCli(['pin', 'Lansman', '-j']));
+    assert.equal(unpinned.pinned, false);
+
+    // Move Fatura to #1
+    const movedTask = JSON.parse(await runCli(['move', 'Fatura', '1', '-j']));
+    assert.equal(movedTask.position, 1);
+    const activeAfterMove = JSON.parse(await runCli(['-j']));
+    assert.equal(activeAfterMove[0].id, secondTask.id);
+
+    // Search with --from & --to must NOT treat dates as query words!
+    const rangedSearch = JSON.parse(await runCli(['ara', 'MSIX', '--from', '2026-11-18', '--to', '2026-11-22', '-j']));
+    assert.equal(rangedSearch.length, 1);
+    assert.equal(rangedSearch[0].id, richTask.id);
+
+    // 1G. Subtasks CRUD (add, toggle, edit/rename, delete)
+    const subAdded = JSON.parse(await runCli(['sub', 'Lansman', '+', 'Son kontrol', '-j']));
+    assert.equal(subAdded.title, 'Son kontrol');
+    const subToggled = JSON.parse(await runCli(['sub', 'Lansman', 'ok', '1', '-j']));
+    assert.equal(subToggled.completed, true);
+    const subRenamed = JSON.parse(await runCli(['sub', 'Lansman', 'edit', '3', 'Final kontrol', '-j']));
+    assert.equal(subRenamed.title, 'Final kontrol');
+    const subDeleted = JSON.parse(await runCli(['sub', 'Lansman', 'rm', 'Final', '-j']));
+    assert.equal(subDeleted.ok, true);
+
+    // 1H. Eisenhower Matrix
+    const matrix = JSON.parse(await runCli(['matris', '-j']));
+    assert.ok(matrix.q2.some((t: { id: string }) => t.id === richTask.id) || matrix.q1.some((t: { id: string }) => t.id === richTask.id));
+    assert.ok(matrix.q3.some((t: { id: string }) => t.id === secondTask.id));
+
+    // 1I. Cloud Sync Connect, Push, Reset, Pull Restore (Zero-GUI Recovery!)
+    const cloudConnected = JSON.parse(await runCli(['sync', 'set', cloudDir, '-j']));
+    assert.equal(cloudConnected.connected, true);
+    const cloudPushed = JSON.parse(await runCli(['sync', '-j']));
+    assert.equal(cloudPushed.ok, true);
+    assert.ok(fs.existsSync(path.join(cloudDir, 'agendamea-onedrive-sync.json')));
+
+    // Export JSON Backup
+    const exportInfo = JSON.parse(await runCli(['export', exportFile, '-j']));
+    assert.equal(exportInfo.ok, true);
+    assert.equal(exportInfo.todos, 2);
+
+    // Complete & Clear Completed + Trash Management (list, restore, permanent delete, empty)
+    await runCli(['ok', 'Fatura', '-j']);
+    const cleared = JSON.parse(await runCli(['temizle', '-j']));
+    assert.equal(cleared.clearedCount, 1);
+    const trashView = JSON.parse(await runCli(['cop', '-q', 'Fatura', '-j']));
+    assert.equal(trashView.todos.length, 1);
+    await runCli(['geri', 'Fatura']);
+    const trashAfterRestore = JSON.parse(await runCli(['cop', '-j']));
+    assert.equal(trashAfterRestore.todos.length, 0);
+    await runCli(['rm', 'Fatura', '-j']);
+    const permDel = JSON.parse(await runCli(['cop', 'sil', 'Fatura', '-j']));
+    assert.equal(permDel.ok, true);
+    await runCli(['cat', 'rm', 'Kisisel', '-j']);
+    const emptied = JSON.parse(await runCli(['cop', 'bosalt', '--yes', '-j']));
+    assert.equal(emptied.ok, true);
+    assert.equal(emptied.deletedCategories, 1);
+
+    // Config inspect & update + Clean Reset + Cloud Pull Restore + JSON Import
+    const cfgDark = JSON.parse(await runCli(['config', 'themeMode', 'dark', '-j']));
+    assert.equal(cfgDark.themeMode, 'dark');
+    assert.equal((await runCli(['config', 'themeMode'])).trim(), 'dark');
+
+    // Disable webhook before reset/import noise
+    await runCli(['hook', 'off']);
+    const resetRes = JSON.parse(await runCli(['reset', '--yes', '-j']));
+    assert.equal(resetRes.todos.length, 0);
+    assert.equal(resetRes.categories.length, 0);
+
+    // Pull full state back from Cloud Folder offline!
+    const pulled = JSON.parse(await runCli(['sync', 'pull', '-j']));
+    assert.equal(pulled.ok, true);
+    assert.ok(pulled.bootstrap.todos.length >= 1, 'Cloud pull must restore tasks offline');
+
+    // Import exported backup file and verify full restoration (2 tasks, 2 categories)
+    const imported = JSON.parse(await runCli(['import', exportFile, '-j']));
+    assert.equal(imported.todos.length, 2);
+    assert.equal(imported.categories.length, 2);
+
+    // 2. ALL 18 MCP Tools Over Piped Stdio (Cold-Start Offline SQLite!)
+    const mcpOfflineDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agendamea-mcp18-offline-'));
+    const mcpCloudDir = path.join(mcpOfflineDir, 'cloud');
+    const mcpExportPath = path.join(mcpOfflineDir, 'mcp-backup.json');
+    const mcpEnv = {
+      ...process.env,
+      AGENDAMEA_DATA_DIR: mcpOfflineDir,
+      AGENDAMEA_FORCE_OFFLINE: '1',
+    };
+    try {
+      const requests = [
+        { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
+        { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} },
+        { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'agendamea_status', arguments: {} } },
+        { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'agendamea_manage_category', arguments: { action: 'create', name: 'AI Proje', color: '#7c3aed', pinned: true } } },
+        { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'agendamea_list_categories', arguments: {} } },
+        { jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'agendamea_add_task', arguments: { title: 'MCP Tam Gorev', category: 'AI Proje', priority: 'high', important: true, dueDate: '2026-12-01', dueTime: '10:00', tags: ['mcp'], notes: 'Not', subtasks: ['Alt 1'] } } },
+        { jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'agendamea_get_task', arguments: { id: '1' } } },
+        { jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'agendamea_update_task', arguments: { id: '1', title: 'MCP Guncel Gorev', position: 1 } } },
+        { jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'agendamea_pin_task', arguments: { id: '1', pinned: true } } },
+        { jsonrpc: '2.0', id: 10, method: 'tools/call', params: { name: 'agendamea_manage_subtask', arguments: { action: 'add', taskId: '1', title: 'Alt 2' } } },
+        { jsonrpc: '2.0', id: 11, method: 'tools/call', params: { name: 'agendamea_manage_subtask', arguments: { action: 'update', taskId: '1', subtaskId: '2', title: 'Alt 2 Rename', completed: true } } },
+        { jsonrpc: '2.0', id: 12, method: 'tools/call', params: { name: 'agendamea_list_tasks', arguments: { filter: 'active', tag: 'mcp', sortBy: 'priority' } } },
+        { jsonrpc: '2.0', id: 13, method: 'tools/call', params: { name: 'agendamea_eisenhower_matrix', arguments: {} } },
+        { jsonrpc: '2.0', id: 14, method: 'tools/call', params: { name: 'agendamea_update_settings', arguments: { patch: { themeMode: 'dark', zoomPercent: 110 } } } },
+        { jsonrpc: '2.0', id: 15, method: 'tools/call', params: { name: 'agendamea_get_settings', arguments: {} } },
+        { jsonrpc: '2.0', id: 16, method: 'tools/call', params: { name: 'agendamea_backup_and_sync', arguments: { action: 'export', filePath: mcpExportPath } } },
+        { jsonrpc: '2.0', id: 17, method: 'tools/call', params: { name: 'agendamea_backup_and_sync', arguments: { action: 'connect_cloud', folderPath: mcpCloudDir } } },
+        { jsonrpc: '2.0', id: 18, method: 'tools/call', params: { name: 'agendamea_backup_and_sync', arguments: { action: 'cloud_status' } } },
+        { jsonrpc: '2.0', id: 19, method: 'tools/call', params: { name: 'agendamea_complete_task', arguments: { id: '1', completed: true } } },
+        { jsonrpc: '2.0', id: 20, method: 'tools/call', params: { name: 'agendamea_clear_completed', arguments: {} } },
+        { jsonrpc: '2.0', id: 21, method: 'tools/call', params: { name: 'agendamea_list_trash', arguments: { sortBy: 'newest' } } },
+        { jsonrpc: '2.0', id: 22, method: 'tools/call', params: { name: 'agendamea_manage_trash', arguments: { action: 'restore' } } },
+        { jsonrpc: '2.0', id: 23, method: 'tools/call', params: { name: 'agendamea_delete_task', arguments: { id: 'MCP Guncel' } } },
+        { jsonrpc: '2.0', id: 24, method: 'tools/call', params: { name: 'agendamea_manage_trash', arguments: { action: 'empty' } } },
+        { jsonrpc: '2.0', id: 25, method: 'tools/call', params: { name: 'agendamea_backup_and_sync', arguments: { action: 'import', filePath: mcpExportPath } } },
+      ];
+      // Send requests sequentially in batches so dependent mutations execute strictly in order!
+      const runMcpStep = (reqObj: Record<string, unknown>) => {
+        const out = execFileSync(process.execPath, [mcpScript], {
+          env: mcpEnv,
+          input: `${JSON.stringify(reqObj)}\n`,
+          encoding: 'utf8',
+        });
+        return JSON.parse(out.trim().split(/\r?\n/)[0]) as {
+          id: number;
+          result?: { isError?: boolean; tools?: Array<{ name: string }>; content?: Array<{ text: string }> };
+        };
+      };
+
+      const initRes = runMcpStep(requests[0]);
+      assert.equal(initRes.id, 1);
+      const listToolsRes = runMcpStep(requests[1]);
+      assert.equal(listToolsRes.result?.tools?.length, 20, 'MCP server must expose all 20 headless tools');
+
+      for (let i = 2; i < requests.length; i += 1) {
+        const resp = runMcpStep(requests[i]);
+        assert.notEqual(
+          resp.result?.isError,
+          true,
+          `MCP step #${requests[i].id} (${(requests[i].params as { name?: string })?.name}) failed: ${resp.result?.content?.[0]?.text}`,
+        );
+      }
+
+      // Verify restored task from final import step
+      const finalCheck = runMcpStep({
+        jsonrpc: '2.0',
+        id: 99,
+        method: 'tools/call',
+        params: { name: 'agendamea_list_tasks', arguments: { filter: 'all' } },
+      });
+      const restoredTasks = JSON.parse(finalCheck.result?.content?.[0]?.text || '[]');
+      assert.equal(restoredTasks.length, 1);
+      assert.equal(restoredTasks[0].title, 'MCP Guncel Gorev');
+      assert.equal(restoredTasks[0].subtasks.length, 2);
+      assert.equal(restoredTasks[0].subtasks[1].title, 'Alt 2 Rename');
+    } finally {
+      fs.rmSync(mcpOfflineDir, { recursive: true, force: true });
+    }
+
+    // 3. Live-API Parity Check via Ephemeral Express Server (CLI + MCP against 127.0.0.1!)
+    const livePort = await new Promise<number>((resolve, reject) => {
+      const probe = netMod.createServer();
+      probe.listen(0, '127.0.0.1', () => {
+        const addr = probe.address() as { port: number };
+        probe.close(() => resolve(addr.port));
+      });
+      probe.on('error', reject);
+    });
+    const liveDataDir = path.join(coldDir, 'live-api-dir');
+    fs.mkdirSync(liveDataDir, { recursive: true });
+    const tsxCli = path.join(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
+    const liveSrv = spawn(process.execPath, [tsxCli, path.join(process.cwd(), 'server.ts')], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        HOST: '127.0.0.1',
+        PORT: String(livePort),
+        AGENDAMEA_DATA_DIR: liveDataDir,
+      },
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+
+    let liveReady = false;
+    for (let i = 0; i < 40; i += 1) {
+      try {
+        const h = await fetch(`http://127.0.0.1:${livePort}/api/health`);
+        if (h.ok) {
+          liveReady = true;
+          break;
+        }
+      } catch {
+        // Wait
+      }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+    assert.equal(liveReady, true, 'Live Express API must boot for live CLI/MCP parity test');
+    try {
+      const liveEnv = {
+        ...process.env,
+        AGENDAMEA_DATA_DIR: liveDataDir,
+        AGENDAMEA_URL: `http://127.0.0.1:${livePort}`,
+      };
+      delete (liveEnv as Record<string, string | undefined>).AGENDAMEA_FORCE_OFFLINE;
+
+      const liveStat = JSON.parse(
+        execFileSync(process.execPath, [cliScript, 'stat', '-j'], { env: liveEnv, encoding: 'utf8' }),
+      );
+      assert.equal(liveStat.mode, 'live-api');
+
+      execFileSync(process.execPath, [cliScript, 'cat', '+', 'Canli', '#2563eb', '-j'], { env: liveEnv, encoding: 'utf8' });
+      const liveAdded = JSON.parse(
+        execFileSync(process.execPath, [cliScript, '+', 'Canli', 'Gorev', '/Canli', '--sub', 'Alt A', '-j'], {
+          env: liveEnv,
+          encoding: 'utf8',
+        }),
+      );
+      assert.equal(liveAdded.title, 'Canli Gorev');
+      assert.equal(liveAdded.subtasks.length, 1);
+
+      const liveMcpResp = JSON.parse(
+        execFileSync(process.execPath, [mcpScript], {
+          env: liveEnv,
+          input: `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'agendamea_status', arguments: {} } })}\n`,
+          encoding: 'utf8',
+        }).trim(),
+      );
+      const parsedLiveStatus = JSON.parse(liveMcpResp.result.content[0].text);
+      assert.equal(parsedLiveStatus.mode, 'live-api');
+      assert.equal(parsedLiveStatus.activeTasks, 1);
+      assert.equal(parsedLiveStatus.categories, 1);
+    } finally {
+      liveSrv.kill();
+      await new Promise<void>((resolve) => {
+        if (liveSrv.exitCode !== null) resolve();
+        else {
+          liveSrv.once('exit', () => resolve());
+          setTimeout(resolve, 600);
+        }
+      });
+    }
+
+    // 4. DocsSettingsSection exposes all 20 MCP tools + collapsible all-commands drawer
+    const docsSrc = fs.readFileSync(path.join(process.cwd(), 'src', 'components', 'DocsSettingsSection.tsx'), 'utf8');
+    assert.ok(docsSrc.includes('agendamea_backup_and_sync'), 'Docs must list backup/sync MCP tool');
+    assert.ok(docsSrc.includes('agendamea_webhook_and_server'), 'Docs must list webhook/server MCP tool');
+    assert.ok(docsSrc.includes('agendamea_views'), 'Docs must list views MCP tool');
+    assert.ok(docsSrc.includes('docs-all-commands-toggle'), 'Docs must include collapsible all-commands drawer');
+  } finally {
+    hookServer.close();
+    try {
+      fs.rmSync(coldDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 80 });
+    } catch {
+      // Ignore transient Windows WAL handle release delay in OS temp dir
+    }
+  }
+});
+
+test('QA: True 100/100 Headless Automation - Headless Webhook Daemon (ag serve), Multi-URL Retry & Logs, Full HMAC Incoming Webhooks, /reset SSE, Batch/Pipe CLI, Views, Zero-GUI Install & OS Bridge', async () => {
+  const { execFile, execFileSync } = await import('node:child_process');
+  const cryptoMod = await import('node:crypto');
+  const httpMod = await import('node:http');
+  const netMod = await import('node:net');
+
+  const cliScript = path.join(process.cwd(), 'cli', 'agendamea.cjs');
+  const mcpScript = path.join(process.cwd(), 'mcp', 'server.cjs');
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agendamea-full100-'));
+  const tmpBinDir = path.join(tmpDir, 'cli-bin');
+
+  const runCliAsync = (args: string[], env: NodeJS.ProcessEnv, stdinText?: string) =>
+    new Promise<string>((resolve, reject) => {
+      const child = execFile(
+        process.execPath,
+        [cliScript, ...args],
+        { env, encoding: 'utf8', windowsHide: true },
+        (err, stdout, stderr) => {
+          if (err) {
+            reject(new Error(`CLI failed (${args.join(' ')}): ${stderr || err.message}`));
+            return;
+          }
+          resolve(stdout);
+        },
+      );
+      if (stdinText !== undefined && child.stdin) {
+        child.stdin.write(stdinText);
+        child.stdin.end();
+      }
+    });
+
+  // 2 Webhook receivers: receiver A fails once with 503 then succeeds (tests automatic retry!), receiver B succeeds immediately (tests multi-URL!)
+  let receiverAFailsRemaining = 1;
+  const hooksA: Array<{ event: string; sig: string }> = [];
+  const hooksB: Array<{ event: string; sig: string }> = [];
+
+  const srvA = httpMod.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      if (receiverAFailsRemaining > 0) {
+        receiverAFailsRemaining -= 1;
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end('{"error":"transient"}');
+        return;
+      }
+      hooksA.push({
+        event: String(req.headers['x-agendamea-event'] ?? ''),
+        sig: String(req.headers['x-agendamea-signature'] ?? ''),
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"ok":true}');
+    });
+  });
+
+  const srvB = httpMod.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      hooksB.push({
+        event: String(req.headers['x-agendamea-event'] ?? ''),
+        sig: String(req.headers['x-agendamea-signature'] ?? ''),
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"ok":true}');
+    });
+  });
+
+  await new Promise<void>((resolve) => srvA.listen(0, '127.0.0.1', () => resolve()));
+  await new Promise<void>((resolve) => srvB.listen(0, '127.0.0.1', () => resolve()));
+  const urlA = `http://127.0.0.1:${(srvA.address() as { port: number }).port}/a`;
+  const urlB = `http://127.0.0.1:${(srvB.address() as { port: number }).port}/b`;
+  const secret = 'super-hmac-secret-100';
+
+  const daemonPort = await new Promise<number>((resolve, reject) => {
+    const p = netMod.createServer();
+    p.listen(0, '127.0.0.1', () => {
+      const addr = p.address() as { port: number };
+      p.close(() => resolve(addr.port));
+    });
+    p.on('error', reject);
+  });
+
+  const baseEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    AGENDAMEA_DATA_DIR: tmpDir,
+    AGENDAMEA_CLI_LANG: 'tr',
+  };
+  delete baseEnv.AGENDAMEA_FORCE_OFFLINE;
+  const offlineEnv: NodeJS.ProcessEnv = { ...baseEnv, AGENDAMEA_FORCE_OFFLINE: '1' };
+
+  try {
+    // 1. Zero-GUI CLI Install & Uninstall (isolated bin dir, no HKCU PATH mutation)
+    const installed = JSON.parse(await runCliAsync(['install', '--dir', tmpBinDir, '--no-path', '-j'], offlineEnv));
+    assert.equal(installed.ok, true);
+    assert.ok(fs.existsSync(path.join(tmpBinDir, 'ag.cmd')));
+    assert.ok(fs.existsSync(path.join(tmpBinDir, 'run-cli.ps1')));
+    const uninstalled = JSON.parse(await runCliAsync(['uninstall', '--dir', tmpBinDir, '--no-path', '-j'], offlineEnv));
+    assert.equal(uninstalled.ok, true);
+    assert.equal(fs.existsSync(path.join(tmpBinDir, 'ag.cmd')), false);
+
+    // 2. OS-Level Settings Bridge (window-prefs.json + dynamic .ico generated completely offline!)
+    await runCliAsync(['config', 'closeBehavior', 'tray', '-j'], offlineEnv);
+    await runCliAsync(['config', 'appIconId', 'purple', '-j'], offlineEnv);
+    const prefsFile = path.join(tmpDir, 'window-prefs.json');
+    assert.ok(fs.existsSync(prefsFile), 'Offline CLI config must sync window-prefs.json');
+    const savedPrefs = JSON.parse(fs.readFileSync(prefsFile, 'utf8'));
+    assert.equal(savedPrefs.closeBehavior, 'tray');
+    const activeIconMetaPath = path.join(tmpDir, 'active-icon.json');
+    assert.ok(fs.existsSync(activeIconMetaPath), 'Offline CLI appIconId change must write active-icon.json');
+    const activeIconMeta = JSON.parse(fs.readFileSync(activeIconMetaPath, 'utf8'));
+    assert.equal(activeIconMeta.bg, '#7c3aed');
+    assert.ok(fs.existsSync(activeIconMeta.icoPath), 'Offline CLI appIconId change must regenerate dynamic .ico');
+
+    // 3. Offline Cloud Provider Auto-Detection
+    const cloudSt = JSON.parse(await runCliAsync(['sync', 'status'], offlineEnv));
+    assert.ok(Array.isArray(cloudSt.detectedProviders) && cloudSt.detectedProviders.length === 4);
+
+    // 4. Stdin Pipe Batch Add (`ag + -`), Batch Complete (`ag ok 1 2`), Batch Delete (`ag rm 1,2`), Calendar & Kanban Views, Stdin Import (`ag import -`)
+    const pipedAdded = JSON.parse(
+      await runCliAsync(
+        ['+', '-', '-j'],
+        offlineEnv,
+        'Gorev Bir @2026-12-01 09:00 !\nGorev Iki @2026-12-02\nGorev Uc\n',
+      ),
+    );
+    assert.equal(pipedAdded.length, 3);
+
+    const calAgenda = JSON.parse(await runCliAsync(['cal', '-j'], offlineEnv));
+    assert.ok(Array.isArray(calAgenda.grouped['2026-12-01']));
+    assert.equal(calAgenda.undated.length, 1);
+
+    const kanbanBoard = JSON.parse(await runCliAsync(['kanban', 'priority', '-j'], offlineEnv));
+    assert.equal(kanbanBoard.columns.high.length, 1);
+    assert.equal(kanbanBoard.columns.normal.length, 2);
+
+    const exportedJson = await runCliAsync(['export'], offlineEnv);
+    const batchDone = JSON.parse(await runCliAsync(['ok', '1', '2', '-j'], offlineEnv));
+    assert.equal(batchDone.length, 2);
+    assert.ok(batchDone.every((t: { completed: boolean }) => t.completed === true));
+
+    // Restore from stdin pipe (`ag import -`) then test comma batch delete (`ag rm 1,2`)
+    const importedFromPipe = JSON.parse(await runCliAsync(['import', '-', '-j'], offlineEnv, exportedJson));
+    assert.equal(importedFromPipe.todos.length, 3);
+    const batchDel = JSON.parse(await runCliAsync(['rm', '1,2', '-j'], offlineEnv));
+    assert.equal(batchDel.length, 2);
+    assert.ok(batchDel.every((r: { movedToTrash: boolean }) => r.movedToTrash === true));
+
+    // 5. Multi-URL Outgoing Webhook + Auto-Retry (503 -> 200) + Event Filtering + Persistent Logs
+    await runCliAsync(['hook', 'set', `${urlA},${urlB}`, secret, '-j'], offlineEnv);
+    await runCliAsync(['hook', 'events', 'todo.created,category.created', '-j'], offlineEnv);
+
+    const multiTest = JSON.parse(await runCliAsync(['hook', 'test', '-j'], offlineEnv));
+    assert.equal(multiTest.ok, true, 'Multi-URL webhook test must retry transient 503 on receiver A and succeed on both');
+    assert.equal(multiTest.results.length, 2);
+    assert.equal(hooksA.length, 1);
+    assert.equal(hooksB.length, 1);
+
+    // Filtered-out event (todo.deleted) must NOT fire outgoing webhook, while todo.created MUST fire!
+    const createdForFilter = JSON.parse(await runCliAsync(['+', 'Filter', 'Test', '-j'], offlineEnv));
+    assert.equal(hooksA.length, 2);
+    assert.equal(hooksB.length, 2);
+    await runCliAsync(['rm', createdForFilter.id, '-j'], offlineEnv);
+    assert.equal(hooksA.length, 2, 'Filtered-out todo.deleted event must not be dispatched');
+
+    const logsBeforeClear = JSON.parse(await runCliAsync(['hook', 'logs', '-j'], offlineEnv));
+    assert.ok(logsBeforeClear.length >= 4);
+    assert.ok(logsBeforeClear.some((l: { attempts: number; ok: boolean }) => l.attempts === 2 && l.ok === true));
+
+    // 6. Start Headless API & Incoming Webhook Daemon (`ag serve start`) WITHOUT GUI!
+    const started = JSON.parse(
+      await runCliAsync(['serve', 'start', '--port', String(daemonPort), '-j'], baseEnv),
+    );
+    assert.equal(started.ok, true);
+    assert.equal(started.running, true);
+    assert.equal(started.headless, true);
+    assert.equal(started.port, daemonPort);
+
+    const daemonStatus = JSON.parse(await runCliAsync(['serve', 'status', '-j'], baseEnv));
+    assert.equal(daemonStatus.running, true);
+    assert.equal(daemonStatus.headless, true);
+
+    const sendSignedIncoming = async (payload: Record<string, unknown>) => {
+      const raw = JSON.stringify(payload);
+      const sig = `sha256=${cryptoMod.createHmac('sha256', secret).update(raw).digest('hex')}`;
+      const r = await fetch(started.incomingWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Agendamea-Signature': sig,
+        },
+        body: raw,
+      });
+      return { status: r.status, body: await r.json() };
+    };
+
+    // 6A. Full Incoming Webhook Actions Authenticated via HMAC-SHA256 Signature!
+    const incCat = await sendSignedIncoming({ action: 'category.create', name: 'Otomasyon', color: '#7c3aed' });
+    assert.equal(incCat.status, 201);
+    const incAdd = await sendSignedIncoming({
+      action: 'add',
+      title: 'n8n Gorevi',
+      category: 'Otomasyon',
+      startDate: '2026-12-10',
+      dueDate: '2026-12-12',
+      dueTime: '11:30',
+      pinned: true,
+      subtasks: ['Adim A'],
+    });
+    assert.equal(incAdd.status, 201);
+    assert.equal(incAdd.body.todo.pinned, true);
+    assert.equal(incAdd.body.todo.subtasks.length, 1);
+
+    const incUpd = await sendSignedIncoming({ action: 'update', id: 'n8n Gorevi', notes: 'HMAC guncel' });
+    assert.equal(incUpd.status, 200);
+    assert.equal(incUpd.body.todo.notes, 'HMAC guncel');
+
+    const incSubAdd = await sendSignedIncoming({ action: 'subtask.add', taskId: 'n8n Gorevi', title: 'Adim B' });
+    assert.equal(incSubAdd.status, 201);
+    const incSubToggle = await sendSignedIncoming({ action: 'subtask.toggle', taskId: 'n8n Gorevi', subtaskId: 'Adim B' });
+    assert.equal(incSubToggle.status, 200);
+    assert.equal(incSubToggle.body.subtask.completed, true);
+    const incSubDel = await sendSignedIncoming({ action: 'subtask.delete', taskId: 'n8n Gorevi', subtaskId: 'Adim B' });
+    assert.equal(incSubDel.status, 200);
+
+    const incDel = await sendSignedIncoming({ action: 'delete', id: 'n8n Gorevi' });
+    assert.equal(incDel.status, 200);
+    const incRestore = await sendSignedIncoming({ action: 'restore', id: 'n8n Gorevi' });
+    assert.equal(incRestore.status, 200);
+    assert.equal(incRestore.body.kind, 'todo');
+
+    // 6B. Verify SSE Stream Receives Live Change Event on POST /api/reset!
+    let sseReceivedReset = false;
+    const sseReq = httpMod.get(`${started.url}/api/events`, (sseRes) => {
+      sseRes.on('data', (chunk: Buffer) => {
+        if (chunk.toString('utf8').includes('/reset')) {
+          sseReceivedReset = true;
+        }
+      });
+    });
+    await new Promise((r) => setTimeout(r, 150));
+    await fetch(`${started.url}/api/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resetSettings: false }),
+    });
+    for (let i = 0; i < 20 && !sseReceivedReset; i += 1) {
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    sseReq.destroy();
+    assert.equal(sseReceivedReset, true, 'POST /api/reset must broadcast SSE refresh event to open UI');
+
+    // 6C. Verify MCP Tools #19 (agendamea_views) & #20 (agendamea_webhook_and_server) Against Live Headless Daemon!
+    const callMcp = (name: string, args: Record<string, unknown>) => {
+      const out = execFileSync(process.execPath, [mcpScript], {
+        env: baseEnv,
+        input: `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } })}\n`,
+        encoding: 'utf8',
+      });
+      const parsed = JSON.parse(out.trim().split(/\r?\n/)[0]);
+      assert.notEqual(parsed.result?.isError, true, `MCP ${name} failed: ${parsed.result?.content?.[0]?.text}`);
+      return JSON.parse(parsed.result.content[0].text);
+    };
+
+    const mcpLogs = callMcp('agendamea_webhook_and_server', { action: 'webhook_logs', limit: 30 });
+    assert.ok(mcpLogs.some((l: { direction: string }) => l.direction === 'incoming'), 'Incoming webhook calls must be logged');
+    const mcpSrvStatus = callMcp('agendamea_webhook_and_server', { action: 'server_status' });
+    assert.equal(mcpSrvStatus.running, true);
+    const mcpCal = callMcp('agendamea_views', { view: 'calendar' });
+    assert.ok(mcpCal && typeof mcpCal.grouped === 'object');
+    const mcpKanban = callMcp('agendamea_views', { view: 'kanban', groupBy: 'status' });
+    assert.equal(mcpKanban.groupBy, 'status');
+
+    // 6D. Stop Headless Daemon Cleanly via `ag serve stop`!
+    const stopped = JSON.parse(await runCliAsync(['serve', 'stop', '-j'], baseEnv));
+    assert.equal(stopped.ok, true);
+    assert.equal(stopped.stopped, true);
+    const afterStop = JSON.parse(await runCliAsync(['serve', 'status', '-j'], baseEnv));
+    assert.equal(afterStop.running, false);
+  } finally {
+    try {
+      await runCliAsync(['serve', 'stop', '-j'], baseEnv);
+    } catch {
+      // Ignore if already stopped
+    }
+    srvA.close();
+    srvB.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 

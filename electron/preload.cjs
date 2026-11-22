@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
   setGlobalQuickAddShortcut: (enabled) =>
     ipcRenderer.invoke('shortcut:set-global-quick-add', Boolean(enabled)),
   getDiagnostics: () => ipcRenderer.invoke('app:get-diagnostics'),
+  installCliShims: () => ipcRenderer.invoke('cli:install-shims'),
+  openCliTerminal: () => ipcRenderer.invoke('cli:open-terminal'),
   updateTrayLabels: (labels) => ipcRenderer.invoke('tray:update-labels', labels),
   applyAppIcon: (payload) => ipcRenderer.invoke('icon:apply', payload),
   setZoomFactor: (factor) => ipcRenderer.invoke('window:set-zoom', factor),

@@ -22,6 +22,7 @@ const {
   updateWindowsShortcuts,
 } = require('./iconGenerator.cjs');
 const { compareSemver, parseGitHubRelease } = require('../shared/releaseUtils.cjs');
+const cliInstaller = require('../shared/cliInstaller.cjs');
 
 // Windows 11 Taskbar & Jump List AppUserModelID (matches electron-builder appId)
 if (process.platform === 'win32') {
@@ -870,6 +871,71 @@ ipcMain.handle('shortcut:set-global-quick-add', (_event, enabled) => {
   return { ok: true, globalQuickAddShortcut: activeGlobalQuickAdd };
 });
 
+function getCliBinDir() {
+  return cliInstaller.getCliBinDir();
+}
+
+function isCliShimsInstalled() {
+  return cliInstaller.isCliShimsInstalled();
+}
+
+function writeCliShimFiles() {
+  return cliInstaller.writeCliShimFiles({
+    runtimeRoot: resolveRuntimeRoot(),
+    execPath: process.execPath,
+  });
+}
+
+function syncExistingCliShimsOnStartup() {
+  if (process.platform !== 'win32') return;
+  try {
+    const binDir = getCliBinDir();
+    if (
+      fs.existsSync(path.join(binDir, 'ag.cmd')) ||
+      fs.existsSync(path.join(binDir, 'agendamea.cmd'))
+    ) {
+      writeCliShimFiles();
+    }
+  } catch {
+    // Ignore non-critical startup shim refresh failure
+  }
+}
+
+async function installCliShims() {
+  return cliInstaller.installCliShims({
+    runtimeRoot: resolveRuntimeRoot(),
+    execPath: process.execPath,
+  });
+}
+
+ipcMain.handle('cli:install-shims', async () => {
+  try {
+    return await installCliShims();
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'CLI install failed' };
+  }
+});
+
+ipcMain.handle('cli:open-terminal', async () => {
+  if (process.platform !== 'win32') {
+    return { ok: false, error: 'Only supported on Windows' };
+  }
+  try {
+    const binDir = writeCliShimFiles();
+    const escapedBin = binDir.replace(/'/g, "''");
+    const initCmd = `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $env:Path='${escapedBin};'+$env:Path; ag stat; Write-Host ''; ag`;
+    const child = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-NoExit', '-Command', initCmd],
+      { detached: true, stdio: 'ignore' },
+    );
+    child.unref();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Terminal launch failed' };
+  }
+});
+
 ipcMain.handle('app:get-diagnostics', () => {
   const runtimeRoot = resolveRuntimeRoot();
   const cliPath = path.join(runtimeRoot, 'cli', 'agendamea.cjs');
@@ -887,6 +953,8 @@ ipcMain.handle('app:get-diagnostics', () => {
     execPath: process.execPath,
     cliPath,
     mcpPath,
+    cliBinDir: getCliBinDir(),
+    cliInstalled: isCliShimsInstalled(),
     runtimePort: activePort,
     userDataDir: app.getPath('userData'),
   };
@@ -1369,6 +1437,7 @@ app
     activeGlobalQuickAdd = prefs.globalQuickAdd;
     syncGlobalQuickAddShortcut(activeGlobalQuickAdd);
     rebuildWindowsJumpList();
+    syncExistingCliShimsOnStartup();
 
     // Deny unexpected browser permission prompts (camera, microphone, geolocation, notifications)
     session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {

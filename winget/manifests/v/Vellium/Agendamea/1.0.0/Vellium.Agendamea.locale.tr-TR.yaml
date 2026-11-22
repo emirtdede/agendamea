@@ -13,6 +13,6 @@ License: MIT
 LicenseUrl: https://github.com/emirtdede/agendamea/blob/main/LICENSE
 Copyright: Copyright (c) 2026 Vellium (vellium.dev)
 ShortDescription: Windows 10/11 icin internetsiz calisan, sade ve hizli gunluk gorev yoneticisi.
-Description: Agendamea; yerel SQLite WAL veritabani, 4 farkli gorunum (Liste, Kanban, Takvim, Eisenhower Matrisi), sunucusuz bulut klasor esitlemesi (OneDrive, Google Drive, Dropbox), ozel HEX temalari, dinamik sistem ikonlari ve 73 dil destegi sunan hizli Windows gorev yoneticisidir.
+Description: Agendamea; yerel SQLite WAL veritabani, 4 farkli gorunum (Liste, Kanban, Takvim, Eisenhower Matrisi), 20 aracli yerlesik MCP sunucusu, kisa terminal CLI (ag), cift yonlu webhook otomasyonu, sunucusuz coklu bulut klasor esitlemesi (OneDrive, Google Drive, iCloud, Dropbox), ozel HEX temalari, dinamik sistem ikonlari ve 73 dil destegi sunan hizli Windows gorev yoneticisidir.
 ManifestType: locale
 ManifestVersion: 1.6.0

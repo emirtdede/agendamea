@@ -9,6 +9,7 @@ import React, {
 import {
   Calendar as CalendarIcon,
   CheckCheck,
+  ChevronDown,
   Cloud,
   Columns3,
   FolderOpen,
@@ -133,9 +134,15 @@ export default function App() {
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('manual');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchDateFrom, setSearchDateFrom] = useState('');
+  const [searchDateTo, setSearchDateTo] = useState('');
+  const [isDateFilterOpen, setIsDateFilterOpen] = useState(false);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [webhookEnabled, setWebhookEnabled] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
 
   const {
     undoToast,
@@ -229,6 +236,9 @@ export default function App() {
       setAutoUpdateCheck(
         data.settings.autoUpdateCheck === undefined ? true : Boolean(data.settings.autoUpdateCheck),
       );
+      setWebhookEnabled(Boolean(data.settings.webhookEnabled));
+      setWebhookUrl(data.settings.webhookUrl ?? '');
+      setWebhookSecret(data.settings.webhookSecret ?? '');
       await syncFromBootstrapSettings(data.settings);
       setLoadError(null);
 
@@ -300,6 +310,29 @@ export default function App() {
     void loadData(false);
   }, [loadData]);
 
+  // Live refresh whenever external CLI, MCP server, or Incoming Webhook mutates tasks
+  useEffect(() => {
+    if (typeof EventSource === 'undefined') return;
+    let source: EventSource | null = null;
+    let refreshTimer: number | null = null;
+    try {
+      source = new EventSource('/api/events');
+      source.onmessage = () => {
+        if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+        refreshTimer = window.setTimeout(() => {
+          refreshTimer = null;
+          void loadData(true);
+        }, 120);
+      };
+    } catch {
+      // Ignore SSE errors in unsupported environments
+    }
+    return () => {
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      source?.close();
+    };
+  }, [loadData]);
+
   // Handle Windows Jump List / PWA shortcut launch query params (?view=... & ?action=new)
   useEffect(() => {
     try {
@@ -347,6 +380,8 @@ export default function App() {
     isMobileSidebarOpen,
     selectedTodoId,
     searchQuery,
+    searchDateFrom,
+    searchDateTo,
     tagFilter,
     focusSidebarSearch,
     zoomPercent,
@@ -358,6 +393,8 @@ export default function App() {
     isMobileSidebarOpen,
     selectedTodoId,
     searchQuery,
+    searchDateFrom,
+    searchDateTo,
     tagFilter,
     focusSidebarSearch,
     zoomPercent,
@@ -415,8 +452,11 @@ export default function App() {
           setIsMobileSidebarOpen(false);
         } else if (state.selectedTodoId) {
           setSelectedTodoId(null);
-        } else if (state.searchQuery) {
+        } else if (state.searchQuery || state.searchDateFrom || state.searchDateTo) {
           setSearchQuery('');
+          setSearchDateFrom('');
+          setSearchDateTo('');
+          setIsDateFilterOpen(false);
         } else if (state.tagFilter) {
           setTagFilter(null);
         }
@@ -972,6 +1012,9 @@ export default function App() {
           ? true
           : Boolean(restored.settings.autoUpdateCheck),
       );
+      setWebhookEnabled(Boolean(restored.settings.webhookEnabled));
+      setWebhookUrl(restored.settings.webhookUrl ?? '');
+      setWebhookSecret(restored.settings.webhookSecret ?? '');
       setSelectedTodoId(null);
       setTagFilter(null);
       setSearchQuery('');
@@ -989,6 +1032,46 @@ export default function App() {
       handleApplyRestoredBootstrap(restored);
     },
     [handleApplyRestoredBootstrap],
+  );
+
+  const handleResetAllData = useCallback(
+    async (resetSettings: boolean) => {
+      const fresh = await api.resetAllData({ resetSettings });
+      setSearchQuery('');
+      setSearchDateFrom('');
+      setSearchDateTo('');
+      setIsDateFilterOpen(false);
+      setTagFilter(null);
+      setActiveView({ type: 'smart', id: 'all' });
+      setOneDrivePrompt(null);
+      clearUndoToast();
+      todoUpdateSeqRef.current.clear();
+      categoryUpdateSeqRef.current.clear();
+      setCategories(fresh.categories);
+      setTodos(fresh.todos);
+      setTrashedCategories(fresh.trashedCategories);
+      setTrashedTodos(fresh.trashedTodos);
+      setSelectedTodoId(null);
+      if (resetSettings) {
+        try {
+          localStorage.removeItem('agendamea-theme-mode');
+          localStorage.removeItem('agendamea-theme-id');
+          localStorage.removeItem('agendamea-custom-theme-color');
+          localStorage.removeItem('agendamea-zoom-percent');
+          localStorage.removeItem('agendamea-high-contrast');
+          localStorage.removeItem('agendamea-reduced-motion');
+        } catch {
+          // Ignore storage errors
+        }
+        applyRestoredSettings(fresh.settings);
+        setDragLocked(Boolean(fresh.settings.dragLocked));
+        setWebhookEnabled(false);
+        setWebhookUrl('');
+        setWebhookSecret('');
+      }
+      showInfoToast(tRef.current.resetDataDoneToast, 'info');
+    },
+    [clearUndoToast, applyRestoredSettings, showInfoToast, tRef],
   );
 
   const handleAddSubtask = useCallback(
@@ -1087,9 +1170,25 @@ export default function App() {
         sortBy,
         todayStr,
         tagFilter,
+        dateFrom: searchDateFrom,
+        dateTo: searchDateTo,
       }),
-    [todos, activeView, statusFilter, deferredSearchQuery, sortBy, todayStr, tagFilter],
+    [
+      todos,
+      activeView,
+      statusFilter,
+      deferredSearchQuery,
+      sortBy,
+      todayStr,
+      tagFilter,
+      searchDateFrom,
+      searchDateTo,
+    ],
   );
+
+  const hasDateRangeFilter = Boolean(searchDateFrom || searchDateTo);
+  const showDateRangeBar =
+    searchQuery.trim().length > 0 || isDateFilterOpen || hasDateRangeFilter;
 
   const { activeCountInView, completedCountInView } = useMemo(() => {
     let completed = 0;
@@ -1109,7 +1208,11 @@ export default function App() {
 
   const isCompletedView = activeView.type === 'smart' && activeView.id === 'completed';
   const canDragTodos =
-    !dragLocked && !deferredSearchQuery.trim() && !tagFilter && visibleTodos.length > 1;
+    !dragLocked &&
+    !deferredSearchQuery.trim() &&
+    !tagFilter &&
+    !hasDateRangeFilter &&
+    visibleTodos.length > 1;
 
   const {
     draggedTodoId,
@@ -1272,6 +1375,23 @@ export default function App() {
     setIsWelcomeOpen(true);
   }, []);
 
+  const handleSaveWebhook = useCallback(
+    async (patch: { webhookEnabled: boolean; webhookUrl: string; webhookSecret: string }) => {
+      setWebhookEnabled(patch.webhookEnabled);
+      setWebhookUrl(patch.webhookUrl);
+      setWebhookSecret(patch.webhookSecret);
+      try {
+        const updated = await api.updateSettings(patch);
+        setWebhookEnabled(Boolean(updated.webhookEnabled));
+        setWebhookUrl(updated.webhookUrl ?? '');
+        setWebhookSecret(updated.webhookSecret ?? '');
+      } catch (err) {
+        showInfoToast(formatUiError(err), 'error');
+      }
+    },
+    [showInfoToast, formatUiError],
+  );
+
   const handleCloseMobileSidebar = useCallback(() => {
     setIsMobileSidebarOpen(false);
   }, []);
@@ -1413,6 +1533,7 @@ export default function App() {
               onClearAllCompleted={handleClearAllCompleted}
               onImportBackup={handleImportBackup}
               onApplyRestoredBootstrap={handleApplyRestoredBootstrap}
+              onResetAllData={handleResetAllData}
               trashedCategories={trashedCategories}
               trashedTodos={trashedTodos}
               onRestoreTodo={handleRestoreTodo}
@@ -1421,6 +1542,10 @@ export default function App() {
               onPermanentDeleteCategory={handlePermanentDeleteCategory}
               onEmptyTrash={handleEmptyTrash}
               onOpenWelcomeGuide={handleOpenWelcomeGuide}
+              webhookEnabled={webhookEnabled}
+              webhookUrl={webhookUrl}
+              webhookSecret={webhookSecret}
+              onSaveWebhook={handleSaveWebhook}
             />
           ) : (
           <main className="flex-1 overflow-y-auto px-4 pt-11 pb-8 sm:px-8 sm:pt-10">
@@ -1583,23 +1708,112 @@ export default function App() {
                     </button>
                   )}
 
-                  <label className="inline-flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-                    <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-                    <span className="sr-only">{t.sortCustom}</span>
+                  <button
+                    type="button"
+                    data-testid="tasks-date-range-toggle"
+                    aria-pressed={showDateRangeBar}
+                    onClick={() => setIsDateFilterOpen((prev) => !prev)}
+                    title={t.taskDateRangeFilterButton}
+                    className={`inline-flex h-[30px] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                      hasDateRangeFilter || isDateFilterOpen
+                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                    <span className="hidden sm:inline">{t.taskDateRangeFilterButton}</span>
+                  </button>
+
+                  <div className="relative inline-flex items-center">
+                    <SlidersHorizontal
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]"
+                    />
                     <select
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value as SortOption)}
                       aria-label={t.sortCustom}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none cursor-pointer"
+                      className="h-[30px] appearance-none rounded-lg border border-[var(--border)] bg-[var(--surface)] pl-8 pr-7 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors focus:border-[var(--border-strong)] focus:outline-none cursor-pointer"
                     >
                       <option value="manual">{t.sortCustom}</option>
                       <option value="priority">{t.sortPriority}</option>
                       <option value="dueDate">{t.sortDueDate}</option>
                       <option value="newest">{t.sortNewest}</option>
                     </select>
-                  </label>
+                    <ChevronDown
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-[var(--text-muted)]"
+                    />
+                  </div>
                 </div>
               </div>
+
+              {/* Search / All-Tasks Date Range Filter Bar */}
+              {showDateRangeBar && (
+                <div
+                  data-testid="tasks-date-range-bar"
+                  className="animate-tab-enter flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)]">
+                      <CalendarIcon className="h-3.5 w-3.5 text-[var(--accent)]" />
+                      <span>{t.taskDateRangeFilterButton}</span>
+                    </span>
+                    <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+                      <span>{t.trashDateFrom}</span>
+                      <input
+                        type="date"
+                        data-testid="tasks-date-from"
+                        value={searchDateFrom}
+                        onChange={(e) => setSearchDateFrom(e.target.value)}
+                        aria-label={t.trashDateFrom}
+                        className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 font-mono-tabular text-[11px] text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                      />
+                    </label>
+                    <label className="inline-flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+                      <span>{t.trashDateTo}</span>
+                      <input
+                        type="date"
+                        data-testid="tasks-date-to"
+                        value={searchDateTo}
+                        onChange={(e) => setSearchDateTo(e.target.value)}
+                        aria-label={t.trashDateTo}
+                        className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 font-mono-tabular text-[11px] text-[var(--text-primary)] focus:border-[var(--accent)] focus:outline-none"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {hasDateRangeFilter && (
+                      <button
+                        type="button"
+                        data-testid="tasks-date-clear"
+                        onClick={() => {
+                          setSearchDateFrom('');
+                          setSearchDateTo('');
+                        }}
+                        className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-[11px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
+                      >
+                        {t.zoomResetButton}
+                      </button>
+                    )}
+                    {!searchQuery.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsDateFilterOpen(false);
+                          setSearchDateFrom('');
+                          setSearchDateTo('');
+                        }}
+                        aria-label={t.closeMenu}
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* First-Launch OneDrive Cloud Backup Recovery Prompt */}
               {oneDrivePrompt && (
@@ -1846,24 +2060,27 @@ export default function App() {
                     <CheckCheck className="h-5 w-5" />
                   </div>
                   <h2 className="font-display text-base font-semibold text-[var(--text-primary)]">
-                    {searchQuery.trim() || tagFilter
+                    {searchQuery.trim() || tagFilter || hasDateRangeFilter
                       ? t.emptySearchTitle
                       : isCompletedView
                         ? t.emptyCompletedTitle
                         : t.emptyListTitle}
                   </h2>
                   <p className="mt-1 max-w-sm text-sm text-[var(--text-muted)]">
-                    {searchQuery.trim() || tagFilter
+                    {searchQuery.trim() || tagFilter || hasDateRangeFilter
                       ? t.emptySearchDesc
                       : isCompletedView
                         ? t.emptyCompletedDesc
                         : t.emptyListDesc}
                   </p>
-                  {searchQuery.trim() || tagFilter ? (
+                  {searchQuery.trim() || tagFilter || hasDateRangeFilter ? (
                     <button
                       type="button"
                       onClick={() => {
                         setSearchQuery('');
+                        setSearchDateFrom('');
+                        setSearchDateTo('');
+                        setIsDateFilterOpen(false);
                         setTagFilter(null);
                       }}
                       className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-4 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"

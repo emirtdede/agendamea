@@ -39,9 +39,18 @@ interface NativeWindowBridge {
     execPath?: string;
     cliPath?: string;
     mcpPath?: string;
+    cliBinDir?: string;
+    cliInstalled?: boolean;
     runtimePort?: number | null;
     userDataDir?: string;
   }>;
+  installCliShims?: () => Promise<{
+    ok: boolean;
+    binDir?: string;
+    installed?: boolean;
+    error?: string;
+  }>;
+  openCliTerminal?: () => Promise<{ ok: boolean; error?: string }>;
   updateTrayLabels?: (labels: {
     openLabel: string;
     newTaskLabel: string;

@@ -13,6 +13,7 @@ import type {
   SubtaskPatch,
   Todo,
   TodoPatch,
+  WebhookLogEntry,
 } from '../types.ts';
 import {
   clampZoomPercent,
@@ -233,8 +234,22 @@ export class TodoDatabase {
         value TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS webhook_logs (
+        id TEXT PRIMARY KEY,
+        direction TEXT NOT NULL DEFAULT 'outgoing',
+        event TEXT NOT NULL,
+        target_url TEXT NOT NULL DEFAULT '',
+        status_code INTEGER DEFAULT NULL,
+        ok INTEGER NOT NULL DEFAULT 0,
+        attempts INTEGER NOT NULL DEFAULT 1,
+        latency_ms INTEGER NOT NULL DEFAULT 0,
+        error TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_todos_category ON todos(category_id);
       CREATE INDEX IF NOT EXISTS idx_subtasks_todo ON subtasks(todo_id);
+      CREATE INDEX IF NOT EXISTS idx_webhook_logs_created ON webhook_logs(created_at DESC);
     `);
 
     // Versioned schema migration using PRAGMA user_version (also upgrades legacy v0 DBs safely)
@@ -394,6 +409,10 @@ export class TodoDatabase {
       'onedriveAutoSync',
       'onedriveCustomPath',
       'onboardingCompleted',
+      'webhookEnabled',
+      'webhookUrl',
+      'webhookSecret',
+      'webhookEvents',
     ];
     const placeholders = keys.map(() => '?').join(', ');
     const rows = this.db
@@ -420,6 +439,10 @@ export class TodoDatabase {
     const rawOnedriveAutoSync = map.get('onedriveAutoSync');
     const rawOnedrivePath = map.get('onedriveCustomPath') ?? '';
     const rawOnboardingCompleted = map.get('onboardingCompleted');
+    const rawWebhookEnabled = map.get('webhookEnabled');
+    const rawWebhookUrl = map.get('webhookUrl') ?? '';
+    const rawWebhookSecret = map.get('webhookSecret') ?? '';
+    const rawWebhookEvents = map.get('webhookEvents') ?? '';
 
     const settings: AppSettings = {
       themeMode: rawMode === 'dark' ? 'dark' : rawMode === 'system' ? 'system' : 'light',
@@ -472,6 +495,18 @@ export class TodoDatabase {
     }
     if (rawOnboardingCompleted === '1' || rawOnboardingCompleted === 'true') {
       settings.onboardingCompleted = true;
+    }
+    if (rawWebhookEnabled === '1' || rawWebhookEnabled === 'true') {
+      settings.webhookEnabled = true;
+    }
+    if (rawWebhookUrl.length > 0) {
+      settings.webhookUrl = rawWebhookUrl;
+    }
+    if (rawWebhookSecret.length > 0) {
+      settings.webhookSecret = rawWebhookSecret;
+    }
+    if (rawWebhookEvents.length > 0) {
+      settings.webhookEvents = rawWebhookEvents;
     }
     return settings;
   }
@@ -550,6 +585,43 @@ export class TodoDatabase {
     }
     if (typeof patch.onboardingCompleted === 'boolean') {
       stmt.run('onboardingCompleted', patch.onboardingCompleted ? '1' : '0');
+    }
+    if (typeof patch.webhookEnabled === 'boolean') {
+      stmt.run('webhookEnabled', patch.webhookEnabled ? '1' : '0');
+    }
+    if (typeof patch.webhookUrl === 'string') {
+      const trimmedUrl = patch.webhookUrl.trim().slice(0, 4000);
+      if (trimmedUrl === '') {
+        stmt.run('webhookUrl', '');
+      } else {
+        const validUrls = trimmedUrl
+          .split(/[\r\n,]+/)
+          .map((u) => u.trim())
+          .filter((u) => {
+            if (!u) return false;
+            try {
+              const parsed = new URL(u);
+              return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+            } catch {
+              return false;
+            }
+          });
+        if (validUrls.length > 0) {
+          stmt.run('webhookUrl', validUrls.join(','));
+        }
+      }
+    }
+    if (typeof patch.webhookSecret === 'string') {
+      stmt.run('webhookSecret', patch.webhookSecret.trim().slice(0, 256));
+    }
+    if (typeof patch.webhookEvents === 'string') {
+      const cleaned = patch.webhookEvents
+        .split(/[\s,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(',')
+        .slice(0, 500);
+      stmt.run('webhookEvents', cleaned);
     }
   }
 
@@ -1442,6 +1514,125 @@ export class TodoDatabase {
 
     tx();
     return this.getBootstrap();
+  }
+
+  resetAllData(options?: { resetSettings?: boolean }): BootstrapPayload {
+    const resetSettings = Boolean(options?.resetSettings);
+    const currentLang = this.getSettings().language ?? 'tr';
+
+    const tx = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM subtasks').run();
+      this.db.prepare('DELETE FROM todos').run();
+      this.db.prepare('DELETE FROM categories').run();
+
+      if (resetSettings) {
+        this.db.prepare('DELETE FROM settings').run();
+        const stmt = this.db.prepare(
+          'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+        );
+        stmt.run('themeMode', 'light');
+        stmt.run('themeId', 'obsidian');
+        stmt.run('dragLocked', '0');
+        stmt.run('sidebarCollapsed', '0');
+        stmt.run('themeCustomized', '0');
+        stmt.run('language', currentLang);
+        stmt.run('autoUpdateCheck', '1');
+        stmt.run('onedriveAutoSync', '0');
+        stmt.run('onedriveCustomPath', '');
+        stmt.run('onboardingCompleted', '1');
+        stmt.run('webhookEnabled', '0');
+        stmt.run('webhookUrl', '');
+        stmt.run('webhookSecret', '');
+        stmt.run('webhookEvents', '');
+      }
+    });
+
+    tx();
+    return this.getBootstrap();
+  }
+
+  recordWebhookLog(entry: {
+    direction: 'outgoing' | 'incoming';
+    event: string;
+    targetUrl?: string;
+    statusCode?: number | null;
+    ok: boolean;
+    attempts?: number;
+    latencyMs?: number;
+    error?: string;
+  }): WebhookLogEntry {
+    const id = `whlog-${crypto.randomUUID()}`;
+    const createdAt = new Date().toISOString();
+    const row = {
+      id,
+      direction: entry.direction === 'incoming' ? 'incoming' : 'outgoing',
+      event: String(entry.event || 'unknown').slice(0, 100),
+      targetUrl: String(entry.targetUrl || '').slice(0, 500),
+      statusCode: typeof entry.statusCode === 'number' ? entry.statusCode : null,
+      ok: Boolean(entry.ok),
+      attempts: Math.max(1, Math.min(10, Number(entry.attempts) || 1)),
+      latencyMs: Math.max(0, Math.round(Number(entry.latencyMs) || 0)),
+      error: String(entry.error || '').slice(0, 500),
+      createdAt,
+    };
+    this.db
+      .prepare(
+        `INSERT INTO webhook_logs (id, direction, event, target_url, status_code, ok, attempts, latency_ms, error, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        row.id,
+        row.direction,
+        row.event,
+        row.targetUrl,
+        row.statusCode,
+        row.ok ? 1 : 0,
+        row.attempts,
+        row.latencyMs,
+        row.error,
+        row.createdAt,
+      );
+    // Prune older entries beyond 200 to keep DB lightweight
+    this.db
+      .prepare(
+        `DELETE FROM webhook_logs WHERE id NOT IN (SELECT id FROM webhook_logs ORDER BY created_at DESC LIMIT 200)`,
+      )
+      .run();
+    return row as WebhookLogEntry;
+  }
+
+  getWebhookLogs(limit = 30): WebhookLogEntry[] {
+    const safeLimit = Math.max(1, Math.min(200, Math.round(Number(limit) || 30)));
+    const rows = this.db
+      .prepare('SELECT * FROM webhook_logs ORDER BY created_at DESC LIMIT ?')
+      .all(safeLimit) as Array<{
+      id: string;
+      direction: string;
+      event: string;
+      target_url: string;
+      status_code: number | null;
+      ok: number;
+      attempts: number;
+      latency_ms: number;
+      error: string;
+      created_at: string;
+    }>;
+    return rows.map((r) => ({
+      id: r.id,
+      direction: r.direction === 'incoming' ? 'incoming' : 'outgoing',
+      event: r.event,
+      targetUrl: r.target_url,
+      statusCode: r.status_code,
+      ok: Boolean(r.ok),
+      attempts: Number(r.attempts) || 1,
+      latencyMs: Number(r.latency_ms) || 0,
+      error: r.error || '',
+      createdAt: r.created_at,
+    }));
+  }
+
+  clearWebhookLogs(): number {
+    return this.db.prepare('DELETE FROM webhook_logs').run().changes;
   }
 
   close(): void {

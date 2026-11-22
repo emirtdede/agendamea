@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import crypto from 'node:crypto';
 import http from 'node:http';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -86,17 +87,19 @@ async function startServer() {
       path.join(home, 'OneDrive'),
     ]);
 
-    // Google Drive for Desktop creates either a virtual drive (often G:\My Drive or G:\Drive'ım) or user-home folder
+    // Google Drive for Desktop creates either a virtual drive (e.g. G:\My Drive or G:\Drive'ım) or user-home folder
     const googleCandidates: string[] = [
       path.join(home, 'Google Drive'),
       path.join(home, 'My Drive'),
+      path.join(home, "Drive'ım"),
     ];
     if (process.platform === 'win32') {
-      for (const letter of ['G', 'H', 'I', 'D', 'E', 'F']) {
+      for (const letter of ['G', 'H', 'I', 'D', 'E', 'F', 'J', 'K', 'M', 'Z']) {
         googleCandidates.push(`${letter}:\\My Drive`);
         googleCandidates.push(`${letter}:\\Drive'ım`);
         googleCandidates.push(`${letter}:\\Mon Drive`);
         googleCandidates.push(`${letter}:\\Meine Ablage`);
+        googleCandidates.push(`${letter}:\\Mi unidad`);
       }
     }
     const googleDriveRoot = findFirstExistingDir(googleCandidates);
@@ -107,10 +110,27 @@ async function startServer() {
       path.join(home, 'Library', 'Mobile Documents', 'com~apple~CloudDocs'),
     ]);
 
-    const dropboxRoot = findFirstExistingDir([
+    const dropboxCandidates: Array<string | undefined> = [
       path.join(home, 'Dropbox'),
       path.join(home, 'Dropbox (Personal)'),
-    ]);
+    ];
+    for (const infoBase of [process.env.LOCALAPPDATA, process.env.APPDATA]) {
+      if (!infoBase) continue;
+      try {
+        const infoPath = path.join(infoBase, 'Dropbox', 'info.json');
+        if (fs.existsSync(infoPath)) {
+          const parsed = JSON.parse(fs.readFileSync(infoPath, 'utf8')) as {
+            personal?: { path?: string };
+            business?: { path?: string };
+          };
+          if (parsed?.personal?.path) dropboxCandidates.unshift(parsed.personal.path);
+          if (parsed?.business?.path) dropboxCandidates.push(parsed.business.path);
+        }
+      } catch {
+        // Ignore unreadable Dropbox metadata
+      }
+    }
+    const dropboxRoot = findFirstExistingDir(dropboxCandidates);
 
     return [
       {
@@ -318,10 +338,22 @@ async function startServer() {
       }
     }
 
+    const activeProvider = detectProviderForFolder(folder, detectCloudProviders());
+    const providerDisplayName =
+      activeProvider === 'onedrive'
+        ? 'OneDrive'
+        : activeProvider === 'googledrive'
+          ? 'Google Drive'
+          : activeProvider === 'icloud'
+            ? 'iCloud Drive'
+            : activeProvider === 'dropbox'
+              ? 'Dropbox'
+              : 'Custom Cloud Folder';
+
     const payload = {
       exportedAt: new Date().toISOString(),
       app: 'Agendamea',
-      provider: 'OneDrive',
+      provider: providerDisplayName,
       ...snapshot,
     };
     const jsonText = JSON.stringify(payload, null, 2);
@@ -352,6 +384,191 @@ async function startServer() {
   }
 
   let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Lightweight SSE subscribers so external CLI / MCP / Webhook mutations refresh open UI live
+  const sseClients = new Set<express.Response>();
+  function broadcastExternalChange(reason: string): void {
+    if (sseClients.size === 0) return;
+    const payload = `data: ${JSON.stringify({ type: 'changed', reason, at: Date.now() })}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(payload);
+      } catch {
+        sseClients.delete(client);
+      }
+    }
+  }
+
+  function isValidWebhookTargetUrl(rawUrl: string): boolean {
+    try {
+      const parsed = new URL(rawUrl.trim());
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
+  function parseWebhookUrls(rawUrl: string): string[] {
+    return String(rawUrl || '')
+      .split(/[\r\n,]+/)
+      .map((u) => u.trim())
+      .filter((u) => isValidWebhookTargetUrl(u));
+  }
+
+  function isWebhookEventAllowed(configuredEvents: string | undefined, event: string): boolean {
+    if (event === 'webhook.test') return true;
+    const raw = String(configuredEvents || '').trim();
+    if (!raw || raw === '*') return true;
+    const allowed = raw
+      .split(/[\s,]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    if (allowed.length === 0 || allowed.includes('*')) return true;
+    const lowerEvent = event.toLowerCase();
+    return allowed.some((pattern) =>
+      pattern.endsWith('.*') ? lowerEvent.startsWith(pattern.slice(0, -1)) : lowerEvent === pattern,
+    );
+  }
+
+  async function deliverSingleWebhookWithRetry(
+    targetUrl: string,
+    secret: string,
+    event: string,
+    data: unknown,
+    maxAttempts = 2,
+  ): Promise<{ ok: boolean; statusCode?: number; latencyMs: number; attempts: number; error?: string }> {
+    const startedAt = Date.now();
+    if (!isValidWebhookTargetUrl(targetUrl)) {
+      return { ok: false, latencyMs: 0, attempts: 1, error: 'Geçersiz webhook URL adresi (http/https).' };
+    }
+    const titlePreview =
+      data && typeof data === 'object' && 'title' in data && typeof (data as { title?: unknown }).title === 'string'
+        ? `: ${(data as { title: string }).title}`
+        : data && typeof data === 'object' && 'name' in data && typeof (data as { name?: unknown }).name === 'string'
+          ? `: ${(data as { name: string }).name}`
+          : '';
+    const summaryLine = `[Agendamea] ${event}${titlePreview}`;
+    const bodyJson = JSON.stringify({
+      event,
+      timestamp: new Date().toISOString(),
+      app: 'Agendamea',
+      version: APP_VERSION,
+      content: summaryLine,
+      text: summaryLine,
+      data,
+    });
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'User-Agent': `Agendamea-Webhook/${APP_VERSION}`,
+      'X-Agendamea-Event': event,
+    };
+    const cleanSecret = secret.trim();
+    if (cleanSecret) {
+      const sig = crypto.createHmac('sha256', cleanSecret).update(bodyJson).digest('hex');
+      headers['X-Agendamea-Signature'] = `sha256=${sig}`;
+    }
+
+    let lastResult: { ok: boolean; statusCode?: number; latencyMs: number; attempts: number; error?: string } = {
+      ok: false,
+      latencyMs: 0,
+      attempts: 1,
+      error: 'Webhook gönderilemedi.',
+    };
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      try {
+        const response = await fetch(targetUrl.trim(), {
+          method: 'POST',
+          headers,
+          body: bodyJson,
+          signal: controller.signal,
+        });
+        lastResult = {
+          ok: response.ok,
+          statusCode: response.status,
+          latencyMs: Date.now() - startedAt,
+          attempts: attempt,
+          error: response.ok ? undefined : `HTTP ${response.status}`,
+        };
+        if (response.ok || (response.status >= 400 && response.status < 500)) {
+          break;
+        }
+      } catch (err) {
+        lastResult = {
+          ok: false,
+          latencyMs: Date.now() - startedAt,
+          attempts: attempt,
+          error: err instanceof Error ? err.message : 'Webhook gönderilemedi.',
+        };
+      } finally {
+        clearTimeout(timer);
+      }
+      if (attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 250));
+      }
+    }
+
+    try {
+      db.recordWebhookLog({
+        direction: 'outgoing',
+        event,
+        targetUrl: targetUrl.trim(),
+        statusCode: lastResult.statusCode ?? null,
+        ok: lastResult.ok,
+        attempts: lastResult.attempts,
+        latencyMs: lastResult.latencyMs,
+        error: lastResult.error ?? '',
+      });
+    } catch {
+      // Never fail webhook delivery if log insert fails
+    }
+    return lastResult;
+  }
+
+  async function deliverWebhookRequest(
+    targetUrlsRaw: string,
+    secret: string,
+    event: string,
+    data: unknown,
+  ): Promise<{ ok: boolean; statusCode?: number; latencyMs: number; attempts?: number; error?: string; results?: Array<{ url: string; ok: boolean; statusCode?: number; error?: string }> }> {
+    const urls = parseWebhookUrls(targetUrlsRaw);
+    if (urls.length === 0) {
+      return { ok: false, latencyMs: 0, error: 'Geçersiz webhook URL adresi (http/https).' };
+    }
+    if (urls.length === 1) {
+      return deliverSingleWebhookWithRetry(urls[0], secret, event, data, 2);
+    }
+    const startedAt = Date.now();
+    const results = await Promise.all(
+      urls.map(async (url) => {
+        const res = await deliverSingleWebhookWithRetry(url, secret, event, data, 2);
+        return { url, ok: res.ok, statusCode: res.statusCode, error: res.error };
+      }),
+    );
+    const allOk = results.every((r) => r.ok);
+    const firstFail = results.find((r) => !r.ok);
+    return {
+      ok: allOk,
+      statusCode: results[0]?.statusCode,
+      latencyMs: Date.now() - startedAt,
+      error: firstFail?.error,
+      results,
+    };
+  }
+
+  function dispatchConfiguredWebhook(event: string, data: unknown): void {
+    try {
+      const settings = db.getSettings();
+      if (!settings.webhookEnabled || !settings.webhookUrl) return;
+      if (!isWebhookEventAllowed(settings.webhookEvents, event)) return;
+      void deliverWebhookRequest(settings.webhookUrl, settings.webhookSecret ?? '', event, data);
+    } catch {
+      // Never block primary mutation on webhook errors
+    }
+  }
 
   function flushOneDriveAutoSync(): void {
     if (autoSyncTimer) {
@@ -406,7 +623,14 @@ async function startServer() {
     next();
   });
 
-  app.use(express.json({ limit: '5mb' }));
+  app.use(
+    express.json({
+      limit: '5mb',
+      verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: string }).rawBody = buf.toString('utf8');
+      },
+    }),
+  );
   app.use('/api', (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
 
@@ -452,11 +676,18 @@ async function startServer() {
     if (
       isMutation &&
       !req.path.startsWith('/onedrive/') &&
-      !req.path.startsWith('/window/')
+      !req.path.startsWith('/window/') &&
+      !req.path.startsWith('/webhooks/')
     ) {
+      const sourceHeader = String(req.headers['x-agendamea-source'] ?? '').toLowerCase();
       res.on('finish', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          triggerOneDriveAutoSync();
+          if (req.path !== '/reset') {
+            triggerOneDriveAutoSync();
+          }
+          if (sourceHeader !== 'ui') {
+            broadcastExternalChange(`${req.method} ${req.path}`);
+          }
         }
       });
     }
@@ -466,6 +697,28 @@ async function startServer() {
   // Lightweight health probe for Electron / Windows launcher startup checks
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
+  });
+
+  // Live change notification stream for external CLI / MCP / Webhook mutations
+  app.get('/api/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+    res.write(': connected\n\n');
+    sseClients.add(res);
+    const keepalive = setInterval(() => {
+      try {
+        res.write(': ping\n\n');
+      } catch {
+        clearInterval(keepalive);
+        sseClients.delete(res);
+      }
+    }, 25_000);
+    req.on('close', () => {
+      clearInterval(keepalive);
+      sseClients.delete(res);
+    });
   });
 
   // Bootstrap all active + trashed state and settings in one round-trip
@@ -491,6 +744,7 @@ async function startServer() {
         color: typeof color === 'string' ? color : undefined,
         pinned: typeof pinned === 'boolean' ? pinned : undefined,
       });
+      dispatchConfiguredWebhook('category.created', created);
       res.status(201).json(created);
     } catch (err) {
       sendRouteError(res, 'POST /api/categories', err, 'Kategori oluşturulamadı.');
@@ -523,6 +777,7 @@ async function startServer() {
         res.status(404).json({ error: 'Kategori bulunamadı.' });
         return;
       }
+      dispatchConfiguredWebhook('category.updated', updated);
       res.json(updated);
     } catch (err) {
       sendRouteError(res, 'PATCH /api/categories/:id', err, 'Kategori güncellenemedi.');
@@ -537,6 +792,7 @@ async function startServer() {
         res.status(404).json({ error: 'Kategori bulunamadı.' });
         return;
       }
+      dispatchConfiguredWebhook('category.deleted', trashed);
       res.json(trashed);
     } catch (err) {
       sendRouteError(res, 'DELETE /api/categories/:id', err, 'Kategori çöp kutusuna taşınamadı.');
@@ -550,6 +806,7 @@ async function startServer() {
         res.status(404).json({ error: 'Kategori çöp kutusunda bulunamadı.' });
         return;
       }
+      dispatchConfiguredWebhook('category.restored', restored);
       res.json(restored);
     } catch (err) {
       sendRouteError(res, 'POST /api/categories/:id/restore', err, 'Kategori geri yüklenemedi.');
@@ -605,6 +862,7 @@ async function startServer() {
             : undefined,
         subtasks: Array.isArray(body.subtasks) ? body.subtasks : undefined,
       });
+      dispatchConfiguredWebhook('todo.created', created);
       res.status(201).json(created);
     } catch (err) {
       sendRouteError(res, 'POST /api/todos', err, 'Görev eklenemedi.');
@@ -633,6 +891,7 @@ async function startServer() {
           ? req.query.categoryId
           : null;
       const trashedTodos = db.clearCompleted(categoryId);
+      dispatchConfiguredWebhook('todos.cleared_completed', { clearedCount: trashedTodos.length, categoryId });
       res.json({ ok: true, trashedTodos });
     } catch (err) {
       sendRouteError(
@@ -672,6 +931,10 @@ async function startServer() {
         res.status(404).json({ error: 'Görev bulunamadı.' });
         return;
       }
+      dispatchConfiguredWebhook(
+        typeof body.completed === 'boolean' && body.completed ? 'todo.completed' : 'todo.updated',
+        updated,
+      );
       res.json(updated);
     } catch (err) {
       sendRouteError(res, 'PATCH /api/todos/:id', err, 'Görev güncellenemedi.');
@@ -686,6 +949,7 @@ async function startServer() {
         res.status(404).json({ error: 'Görev bulunamadı.' });
         return;
       }
+      dispatchConfiguredWebhook('todo.deleted', trashed);
       res.json(trashed);
     } catch (err) {
       sendRouteError(res, 'DELETE /api/todos/:id', err, 'Görev çöp kutusuna taşınamadı.');
@@ -699,6 +963,7 @@ async function startServer() {
         res.status(404).json({ error: 'Görev çöp kutusunda bulunamadı.' });
         return;
       }
+      dispatchConfiguredWebhook('todo.restored', restored);
       res.json(restored);
     } catch (err) {
       sendRouteError(res, 'POST /api/todos/:id/restore', err, 'Görev geri yüklenemedi.');
@@ -722,6 +987,7 @@ async function startServer() {
   app.delete('/api/trash', (_req, res) => {
     try {
       const result = db.emptyTrash();
+      dispatchConfiguredWebhook('trash.emptied', result);
       res.json({ ok: true, ...result });
     } catch (err) {
       sendRouteError(res, 'DELETE /api/trash', err, 'Çöp kutusu boşaltılamadı.');
@@ -741,6 +1007,7 @@ async function startServer() {
         res.status(404).json({ error: 'Üst görev bulunamadı.' });
         return;
       }
+      dispatchConfiguredWebhook('subtask.created', created);
       res.status(201).json(created);
     } catch (err) {
       sendRouteError(res, 'POST /api/todos/:id/subtasks', err, 'Alt görev eklenemedi.');
@@ -758,6 +1025,7 @@ async function startServer() {
         res.status(404).json({ error: 'Alt görev bulunamadı.' });
         return;
       }
+      dispatchConfiguredWebhook('subtask.updated', updated);
       res.json(updated);
     } catch (err) {
       sendRouteError(res, 'PATCH /api/subtasks/:id', err, 'Alt görev güncellenemedi.');
@@ -771,19 +1039,421 @@ async function startServer() {
         res.status(404).json({ error: 'Alt görev bulunamadı.' });
         return;
       }
+      dispatchConfiguredWebhook('subtask.deleted', { id: req.params.id });
       res.json({ ok: true });
     } catch (err) {
       sendRouteError(res, 'DELETE /api/subtasks/:id', err, 'Alt görev silinemedi.');
     }
   });
 
-  // Settings (theme mode, color theme, drag lock, sidebar, language & autoUpdateCheck persisted to SQLite)
+  // Settings (theme mode, color theme, drag lock, sidebar, language, webhooks & autoUpdateCheck persisted to SQLite)
   app.patch('/api/settings', (req, res) => {
     try {
       const updated = db.updateSettings(req.body ?? {});
       res.json(updated);
     } catch (err) {
       sendRouteError(res, 'PATCH /api/settings', err, 'Ayarlar kaydedilemedi.');
+    }
+  });
+
+  // Outgoing & Incoming Webhook Logs
+  app.get('/api/webhooks/logs', (req, res) => {
+    try {
+      const limit = Number(req.query.limit) || 30;
+      res.json(db.getWebhookLogs(limit));
+    } catch (err) {
+      sendRouteError(res, 'GET /api/webhooks/logs', err, 'Webhook kayıtları alınamadı.');
+    }
+  });
+
+  app.delete('/api/webhooks/logs', (_req, res) => {
+    try {
+      const cleared = db.clearWebhookLogs();
+      res.json({ ok: true, cleared });
+    } catch (err) {
+      sendRouteError(res, 'DELETE /api/webhooks/logs', err, 'Webhook kayıtları temizlenemedi.');
+    }
+  });
+
+  // Outgoing Webhook Live Test Endpoint (Discord, Slack, n8n, Zapier, Make, custom HTTP/HTTPS)
+  app.post('/api/webhooks/test', async (req, res) => {
+    try {
+      const settings = db.getSettings();
+      const body = req.body ?? {};
+      const targetUrl =
+        typeof body.url === 'string' && body.url.trim().length > 0
+          ? body.url.trim()
+          : (settings.webhookUrl ?? '');
+      const secret =
+        typeof body.secret === 'string' ? body.secret : (settings.webhookSecret ?? '');
+      if (!targetUrl) {
+        res.status(400).json({ ok: false, error: 'Webhook URL adresi gereklidir.' });
+        return;
+      }
+      const result = await deliverWebhookRequest(targetUrl, secret, 'webhook.test', {
+        title: 'Agendamea Webhook Test',
+        message: 'Connection verified successfully.',
+      });
+      res.json(result);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/webhooks/test', err, 'Webhook testi başarısız oldu.');
+    }
+  });
+
+  // Full Incoming Webhook Automation Endpoint (supports secret OR HMAC-SHA256 signature & all actions)
+  app.post('/api/webhook/incoming', (req, res) => {
+    const startedAt = Date.now();
+    const recordIncoming = (event: string, statusCode: number, ok: boolean, error = '') => {
+      try {
+        db.recordWebhookLog({
+          direction: 'incoming',
+          event,
+          targetUrl: '/api/webhook/incoming',
+          statusCode,
+          ok,
+          attempts: 1,
+          latencyMs: Date.now() - startedAt,
+          error,
+        });
+      } catch {
+        // Ignore logging error
+      }
+    };
+
+    try {
+      const settings = db.getSettings();
+      const configuredSecret = (settings.webhookSecret ?? '').trim();
+      if (configuredSecret) {
+        const providedSecret = String(
+          req.headers['x-agendamea-secret'] ?? req.body?.secret ?? '',
+        ).trim();
+        const providedSig = String(req.headers['x-agendamea-signature'] ?? '').trim();
+        let authorized = false;
+
+        if (providedSecret) {
+          const a = Buffer.from(providedSecret, 'utf8');
+          const b = Buffer.from(configuredSecret, 'utf8');
+          authorized = a.length === b.length && crypto.timingSafeEqual(a, b);
+        } else if (providedSig.startsWith('sha256=')) {
+          const rawBody = (req as express.Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {});
+          const expected = `sha256=${crypto.createHmac('sha256', configuredSecret).update(rawBody).digest('hex')}`;
+          const a = Buffer.from(providedSig, 'utf8');
+          const b = Buffer.from(expected, 'utf8');
+          authorized = a.length === b.length && crypto.timingSafeEqual(a, b);
+        }
+
+        if (!authorized) {
+          recordIncoming('incoming.unauthorized', 401, false, 'Unauthorized');
+          res.status(401).json({ error: 'Geçersiz webhook gizli anahtarı veya HMAC imzası.' });
+          return;
+        }
+      }
+
+      const body = req.body ?? {};
+      const action = typeof body.action === 'string' ? body.action.trim().toLowerCase() : 'add';
+      const normText = (s: unknown) => String(s ?? '').toLocaleLowerCase('tr-TR').trim();
+      const findCategoryBySelector = (selector: string) => {
+        const cats = db.getCategories();
+        const q = normText(selector);
+        return (
+          cats.find((c) => c.id === selector) ??
+          cats.find((c) => normText(c.name) === q) ??
+          cats.find((c) => c.id.startsWith(selector) || normText(c.name).includes(q)) ??
+          null
+        );
+      };
+      const findTodoBySelector = (selector: string) => {
+        const todos = db.getTodos();
+        const q = normText(selector);
+        return (
+          todos.find((t) => t.id === selector) ??
+          todos.find((t) => t.id.startsWith(selector)) ??
+          todos.find((t) => normText(t.title).includes(q)) ??
+          null
+        );
+      };
+
+      if (action === 'add' || action === 'create') {
+        const title = typeof body.title === 'string' ? body.title.trim() : '';
+        if (!title) {
+          recordIncoming('incoming.add', 400, false, 'Missing title');
+          res.status(400).json({ error: 'Görev başlığı (title) gereklidir.' });
+          return;
+        }
+        let resolvedCategoryId = typeof body.categoryId === 'string' ? body.categoryId : undefined;
+        if (!resolvedCategoryId && typeof body.category === 'string' && body.category.trim()) {
+          resolvedCategoryId = findCategoryBySelector(body.category.trim())?.id;
+        }
+        const subtasks = Array.isArray(body.subtasks)
+          ? body.subtasks
+              .map((s: unknown) =>
+                typeof s === 'string'
+                  ? { title: s.trim(), completed: false }
+                  : s && typeof s === 'object' && 'title' in s
+                    ? { title: String((s as { title: unknown }).title), completed: Boolean((s as { completed?: unknown }).completed) }
+                    : null,
+              )
+              .filter((x: unknown): x is { title: string; completed: boolean } => Boolean(x && (x as { title: string }).title))
+          : undefined;
+        const created = db.createTodo({
+          title,
+          notes: typeof body.notes === 'string' ? body.notes : undefined,
+          startDate: typeof body.startDate === 'string' ? body.startDate : undefined,
+          dueDate: typeof body.dueDate === 'string' ? body.dueDate : undefined,
+          dueTime: typeof body.dueTime === 'string' ? body.dueTime : undefined,
+          priority: body.priority,
+          important: typeof body.important === 'boolean' ? body.important : undefined,
+          pinned: typeof body.pinned === 'boolean' ? body.pinned : undefined,
+          tags: Array.isArray(body.tags) ? body.tags : undefined,
+          categoryId: resolvedCategoryId,
+          subtasks,
+        });
+        dispatchConfiguredWebhook('todo.created', created);
+        recordIncoming('incoming.add', 201, true);
+        res.status(201).json({ ok: true, action: 'add', todo: created });
+        return;
+      }
+
+      if (action === 'update' || action === 'edit') {
+        const sel = String(body.id ?? body.target ?? '').trim();
+        if (!sel) {
+          recordIncoming('incoming.update', 400, false, 'Missing id');
+          res.status(400).json({ error: 'Görev kimliği (id) gereklidir.' });
+          return;
+        }
+        const found = findTodoBySelector(sel);
+        if (!found) {
+          recordIncoming('incoming.update', 404, false, 'Task not found');
+          res.status(404).json({ error: 'Görev bulunamadı.' });
+          return;
+        }
+        let categoryId =
+          body.categoryId === null || typeof body.categoryId === 'string' ? body.categoryId : undefined;
+        if (categoryId === undefined && typeof body.category === 'string') {
+          categoryId = body.category.trim() ? (findCategoryBySelector(body.category.trim())?.id ?? null) : null;
+        }
+        const updated = db.updateTodo(found.id, {
+          title: typeof body.title === 'string' ? body.title : undefined,
+          notes: typeof body.notes === 'string' ? body.notes : undefined,
+          completed: typeof body.completed === 'boolean' ? body.completed : undefined,
+          important: typeof body.important === 'boolean' ? body.important : undefined,
+          pinned: typeof body.pinned === 'boolean' ? body.pinned : undefined,
+          priority: body.priority,
+          startDate: body.startDate === null || typeof body.startDate === 'string' ? body.startDate : undefined,
+          dueDate: body.dueDate === null || typeof body.dueDate === 'string' ? body.dueDate : undefined,
+          dueTime: body.dueTime === null || typeof body.dueTime === 'string' ? body.dueTime : undefined,
+          tags: Array.isArray(body.tags) ? body.tags : undefined,
+          categoryId,
+        });
+        dispatchConfiguredWebhook(updated?.completed ? 'todo.completed' : 'todo.updated', updated);
+        recordIncoming('incoming.update', 200, true);
+        res.json({ ok: true, action: 'update', todo: updated });
+        return;
+      }
+
+      if (action === 'complete' || action === 'done' || action === 'pin') {
+        const sel = String(body.id ?? body.target ?? '').trim();
+        if (!sel) {
+          recordIncoming(`incoming.${action}`, 400, false, 'Missing id');
+          res.status(400).json({ error: 'Görev kimliği (id) gereklidir.' });
+          return;
+        }
+        const found = findTodoBySelector(sel);
+        if (!found) {
+          recordIncoming(`incoming.${action}`, 404, false, 'Task not found');
+          res.status(404).json({ error: 'Görev bulunamadı.' });
+          return;
+        }
+        const patch =
+          action === 'pin'
+            ? { pinned: body.pinned === undefined ? !found.pinned : Boolean(body.pinned) }
+            : { completed: body.completed === undefined ? true : Boolean(body.completed) };
+        const updated = db.updateTodo(found.id, patch);
+        dispatchConfiguredWebhook(
+          action !== 'pin' && patch.completed ? 'todo.completed' : 'todo.updated',
+          updated,
+        );
+        recordIncoming(`incoming.${action}`, 200, true);
+        res.json({ ok: true, action: action === 'pin' ? 'pin' : 'complete', todo: updated });
+        return;
+      }
+
+      if (action === 'delete' || action === 'trash') {
+        const sel = String(body.id ?? body.target ?? '').trim();
+        if (!sel) {
+          recordIncoming('incoming.delete', 400, false, 'Missing id');
+          res.status(400).json({ error: 'Görev kimliği (id) gereklidir.' });
+          return;
+        }
+        const found = findTodoBySelector(sel);
+        if (!found) {
+          recordIncoming('incoming.delete', 404, false, 'Task not found');
+          res.status(404).json({ error: 'Görev bulunamadı.' });
+          return;
+        }
+        const trashed = db.softDeleteTodo(found.id);
+        dispatchConfiguredWebhook('todo.deleted', trashed);
+        recordIncoming('incoming.delete', 200, true);
+        res.json({ ok: true, action: 'delete', todo: trashed });
+        return;
+      }
+
+      if (action === 'restore') {
+        const sel = String(body.id ?? body.target ?? '').trim();
+        const trashedTodos = db.getTrashedTodos();
+        const trashedCats = db.getTrashedCategories();
+        const matchedTodo = sel
+          ? (trashedTodos.find((t) => t.id === sel || t.id.startsWith(sel) || normText(t.title).includes(normText(sel))) ?? null)
+          : (trashedTodos[0] ?? null);
+        if (matchedTodo) {
+          const restored = db.restoreTodo(matchedTodo.id);
+          dispatchConfiguredWebhook('todo.restored', restored);
+          recordIncoming('incoming.restore', 200, true);
+          res.json({ ok: true, action: 'restore', kind: 'todo', item: restored });
+          return;
+        }
+        const matchedCat = sel
+          ? (trashedCats.find((c) => c.id === sel || c.id.startsWith(sel) || normText(c.name).includes(normText(sel))) ?? null)
+          : (trashedCats[0] ?? null);
+        if (matchedCat) {
+          const restored = db.restoreCategory(matchedCat.id);
+          dispatchConfiguredWebhook('category.restored', restored);
+          recordIncoming('incoming.restore', 200, true);
+          res.json({ ok: true, action: 'restore', kind: 'category', item: restored });
+          return;
+        }
+        recordIncoming('incoming.restore', 404, false, 'Trash item not found');
+        res.status(404).json({ error: 'Çöp kutusunda eşleşen öğe bulunamadı.' });
+        return;
+      }
+
+      if (action === 'clear_completed') {
+        const catId =
+          typeof body.category === 'string' && body.category.trim()
+            ? (findCategoryBySelector(body.category.trim())?.id ?? null)
+            : typeof body.categoryId === 'string' && body.categoryId.trim()
+              ? body.categoryId.trim()
+              : null;
+        const trashedTodos = db.clearCompleted(catId);
+        dispatchConfiguredWebhook('todos.cleared_completed', { clearedCount: trashedTodos.length, categoryId: catId });
+        recordIncoming('incoming.clear_completed', 200, true);
+        res.json({ ok: true, action: 'clear_completed', clearedCount: trashedTodos.length });
+        return;
+      }
+
+      if (action === 'subtask.add' || action === 'subtask.toggle' || action === 'subtask.update' || action === 'subtask.delete') {
+        const taskSel = String(body.taskId ?? body.id ?? '').trim();
+        const task = taskSel ? findTodoBySelector(taskSel) : null;
+        if (!task) {
+          recordIncoming(`incoming.${action}`, 404, false, 'Parent task not found');
+          res.status(404).json({ error: 'Üst görev bulunamadı.' });
+          return;
+        }
+        if (action === 'subtask.add') {
+          const subTitle = typeof body.title === 'string' ? body.title.trim() : '';
+          if (!subTitle) {
+            recordIncoming('incoming.subtask.add', 400, false, 'Missing subtask title');
+            res.status(400).json({ error: 'Alt görev başlığı gereklidir.' });
+            return;
+          }
+          const created = db.createSubtask(task.id, subTitle);
+          dispatchConfiguredWebhook('subtask.created', created);
+          recordIncoming('incoming.subtask.add', 201, true);
+          res.status(201).json({ ok: true, action, subtask: created });
+          return;
+        }
+        const subSel = String(body.subtaskId ?? body.subtask ?? '').trim();
+        const sub =
+          task.subtasks.find((s) => s.id === subSel || s.id.startsWith(subSel) || normText(s.title).includes(normText(subSel))) ??
+          null;
+        if (!sub) {
+          recordIncoming(`incoming.${action}`, 404, false, 'Subtask not found');
+          res.status(404).json({ error: 'Alt görev bulunamadı.' });
+          return;
+        }
+        if (action === 'subtask.delete') {
+          db.deleteSubtask(sub.id);
+          dispatchConfiguredWebhook('subtask.deleted', { id: sub.id, todoId: task.id });
+          recordIncoming('incoming.subtask.delete', 200, true);
+          res.json({ ok: true, action, id: sub.id });
+          return;
+        }
+        const updatedSub = db.updateSubtask(sub.id, {
+          title: typeof body.title === 'string' ? body.title : undefined,
+          completed:
+            action === 'subtask.toggle'
+              ? body.completed === undefined
+                ? !sub.completed
+                : Boolean(body.completed)
+              : typeof body.completed === 'boolean'
+                ? body.completed
+                : undefined,
+        });
+        dispatchConfiguredWebhook('subtask.updated', updatedSub);
+        recordIncoming(`incoming.${action}`, 200, true);
+        res.json({ ok: true, action, subtask: updatedSub });
+        return;
+      }
+
+      if (action === 'category.create' || action === 'category.update' || action === 'category.delete') {
+        if (action === 'category.create') {
+          const name = typeof body.name === 'string' ? body.name.trim() : '';
+          if (!name) {
+            recordIncoming('incoming.category.create', 400, false, 'Missing category name');
+            res.status(400).json({ error: 'Kategori adı gereklidir.' });
+            return;
+          }
+          const created = db.createCategory({
+            name,
+            color: typeof body.color === 'string' ? body.color : undefined,
+            pinned: typeof body.pinned === 'boolean' ? body.pinned : undefined,
+          });
+          dispatchConfiguredWebhook('category.created', created);
+          recordIncoming('incoming.category.create', 201, true);
+          res.status(201).json({ ok: true, action, category: created });
+          return;
+        }
+        const catSel = String(body.id ?? body.category ?? body.target ?? '').trim();
+        const foundCat = catSel ? findCategoryBySelector(catSel) : null;
+        if (!foundCat) {
+          recordIncoming(`incoming.${action}`, 404, false, 'Category not found');
+          res.status(404).json({ error: 'Kategori bulunamadı.' });
+          return;
+        }
+        if (action === 'category.delete') {
+          const trashed = db.softDeleteCategory(foundCat.id);
+          dispatchConfiguredWebhook('category.deleted', trashed);
+          recordIncoming('incoming.category.delete', 200, true);
+          res.json({ ok: true, action, category: trashed });
+          return;
+        }
+        const updatedCat = db.updateCategory(foundCat.id, {
+          name: typeof body.name === 'string' ? body.name : undefined,
+          color: typeof body.color === 'string' ? body.color : undefined,
+          pinned: typeof body.pinned === 'boolean' ? body.pinned : undefined,
+        });
+        dispatchConfiguredWebhook('category.updated', updatedCat);
+        recordIncoming('incoming.category.update', 200, true);
+        res.json({ ok: true, action, category: updatedCat });
+        return;
+      }
+
+      if (action === 'trash.empty') {
+        const result = db.emptyTrash();
+        dispatchConfiguredWebhook('trash.emptied', result);
+        recordIncoming('incoming.trash.empty', 200, true);
+        res.json({ ok: true, action, ...result });
+        return;
+      }
+
+      recordIncoming(`incoming.${action}`, 400, false, 'Unsupported action');
+      res.status(400).json({
+        error:
+          'Desteklenmeyen webhook eylemi (add, update, complete, pin, delete, restore, clear_completed, subtask.*, category.*, trash.empty).',
+      });
+    } catch (err) {
+      recordIncoming('incoming.error', 500, false, err instanceof Error ? err.message : 'Error');
+      sendRouteError(res, 'POST /api/webhook/incoming', err, 'Gelen webhook işlenemedi.');
     }
   });
 
@@ -917,9 +1587,25 @@ async function startServer() {
   app.post('/api/import', (req, res) => {
     try {
       const restored = db.importBackup(req.body ?? {});
+      dispatchConfiguredWebhook('backup.imported', {
+        todos: restored.todos.length,
+        categories: restored.categories.length,
+      });
       res.json(restored);
     } catch (err) {
       sendRouteError(res, 'POST /api/import', err, 'Yedek dosyası içe aktarılamadı.');
+    }
+  });
+
+  // Clean Start / Reset All Data (atomic wipe of tasks, subtasks, categories & trash; optional settings reset)
+  app.post('/api/reset', (req, res) => {
+    try {
+      const resetSettings = Boolean(req.body?.resetSettings);
+      const freshBootstrap = db.resetAllData({ resetSettings });
+      dispatchConfiguredWebhook('data.reset', { resetSettings });
+      res.json(freshBootstrap);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/reset', err, 'Veriler sıfırlanamadı.');
     }
   });
 
@@ -1046,6 +1732,18 @@ async function startServer() {
       sendRouteError(res, 'POST /api/onedrive/open-folder', err, 'OneDrive klasörü açılamadı.');
     }
   });
+
+  // Headless daemon clean shutdown endpoint (loopback-only, strictly active only when AGENDAMEA_HEADLESS_DAEMON=1)
+  if (process.env.AGENDAMEA_HEADLESS_DAEMON === '1') {
+    app.post('/api/server/shutdown', (req, res) => {
+      if (!isLoopbackAddress(req.socket.remoteAddress)) {
+        res.status(403).json({ error: 'Yalnızca yerel erişime izin verilir.' });
+        return;
+      }
+      res.json({ ok: true, stopping: true, pid: process.pid });
+      setTimeout(() => shutdown(), 40);
+    });
+  }
 
   // Unknown API routes return clean JSON 404 instead of SPA index.html
   app.all('/api/*', (_req, res) => {
@@ -1304,8 +2002,51 @@ async function startServer() {
     process.exit(1);
   });
 
+  const isHeadlessDaemon = process.env.AGENDAMEA_HEADLESS_DAEMON === '1';
+  const daemonDataDir = process.env.AGENDAMEA_DATA_DIR
+    ? path.resolve(process.env.AGENDAMEA_DATA_DIR)
+    : path.join(process.cwd(), 'data');
+  const daemonPortFile = path.join(daemonDataDir, 'runtime-port.json');
+
+  const removeDaemonPortFileIfOwned = () => {
+    if (!isHeadlessDaemon) return;
+    try {
+      if (fs.existsSync(daemonPortFile)) {
+        const parsed = JSON.parse(fs.readFileSync(daemonPortFile, 'utf8')) as { pid?: number };
+        if (parsed?.pid === process.pid) {
+          fs.rmSync(daemonPortFile, { force: true });
+        }
+      }
+    } catch {
+      // Ignore cleanup failure
+    }
+  };
+
   const server = httpServer.listen(PORT, HOST, () => {
-    console.log(`Agendamea server running on http://${HOST}:${PORT}`);
+    const addr = server.address();
+    const actualPort = typeof addr === 'object' && addr ? addr.port : PORT;
+    if (isHeadlessDaemon) {
+      try {
+        fs.mkdirSync(daemonDataDir, { recursive: true });
+        fs.writeFileSync(
+          daemonPortFile,
+          JSON.stringify(
+            {
+              port: actualPort,
+              pid: process.pid,
+              headless: true,
+              updatedAt: new Date().toISOString(),
+            },
+            null,
+            2,
+          ),
+          'utf8',
+        );
+      } catch {
+        // Ignore port file write error
+      }
+    }
+    console.log(`Agendamea server running on http://${HOST}:${actualPort}`);
   });
 
   let shuttingDown = false;
@@ -1313,6 +2054,7 @@ async function startServer() {
     if (shuttingDown) return;
     shuttingDown = true;
     flushOneDriveAutoSync();
+    removeDaemonPortFileIfOwned();
 
     const forceExit = setTimeout(() => {
       try {

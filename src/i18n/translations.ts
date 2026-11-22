@@ -337,7 +337,53 @@ export interface UiDictionary {
   docsCmdAddDesc: string;
   docsCmdDoneDesc: string;
   docsCmdDelDesc: string;
+  docsCmdSearchDesc: string;
+  docsCmdUndoDesc: string;
   docsCmdStatusDesc: string;
+  docsCmdAddExample: string;
+  docsCmdSearchExample: string;
+  docsCmdUndoExample: string;
+  docsCliInstallButton: string;
+  docsCliInstalledBadge: string;
+  docsCliTryTerminalButton: string;
+  docsCliInstallHint: string;
+  docsCliAllCommandsToggle: string;
+  docsCliAllCommandsHint: string;
+  docsCmdShowExample: string;
+  docsCmdShowDesc: string;
+  docsCmdEditExample: string;
+  docsCmdEditDesc: string;
+  docsCmdSubExample: string;
+  docsCmdSubDesc: string;
+  docsCmdCatExample: string;
+  docsCmdCatDesc: string;
+  docsCmdTrashExample: string;
+  docsCmdTrashDesc: string;
+  docsCmdMatrixExample: string;
+  docsCmdMatrixDesc: string;
+  docsCmdBackupExample: string;
+  docsCmdBackupDesc: string;
+  docsCmdConfigExample: string;
+  docsCmdConfigDesc: string;
+  docsCmdServeExample: string;
+  docsCmdServeDesc: string;
+  docsWebhookTitle: string;
+  docsWebhookDesc: string;
+  docsWebhookUrlPlaceholder: string;
+  docsWebhookSecretPlaceholder: string;
+  docsWebhookSaveButton: string;
+  docsWebhookTestButton: string;
+  docsWebhookIncomingTitle: string;
+  docsWebhookSavedToast: string;
+  docsWebhookTestOk: string;
+  taskDateRangeFilterButton: string;
+  resetDataSectionTitle: string;
+  resetDataSectionDesc: string;
+  resetDataButton: string;
+  resetDataConfirmWarning: string;
+  resetDataIncludeSettingsLabel: string;
+  resetDataConfirmButton: string;
+  resetDataDoneToast: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -543,27 +589,27 @@ export const TR_DICTIONARY: UiDictionary = {
   tagsLabel: 'Etiketler',
   addTagPlaceholder: 'Etiket ekle (#iş, #acil)...',
   unscheduledTasksTitle: 'Tarihsiz Görevler',
-  onedriveSectionTitle: 'OneDrive Bulut Eşitleme',
-  onedriveSectionDesc: 'Kendi Microsoft OneDrive klasörünüzü kullanarak görevlerinizi sunucusuz ve ücretsiz olarak bulutta yedekleyin ve eşitleyin.',
-  onedriveConnectButton: 'OneDrive Bağla',
+  onedriveSectionTitle: 'Bulut Klasörü Eşitleme',
+  onedriveSectionDesc: 'OneDrive, Google Drive, iCloud Drive, Dropbox veya herhangi bir yerel klasörü kullanarak görevlerinizi sunucusuz ve ücretsiz olarak yedekleyin ve eşitleyin.',
+  onedriveConnectButton: 'Bulutu Bağla',
   onedriveDisconnectButton: 'Bağlantıyı Kes',
   onedriveSyncNowButton: 'Şimdi Eşitle',
-  onedriveRestoreButton: "OneDrive'dan Yükle",
-  onedriveAutoSyncTitle: 'Değişiklikleri OneDrive ile Otomatik Eşitle',
-  onedriveConnectedBadge: 'OneDrive Bağlı',
+  onedriveRestoreButton: 'Buluttan Yükle',
+  onedriveAutoSyncTitle: 'Değişiklikleri Bulutla Otomatik Eşitle',
+  onedriveConnectedBadge: 'Bulut Bağlı',
   onedriveLastSyncedPrefix: 'Son eşitleme',
-  onedriveSyncedToast: 'OneDrive bulut eşitlemesi tamamlandı.',
+  onedriveSyncedToast: 'Bulut eşitlemesi tamamlandı.',
   onedriveOpenFolderButton: 'Klasörü Aç',
-  onedriveBackupDetectedTitle: 'OneDrive Bulut Yedeği Tespit Edildi',
+  onedriveBackupDetectedTitle: 'Bulut Yedeği Tespit Edildi',
   onedriveBackupDetectedDesc:
-    'OneDrive klasörünüzde daha önceden kaydedilmiş bir Agendamea yedeği bulundu. Verilerinizi geri yüklemek mi, yoksa yeni bir başlangıç yapmak mı istersiniz?',
+    'Bulut eşitleme klasörünüzde daha önceden kaydedilmiş bir Agendamea yedeği bulundu. Verilerinizi geri yüklemek mi, yoksa yeni bir başlangıç yapmak mı istersiniz?',
   onedriveStartFreshButton: 'Yeni Başlangıç Yap',
   welcomeReplayButton: 'Karşılama Rehberi',
   welcomeSkipButton: 'Atla',
   welcomeBackButton: 'Geri',
   welcomeNextButton: 'İleri',
   welcomeStartButton: 'Planlamaya Başla',
-  welcomeOpenSettingsButton: 'OneDrive Ayarları',
+  welcomeOpenSettingsButton: 'Bulut Ayarları',
   welcomeStep1Title: "Agendamea'ya Hoş Geldiniz",
   welcomeStep1Desc:
     'İnternetsiz çalışan, her değişikliği anında cihazınıza kaydeden sade ve hızlı günlük planlayıcınız. Şimdi kısa bir turla temel özellikleri keşfedelim.',
@@ -655,18 +701,64 @@ export const TR_DICTIONARY: UiDictionary = {
   trashDateFrom: 'Başlangıç',
   trashDateTo: 'Bitiş',
   trashNoMatchesTitle: 'Filtreyle eşleşen silinmiş öğe bulunamadı',
-  docsSubtitle: 'Basit terminal komutları (CLI), yapay zeka MCP sunucusu ve klavye kısayolları.',
-  docsCliTitle: 'Terminal ve CLI Komutları',
-  docsCliDesc: 'Agendamea açıkken terminalden görev ekleyin, listeleyin ve tamamlayın.',
+  docsSubtitle: 'Kısa terminal komutları (CLI), yapay zeka MCP sunucusu, webhook ve klavye kısayolları.',
+  docsCliTitle: 'Terminal ve CLI Komutları (ag)',
+  docsCliDesc: 'Uygulama açıkken veya kapalıyken (çevrimdışı SQLite) terminalden kısa komutlarla görev yönetin.',
   docsMcpTitle: 'MCP Sunucusu (Yapay Zeka Entegrasyonu)',
-  docsMcpDesc: 'Claude Desktop, Cursor, Antigravity veya VS Code ayarlarına bu JSON yapılandırmasını yapıştırın.',
+  docsMcpDesc: 'Claude Desktop, Cursor, Antigravity veya VS Code ayarlarına bu JSON yapılandırmasını yapıştırın (ek Node.js kurulumu gerekmez).',
   docsCopyButton: 'Kopyala',
   docsCopiedLabel: 'Kopyalandı',
-  docsCmdListDesc: 'Aktif görevleri listeler (--today, --important, --done)',
-  docsCmdAddDesc: 'Hızlıca yeni görev ekler (--today, --high, --important)',
-  docsCmdDoneDesc: 'Belirtilen kimlik önekiyle görevi tamamlar',
-  docsCmdDelDesc: 'Görevi çöp kutusuna taşır',
-  docsCmdStatusDesc: 'Anlık görev ve kategori özetini gösterir',
+  docsCmdListDesc: 'Aktif görevleri 1, 2, 3 diye numaralı listeler (ag bugun, ag onemli)',
+  docsCmdAddDesc: 'Tırnaksız görev ekler (@bugun, @yarin, ! yüksek, * önemli, #etiket)',
+  docsCmdDoneDesc: 'Numarayla (1) veya görev ismiyle (ag ok sunum) tamamlar',
+  docsCmdDelDesc: 'Numarayla veya görev ismiyle çöp kutusuna taşır',
+  docsCmdSearchDesc: 'Başlık, not ve #etiketlerde anlık arama yapar',
+  docsCmdUndoDesc: 'Çöp kutusuna taşınan son görevi tek komutla geri yükler',
+  docsCmdStatusDesc: 'Anlık görev, kategori ve bağlantı özetini gösterir',
+  docsCmdAddExample: 'ag + Sunumu hazirla @bugun ! #is',
+  docsCmdSearchExample: 'ag ara fatura',
+  docsCmdUndoExample: 'ag geri',
+  docsCliInstallButton: 'Terminale Kur (ag)',
+  docsCliInstalledBadge: 'Terminalde Hazır (ag)',
+  docsCliTryTerminalButton: 'Terminalde Dene',
+  docsCliInstallHint: 'ag, agenda ve agendamea komutları kullanıcı PATH dizinine eklenir. Mevcut açık terminaller yerine yeni bir terminal açın veya "Terminalde Dene"ye tıklayın.',
+  docsCliAllCommandsToggle: 'Tüm Arayüzsüz Komutlar (Detay, Alt Görev, Kategori, Çöp, Matris, Bulut, Ayar)',
+  docsCliAllCommandsHint: 'Uygulama arayüzü hiç açılmasa bile Agendamea üzerinde %100 tam kontrol sağlar (ag help all).',
+  docsCmdShowExample: 'ag bak 1',
+  docsCmdShowDesc: 'Görevin notlarını, alt görevlerini, saatini ve etiketlerini tam gösterir',
+  docsCmdEditExample: 'ag edit 1 --time 15:00 --note "Not"',
+  docsCmdEditDesc: 'Başlık, not, tarih aralığı, saat, öncelik, kategori ve etiket günceller (ag move 1 2)',
+  docsCmdSubExample: 'ag sub 1 + Tasarımı kontrol et',
+  docsCmdSubDesc: 'Alt görev ekler, tamamlar (ok), yeniden adlandırır (edit) veya siler (rm)',
+  docsCmdCatExample: 'ag cat + İş #7c3aed',
+  docsCmdCatDesc: 'Kategori oluşturur, düzenler (edit), sıralar (move) veya çöpe taşır (rm)',
+  docsCmdTrashExample: 'ag cop',
+  docsCmdTrashDesc: 'Çöp kutusunu filtreler, kalıcı siler (ag cop sil 1) veya boşaltır (ag cop bosalt --yes)',
+  docsCmdMatrixExample: 'ag matris',
+  docsCmdMatrixDesc: 'Eisenhower 4 kadran öncelik görünümünü terminalde listeler',
+  docsCmdBackupExample: 'ag export yedek.json',
+  docsCmdBackupDesc: 'JSON yedekleme/geri yükleme (ag import), bulut (ag sync pull) ve temiz sıfırlama (ag reset --yes)',
+  docsCmdConfigExample: 'ag config themeMode dark',
+  docsCmdConfigDesc: 'Tema, dil, bulut klasörü ve webhook dahil tüm uygulama ayarlarını yönetir',
+  docsCmdServeExample: 'ag serve start',
+  docsCmdServeDesc: 'Arayüzü açmadan yerel API ve Gelen Webhook sunucusunu arka planda başlatır (ag hook logs)',
+  docsWebhookTitle: 'Webhook (Otomasyon ve Bildirim)',
+  docsWebhookDesc: 'Görev eklendiğinde, tamamlandığında veya silindiğinde Discord, Slack, n8n, Zapier veya kendi sunucunuza anlık JSON bildirim gönderin.',
+  docsWebhookUrlPlaceholder: 'https://discord.com/api/webhooks/... veya özel URL',
+  docsWebhookSecretPlaceholder: 'İsteğe bağlı gizli anahtar (X-Agendamea-Signature)',
+  docsWebhookSaveButton: 'Kaydet',
+  docsWebhookTestButton: 'Test Gönder',
+  docsWebhookIncomingTitle: 'Gelen Webhook (Dışarıdan Görev Ekleme)',
+  docsWebhookSavedToast: 'Webhook ayarları kaydedildi.',
+  docsWebhookTestOk: 'Bağlantı başarılı',
+  taskDateRangeFilterButton: 'Tarih Aralığı',
+  resetDataSectionTitle: 'Verileri Sıfırla (Temiz Başlangıç)',
+  resetDataSectionDesc: 'Tüm aktif görevleri, alt görevleri, kategorileri ve çöp kutusunu kalıcı olarak temizleyerek sıfırdan başlayın.',
+  resetDataButton: 'Verileri Sıfırla',
+  resetDataConfirmWarning: 'Tüm görevleriniz, kategorileriniz ve çöp kutusu öğeleriniz kalıcı olarak silinecek. Öncesinde JSON yedeği indirmeniz önerilir.',
+  resetDataIncludeSettingsLabel: 'Uygulama ayarlarını da varsayılana döndür (tema, ikon, bulut, webhook)',
+  resetDataConfirmButton: 'Evet, Tümünü Sıfırla',
+  resetDataDoneToast: 'Tüm veriler sıfırlandı. Temiz başlangıç hazır.',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -872,27 +964,27 @@ export const EN_DICTIONARY: UiDictionary = {
   tagsLabel: 'Tags',
   addTagPlaceholder: 'Add tag (#work, #urgent)...',
   unscheduledTasksTitle: 'Undated Tasks',
-  onedriveSectionTitle: 'OneDrive Cloud Sync',
-  onedriveSectionDesc: 'Sync and back up your tasks directly to your own Microsoft OneDrive folder with zero server cost.',
-  onedriveConnectButton: 'Connect OneDrive',
+  onedriveSectionTitle: 'Cloud Folder Sync',
+  onedriveSectionDesc: 'Sync and back up your tasks directly to OneDrive, Google Drive, iCloud Drive, Dropbox, or any local folder with zero server cost.',
+  onedriveConnectButton: 'Connect Cloud',
   onedriveDisconnectButton: 'Disconnect',
   onedriveSyncNowButton: 'Sync Now',
-  onedriveRestoreButton: 'Restore from OneDrive',
-  onedriveAutoSyncTitle: 'Auto-Sync Changes to OneDrive',
-  onedriveConnectedBadge: 'OneDrive Connected',
+  onedriveRestoreButton: 'Restore Cloud',
+  onedriveAutoSyncTitle: 'Auto-Sync Changes to Cloud',
+  onedriveConnectedBadge: 'Cloud Connected',
   onedriveLastSyncedPrefix: 'Last synced',
-  onedriveSyncedToast: 'OneDrive cloud sync completed.',
+  onedriveSyncedToast: 'Cloud sync completed.',
   onedriveOpenFolderButton: 'Open Folder',
-  onedriveBackupDetectedTitle: 'OneDrive Cloud Backup Detected',
+  onedriveBackupDetectedTitle: 'Cloud Backup Detected',
   onedriveBackupDetectedDesc:
-    'An existing Agendamea backup was found in your OneDrive folder. Would you like to restore your previous tasks or start fresh?',
+    'An existing Agendamea backup was found in your cloud sync folder. Would you like to restore your previous tasks or start fresh?',
   onedriveStartFreshButton: 'Start Fresh',
   welcomeReplayButton: 'Welcome Guide',
   welcomeSkipButton: 'Skip',
   welcomeBackButton: 'Back',
   welcomeNextButton: 'Next',
   welcomeStartButton: 'Start Planning',
-  welcomeOpenSettingsButton: 'OneDrive Settings',
+  welcomeOpenSettingsButton: 'Cloud Settings',
   welcomeStep1Title: 'Welcome to Agendamea',
   welcomeStep1Desc:
     'Your fast, offline-first daily planner that saves every change instantly on your device. Take a quick tour of the core features below.',
@@ -984,18 +1076,64 @@ export const EN_DICTIONARY: UiDictionary = {
   trashDateFrom: 'From',
   trashDateTo: 'To',
   trashNoMatchesTitle: 'No deleted items match the current filter',
-  docsSubtitle: 'Simple terminal commands (CLI), AI MCP server setup, and keyboard shortcuts.',
-  docsCliTitle: 'Terminal & CLI Commands',
-  docsCliDesc: 'List, add, complete, and manage tasks directly from your terminal while Agendamea is running.',
+  docsSubtitle: 'Short terminal commands (CLI), AI MCP server, webhooks, and keyboard shortcuts.',
+  docsCliTitle: 'Terminal & CLI Commands (ag)',
+  docsCliDesc: 'Manage tasks from your terminal with short commands whether Agendamea is open or closed (offline SQLite).',
   docsMcpTitle: 'MCP Server (AI Assistant Integration)',
-  docsMcpDesc: 'Paste this JSON configuration into Claude Desktop, Cursor, Antigravity, or VS Code.',
+  docsMcpDesc: 'Paste this JSON configuration into Claude Desktop, Cursor, Antigravity, or VS Code (no global Node.js required).',
   docsCopyButton: 'Copy',
   docsCopiedLabel: 'Copied',
-  docsCmdListDesc: 'List active tasks (--today, --important, --done)',
-  docsCmdAddDesc: 'Quickly add a new task (--today, --high, --important)',
-  docsCmdDoneDesc: 'Mark a task complete by ID prefix',
-  docsCmdDelDesc: 'Move a task to Trash',
-  docsCmdStatusDesc: 'Show live task and category summary',
+  docsCmdListDesc: 'List active tasks numbered 1, 2, 3 (ag today, ag imp)',
+  docsCmdAddDesc: 'Add a task without quotes (@today, @tomorrow, ! high, * important, #tag)',
+  docsCmdDoneDesc: 'Complete by number (1) or title keyword (ag ok deck)',
+  docsCmdDelDesc: 'Move a task to Trash by number or keyword',
+  docsCmdSearchDesc: 'Instant search across titles, notes, and #tags',
+  docsCmdUndoDesc: 'Restore the last task moved to Trash in one command',
+  docsCmdStatusDesc: 'Show live task, category, and connection summary',
+  docsCmdAddExample: 'ag + Prepare deck @today ! #work',
+  docsCmdSearchExample: 'ag find invoice',
+  docsCmdUndoExample: 'ag undo',
+  docsCliInstallButton: 'Install CLI (ag)',
+  docsCliInstalledBadge: 'Ready in Terminal (ag)',
+  docsCliTryTerminalButton: 'Try in Terminal',
+  docsCliInstallHint: 'Installs ag, agenda, and agendamea to your user PATH. Open a new terminal window or click "Try in Terminal" to test immediately.',
+  docsCliAllCommandsToggle: 'All Headless Commands (Details, Subtasks, Categories, Trash, Matrix, Cloud, Config)',
+  docsCliAllCommandsHint: 'Provides 100% full control over Agendamea without ever opening the desktop GUI (ag help all).',
+  docsCmdShowExample: 'ag show 1',
+  docsCmdShowDesc: 'Inspect full task details including notes, subtasks, schedule, and #tags',
+  docsCmdEditExample: 'ag edit 1 --time 15:00 --note "Details"',
+  docsCmdEditDesc: 'Update title, notes, date range, time, priority, category, tags, or order (ag move 1 2)',
+  docsCmdSubExample: 'ag sub 1 + Review design',
+  docsCmdSubDesc: 'Add, toggle (ok), rename (edit), or delete (rm) subtasks for any task',
+  docsCmdCatExample: 'ag cat + Work #7c3aed',
+  docsCmdCatDesc: 'Create, edit, reorder (move), or soft-delete (rm) categories',
+  docsCmdTrashExample: 'ag trash',
+  docsCmdTrashDesc: 'Filter Trash, permanently delete items (ag trash delete 1), or empty (ag trash empty --yes)',
+  docsCmdMatrixExample: 'ag matrix',
+  docsCmdMatrixDesc: 'Display the 4-quadrant Eisenhower Matrix right in your terminal',
+  docsCmdBackupExample: 'ag export backup.json',
+  docsCmdBackupDesc: 'JSON backup/restore (ag import), cloud sync (ag sync pull), and clean reset (ag reset --yes)',
+  docsCmdConfigExample: 'ag config themeMode dark',
+  docsCmdConfigDesc: 'Inspect or change any preference including theme, language, cloud folder, and webhooks',
+  docsCmdServeExample: 'ag serve start',
+  docsCmdServeDesc: 'Start the headless API and Incoming Webhook daemon without opening the GUI (ag hook logs)',
+  docsWebhookTitle: 'Webhooks (Automation & Alerts)',
+  docsWebhookDesc: 'Send instant JSON events to Discord, Slack, n8n, Zapier, or your own server when tasks are created, completed, or deleted.',
+  docsWebhookUrlPlaceholder: 'https://discord.com/api/webhooks/... or custom URL',
+  docsWebhookSecretPlaceholder: 'Optional secret key (X-Agendamea-Signature)',
+  docsWebhookSaveButton: 'Save',
+  docsWebhookTestButton: 'Send Test',
+  docsWebhookIncomingTitle: 'Incoming Webhook (Create Tasks Externally)',
+  docsWebhookSavedToast: 'Webhook settings saved.',
+  docsWebhookTestOk: 'Connection verified',
+  taskDateRangeFilterButton: 'Date Range',
+  resetDataSectionTitle: 'Reset All Data (Clean Start)',
+  resetDataSectionDesc: 'Permanently erase all tasks, subtasks, categories, and Trash items for a clean fresh start.',
+  resetDataButton: 'Reset Data',
+  resetDataConfirmWarning: 'All your tasks, categories, and Trash items will be permanently erased. Downloading a JSON backup first is recommended.',
+  resetDataIncludeSettingsLabel: 'Also reset app preferences to defaults (theme, icon, cloud, webhook)',
+  resetDataConfirmButton: 'Yes, Reset Everything',
+  resetDataDoneToast: 'All data cleared. Clean start ready.',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {

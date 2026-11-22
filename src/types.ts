@@ -110,6 +110,30 @@ export interface AppSettings {
   onedriveAutoSync?: boolean;
   onedriveCustomPath?: string;
   onboardingCompleted?: boolean;
+  webhookEnabled?: boolean;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  webhookEvents?: string;
+}
+
+export interface WebhookLogEntry {
+  id: string;
+  direction: 'outgoing' | 'incoming';
+  event: string;
+  targetUrl: string;
+  statusCode: number | null;
+  ok: boolean;
+  attempts: number;
+  latencyMs: number;
+  error: string;
+  createdAt: string;
+}
+
+export interface WebhookTestResult {
+  ok: boolean;
+  statusCode?: number;
+  latencyMs?: number;
+  error?: string;
 }
 
 export interface BootstrapPayload {

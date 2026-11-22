@@ -13,7 +13,7 @@ License: MIT
 LicenseUrl: https://github.com/emirtdede/agendamea/blob/main/LICENSE
 Copyright: Copyright (c) 2026 Vellium (vellium.dev)
 ShortDescription: Fast, offline-first daily task manager and planner for Windows 10/11.
-Description: Agendamea is a fast, offline-first daily task manager for Windows 10/11 built with local SQLite WAL persistence, 4 planning views (List, Kanban, Calendar, Eisenhower Matrix), serverless cloud folder sync (OneDrive, Google Drive, Dropbox), 14+ custom HEX themes, dynamic system-wide icons, and 73 languages.
+Description: Agendamea is a fast, local-first daily task manager and headless automation suite for Windows 10/11 featuring WAL SQLite persistence, 4 planning views (List, Kanban, Calendar, Eisenhower Matrix), a built-in 20-tool MCP server, short terminal CLI (ag), headless bi-directional webhooks, serverless multi-cloud folder sync (OneDrive, Google Drive, iCloud, Dropbox), custom HEX themes, dynamic system-wide icons, and 73 languages.
 Moniker: agendamea
 Tags:
   - todo
@@ -23,5 +23,8 @@ Tags:
   - productivity
   - offline
   - sqlite
+  - mcp
+  - cli
+  - webhooks
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
