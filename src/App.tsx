@@ -2363,9 +2363,13 @@ export default function App() {
             themeMode={themeMode}
             themeId={themeId}
             customThemeColor={customThemeColor}
+            appIconId={appIconId}
+            customIconColor={customIconColor}
             onChangeMode={handleModeChange}
             onChangeTheme={handleThemeChange}
             onChangeCustomThemeColor={handleCustomThemeColorChange}
+            onChangeAppIcon={handleAppIconChange}
+            onChangeCustomIconColor={handleCustomIconColorChange}
             onComplete={handleCompleteWelcome}
           />
         )}

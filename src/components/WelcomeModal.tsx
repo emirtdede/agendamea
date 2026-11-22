@@ -11,7 +11,6 @@ import {
   Globe,
   Grid2x2,
   Hash,
-  Keyboard,
   List,
   Monitor,
   Moon,
@@ -25,10 +24,11 @@ import {
 } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
 import { SUPPORTED_LANGUAGES, type LanguageCode } from '../i18n/languages';
-import type { ThemeId, ThemeMode } from '../types';
+import type { AppIconId, ThemeId, ThemeMode } from '../types';
 import {
   COLOR_THEMES,
   getContrastingForeground,
+  resolveAppIconColors,
   resolveEffectiveThemeMode,
 } from '../utils/themes';
 import { BrandMark } from './BrandMark';
@@ -38,35 +38,46 @@ interface WelcomeModalProps {
   themeMode: ThemeMode;
   themeId: ThemeId;
   customThemeColor: string;
+  appIconId?: AppIconId;
+  customIconColor?: string;
   onChangeMode: (mode: ThemeMode) => void;
   onChangeTheme: (id: ThemeId) => void;
   onChangeCustomThemeColor: (hex: string) => void;
+  onChangeAppIcon?: (iconId: AppIconId) => void;
+  onChangeCustomIconColor?: (hex: string) => void;
   onComplete: (openSettingsAfter?: boolean) => void;
 }
 
-const TOTAL_STEPS = 6;
-const FEATURED_THEME_IDS: readonly ThemeId[] = [
+const TOTAL_STEPS = 7;
+const FEATURED_THEME_IDS: readonly Exclude<ThemeId, 'custom'>[] = [
   'obsidian',
   'blue',
   'emerald',
+  'cyan',
+  'indigo',
   'purple',
-  'orange',
   'pink',
+  'red',
+  'orange',
+  'yellow',
 ];
 
 export function WelcomeModal({
   themeMode,
   themeId,
   customThemeColor,
+  appIconId = 'match-theme',
+  customIconColor = '#2563eb',
   onChangeMode,
   onChangeTheme,
   onChangeCustomThemeColor,
+  onChangeAppIcon,
+  onChangeCustomIconColor,
   onComplete,
 }: WelcomeModalProps) {
   const { lang, onChangeLanguage, t, meta, getThemeDisplayName } = useI18n();
   const [step, setStep] = useState(0);
   const [langSearch, setLangSearch] = useState('');
-  const [isCustomPickerOpen, setIsCustomPickerOpen] = useState(themeId === 'custom');
 
   const filteredLanguages = useMemo(() => {
     const q = langSearch.trim().toLowerCase();
@@ -114,14 +125,26 @@ export function WelcomeModal({
     COLOR_THEMES.find((item) => item.id === id),
   ).filter((item): item is (typeof COLOR_THEMES)[number] => Boolean(item));
 
+  const activeIconColors = resolveAppIconColors(
+    appIconId,
+    themeId,
+    themeMode,
+    customThemeColor,
+    customIconColor,
+  );
+
   const slideCopy = [
     {
       title: t.languageSectionTitle,
-      desc: t.languageSearchPlaceholder,
+      desc: `${meta.nativeName} (${meta.englishName})`,
     },
     {
       title: t.colorThemeTitle,
       desc: t.customThemeHexHint,
+    },
+    {
+      title: t.appIconSectionTitle,
+      desc: t.appIconSectionDesc,
     },
     {
       title: t.welcomeStep1Title,
@@ -143,6 +166,7 @@ export function WelcomeModal({
 
   const isFirst = step === 0;
   const isLast = step === TOTAL_STEPS - 1;
+  const effectiveMode = resolveEffectiveThemeMode(themeMode);
 
   return (
     <div
@@ -157,15 +181,20 @@ export function WelcomeModal({
         }
       }}
     >
-      <div className="relative flex w-full max-w-[540px] max-h-[calc(100vh-24px)] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
-        {/* Top Bar */}
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-3.5 shrink-0">
+      {/* Fixed 540x484 Dialog: Footer & Next button stay at the exact same pixel coordinates across all 7 steps */}
+      <div className="relative flex h-[484px] max-h-[calc(100vh-24px)] w-full max-w-[540px] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+        {/* Top Bar (Fixed 48px) */}
+        <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5">
           <div className="flex items-center gap-2.5 min-w-0">
-            <BrandMark className="h-6 w-6" />
+            <BrandMark
+              className="h-6 w-6"
+              bgColor={activeIconColors.bg}
+              fgColor={activeIconColors.fg}
+            />
             <span className="font-display text-sm font-semibold tracking-tight text-[var(--text-primary)] truncate">
               Agendamea
             </span>
-            <span className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-1.5 py-0.5 font-mono-tabular text-[10px] font-medium text-[var(--text-muted)] shrink-0">
+            <span className="font-mono-tabular text-[11px] font-medium text-[var(--text-muted)] shrink-0">
               v1.0.0
             </span>
           </div>
@@ -195,59 +224,53 @@ export function WelcomeModal({
           </div>
         </div>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto px-5 py-5">
-          {/* Slide Title & Description at top for immediate clarity */}
-          <div className="mb-4 space-y-1">
+        {/* Fixed-Height Body (Zero outer stage box, minimal nesting) */}
+        <div className="flex flex-1 flex-col overflow-hidden px-6 py-4">
+          {/* Step Header */}
+          <div className="mb-3.5 shrink-0">
             <h2
               id="welcome-modal-title"
               className="font-display text-lg font-semibold tracking-tight text-[var(--text-primary)]"
             >
               {slideCopy.title}
             </h2>
-            <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
+            <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-[var(--text-secondary)]">
               {slideCopy.desc}
             </p>
           </div>
 
-          {/* Step-Focused Stage Container (One Single Task Per Step) */}
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4 sm:min-h-[248px] flex flex-col justify-center">
-            {/* STEP 1: LANGUAGE SELECTION ONLY */}
+          {/* Step Content Area */}
+          <div className="flex flex-1 flex-col justify-center min-h-0">
+            {/* STEP 1 / 7: LANGUAGE SELECTION (Single Box Only: Search Header + 5-Row Scroll List) */}
             {step === 0 && (
-              <div className="space-y-3" data-testid="welcome-language-dropdown">
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Globe className="h-4 w-4 text-[var(--accent)] shrink-0" />
-                    <span
-                      data-testid="welcome-language-select"
-                      className="text-xs font-semibold text-[var(--text-primary)] truncate"
-                    >
-                      {meta.nativeName} ({meta.englishName})
-                    </span>
-                  </div>
-                  <span className="rounded-md bg-[var(--accent-soft)] px-2 py-0.5 font-mono-tabular text-[10px] font-semibold uppercase text-[var(--accent)] shrink-0">
-                    {meta.code}
-                  </span>
-                </div>
-
-                <div className="relative flex items-center">
-                  <Search className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <div
+                data-testid="welcome-language-dropdown"
+                className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]"
+              >
+                <div className="relative flex items-center border-b border-[var(--border)] px-3.5">
+                  <Search className="pointer-events-none h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
                   <input
                     type="text"
                     value={langSearch}
                     onChange={(e) => setLangSearch(e.target.value)}
                     placeholder={t.languageSearchPlaceholder}
                     aria-label={t.languageSearchPlaceholder}
-                    className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] pl-8 pr-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
+                    className="h-10 w-full bg-transparent px-2.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
                   />
+                  <span
+                    data-testid="welcome-language-select"
+                    className="font-mono-tabular text-[11px] font-semibold uppercase text-[var(--accent)] shrink-0"
+                  >
+                    {meta.code}
+                  </span>
                 </div>
 
-                {/* Strictly max 5 rows visible (5 * 32px + 8px padding = 168px) with smooth vertical scroll */}
+                {/* Strictly 5 rows visible at once (5 * 38px = 190px) with smooth vertical scroll */}
                 <div
                   role="listbox"
                   aria-label={t.languageSectionTitle}
                   data-testid="welcome-language-listbox"
-                  className="max-h-[168px] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+                  className="h-[190px] overflow-y-auto divide-y divide-[var(--border)]/50"
                 >
                   {filteredLanguages.map((item) => {
                     const selected = item.code === lang;
@@ -257,12 +280,10 @@ export function WelcomeModal({
                         type="button"
                         role="option"
                         aria-selected={selected}
-                        onClick={() => {
-                          onChangeLanguage(item.code as LanguageCode);
-                        }}
-                        className={`flex h-8 w-full items-center justify-between gap-2 rounded-md px-2.5 text-left text-xs transition-colors ${
+                        onClick={() => onChangeLanguage(item.code as LanguageCode)}
+                        className={`flex h-[38px] w-full items-center justify-between gap-2 px-3.5 text-left text-xs transition-colors ${
                           selected
-                            ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
+                            ? 'bg-[var(--accent-soft)] font-semibold text-[var(--text-primary)]'
                             : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                         }`}
                       >
@@ -282,20 +303,17 @@ export function WelcomeModal({
               </div>
             )}
 
-            {/* STEP 2: APPEARANCE & THEME SELECTION ONLY */}
+            {/* STEP 2 / 7: APPEARANCE & THEME SELECTION (Flat layout, Custom Color picker always open) */}
             {step === 1 && (
-              <div className="space-y-3.5">
-                {/* Appearance Mode: Light / Dark / System */}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5">
-                  <span className="text-xs font-medium text-[var(--text-primary)]">
-                    {t.appearanceModeTitle}
-                  </span>
+              <div className="space-y-3.5" data-testid="welcome-custom-theme-panel">
+                {/* Flat Row 1: Appearance Mode + Preset Swatches */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
                   <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5">
                     <button
                       type="button"
                       data-testid="welcome-mode-light"
                       onClick={() => onChangeMode('light')}
-                      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                         themeMode === 'light'
                           ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -313,7 +331,7 @@ export function WelcomeModal({
                       type="button"
                       data-testid="welcome-mode-dark"
                       onClick={() => onChangeMode('dark')}
-                      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                         themeMode === 'dark'
                           ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -331,7 +349,7 @@ export function WelcomeModal({
                       type="button"
                       data-testid="welcome-mode-system"
                       onClick={() => onChangeMode('system')}
-                      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
+                      className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                         themeMode === 'system'
                           ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                           : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -346,14 +364,11 @@ export function WelcomeModal({
                       <span>{t.systemMode}</span>
                     </button>
                   </div>
-                </div>
 
-                {/* Preset Theme Swatches + Custom Color (HEX) Button */}
-                <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
-                  <div className="flex flex-wrap items-center gap-2">
+                  {/* Preset Theme Color Dots */}
+                  <div className="flex items-center gap-1.5">
                     {featuredThemes.map((item) => {
                       const selected = item.id === themeId;
-                      const effectiveMode = resolveEffectiveThemeMode(themeMode);
                       const colorHex =
                         effectiveMode === 'dark' ? item.dark.accent : item.light.accent;
                       return (
@@ -363,11 +378,8 @@ export function WelcomeModal({
                           title={getThemeDisplayName(item.id, item.name)}
                           aria-label={getThemeDisplayName(item.id, item.name)}
                           aria-pressed={selected}
-                          onClick={() => {
-                            onChangeTheme(item.id);
-                            setIsCustomPickerOpen(false);
-                          }}
-                          className={`flex h-7 w-7 items-center justify-center rounded-full border transition-transform ${
+                          onClick={() => onChangeTheme(item.id)}
+                          className={`flex h-6 w-6 items-center justify-center rounded-full border transition-transform ${
                             selected
                               ? 'scale-110 border-[var(--text-primary)] ring-2 ring-[var(--accent-ring)]'
                               : 'border-[var(--border-strong)] hover:scale-105'
@@ -376,7 +388,7 @@ export function WelcomeModal({
                         >
                           {selected && (
                             <Check
-                              className="h-3.5 w-3.5"
+                              className="h-3 w-3"
                               style={{
                                 color:
                                   effectiveMode === 'dark'
@@ -388,271 +400,249 @@ export function WelcomeModal({
                         </button>
                       );
                     })}
-                  </div>
-
-                  <button
-                    type="button"
-                    data-testid="welcome-custom-theme-btn"
-                    aria-expanded={isCustomPickerOpen}
-                    title={t.customThemeHexTitle}
-                    onClick={() => {
-                      if (themeId !== 'custom') {
-                        onChangeTheme('custom');
-                        setIsCustomPickerOpen(true);
-                      } else {
-                        setIsCustomPickerOpen((prev) => !prev);
+                    <button
+                      type="button"
+                      data-testid="welcome-custom-theme-btn"
+                      title={t.customThemeHexTitle}
+                      onClick={() => onChangeTheme('custom')}
+                      className={`flex h-6 w-6 items-center justify-center rounded-full border transition-transform ${
+                        themeId === 'custom'
+                          ? 'scale-110 border-[var(--text-primary)] ring-2 ring-[var(--accent-ring)]'
+                          : 'border-dashed border-[var(--border-strong)] hover:scale-105'
+                      }`}
+                      style={
+                        themeId === 'custom'
+                          ? {
+                              backgroundColor: customThemeColor,
+                              color: getContrastingForeground(customThemeColor),
+                            }
+                          : undefined
                       }
-                    }}
-                    className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                      themeId === 'custom'
-                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                        : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {themeId === 'custom' ? (
-                      <span
-                        aria-hidden="true"
-                        className="h-3 w-3 rounded-full border border-black/20 shrink-0"
-                        style={{ backgroundColor: customThemeColor }}
-                      />
-                    ) : (
-                      <Palette className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                    )}
-                    <span>{t.customThemeButton}</span>
-                    <span className="font-mono-tabular text-[10px] opacity-80">
-                      {themeId === 'custom' ? customThemeColor.toUpperCase() : 'HEX'}
-                    </span>
-                  </button>
+                    >
+                      <Palette className="h-3 w-3" />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Expandable In-App Full-Spectrum Custom Color Picker */}
-                {isCustomPickerOpen && (
-                  <div
-                    data-testid="welcome-custom-theme-panel"
-                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
-                  >
-                    <ColorSpectrumPicker
-                      value={customThemeColor}
-                      onChange={onChangeCustomThemeColor}
-                      hexInputLabel={t.customThemeHexTitle}
-                      hexInputTestId="welcome-custom-theme-hex"
-                      compact
-                      previewNode={
-                        <span
-                          aria-hidden="true"
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border-strong)]"
-                          style={{
-                            backgroundColor: customThemeColor,
-                            color: getContrastingForeground(customThemeColor),
-                          }}
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
-                      }
-                    />
-                  </div>
-                )}
+                {/* Flat Row 2: Custom Color Spectrum Picker (Always Open) */}
+                <ColorSpectrumPicker
+                  value={customThemeColor}
+                  onChange={(hex) => {
+                    if (themeId !== 'custom') {
+                      onChangeTheme('custom');
+                    }
+                    onChangeCustomThemeColor(hex);
+                  }}
+                  hexInputLabel={t.customThemeHexTitle}
+                  hexInputTestId="welcome-custom-theme-hex"
+                  compact
+                  previewNode={
+                    <span
+                      aria-hidden="true"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border-strong)]"
+                      style={{
+                        backgroundColor: customThemeColor,
+                        color: getContrastingForeground(customThemeColor),
+                      }}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                  }
+                />
               </div>
             )}
 
-            {/* STEP 3: CALM, FOCUSED WELCOME HERO */}
+            {/* STEP 3 / 7: APP ICON SELECTION (Flat layout, Preset Icons + Always-Open Custom Icon Color Picker) */}
             {step === 2 && (
-              <div className="flex flex-col items-center justify-center py-4 text-center space-y-4">
-                <div
-                  className="rounded-2xl p-2.5 shadow-sm"
-                  style={{ backgroundColor: 'var(--accent-soft)' }}
-                >
-                  <BrandMark className="h-14 w-14 rounded-xl" />
+              <div className="space-y-3.5" data-testid="welcome-icon-step">
+                {/* Flat Row 1: Mode Pills + Preset Theme Icons */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
+                  <div className="inline-flex flex-wrap items-center gap-1">
+                    {(
+                      [
+                        { id: 'match-theme', label: t.appIconMatchTheme },
+                        { id: 'obsidian', label: t.appIconDarkMono },
+                        { id: 'obsidian-light', label: t.appIconLightMono },
+                        { id: 'custom', label: t.appIconCustom },
+                      ] as const
+                    ).map((modeOpt) => {
+                      const active = appIconId === modeOpt.id;
+                      return (
+                        <button
+                          key={modeOpt.id}
+                          type="button"
+                          data-testid={`welcome-app-icon-${modeOpt.id}`}
+                          onClick={() => onChangeAppIcon?.(modeOpt.id)}
+                          className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors whitespace-nowrap ${
+                            active
+                              ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
+                              : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                          }`}
+                          style={
+                            active
+                              ? { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }
+                              : undefined
+                          }
+                        >
+                          {modeOpt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Preset Theme Miniature App Icons */}
+                  <div className="flex items-center gap-1.5">
+                    {featuredThemes.slice(0, 7).map((item) => {
+                      const selected = appIconId === item.id;
+                      const preview = resolveAppIconColors(
+                        item.id,
+                        themeId,
+                        themeMode,
+                        customThemeColor,
+                        customIconColor,
+                      );
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          title={getThemeDisplayName(item.id, item.name)}
+                          aria-label={getThemeDisplayName(item.id, item.name)}
+                          aria-pressed={selected}
+                          onClick={() => onChangeAppIcon?.(item.id)}
+                          className={`rounded-lg p-0.5 transition-transform ${
+                            selected
+                              ? 'scale-110 ring-2 ring-[var(--text-primary)]'
+                              : 'opacity-85 hover:scale-105 hover:opacity-100'
+                          }`}
+                        >
+                          <BrandMark
+                            className="h-5 w-5 rounded-[5px]"
+                            bgColor={preview.bg}
+                            fgColor={preview.fg}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+
+                {/* Flat Row 2: Custom App Icon Color Picker (Always Open) */}
+                <ColorSpectrumPicker
+                  value={customIconColor}
+                  onChange={(hex) => {
+                    if (appIconId !== 'custom') {
+                      onChangeAppIcon?.('custom');
+                    }
+                    onChangeCustomIconColor?.(hex);
+                  }}
+                  hexInputLabel={`${t.appIconCustom} (HEX)`}
+                  hexInputTestId="welcome-custom-icon-hex"
+                  compact
+                  previewNode={
+                    <BrandMark
+                      className="h-7 w-7 rounded-lg shrink-0"
+                      bgColor={activeIconColors.bg}
+                      fgColor={activeIconColors.fg}
+                    />
+                  }
+                />
+              </div>
+            )}
+
+            {/* STEP 4 / 7: WELCOME HERO (Zero boxes, calm & open) */}
+            {step === 3 && (
+              <div className="flex flex-col items-center justify-center text-center space-y-4">
+                <BrandMark
+                  className="h-16 w-16 rounded-2xl shadow-md"
+                  bgColor={activeIconColors.bg}
+                  fgColor={activeIconColors.fg}
+                />
                 <div className="space-y-1">
                   <p className="font-display text-base font-semibold text-[var(--text-primary)]">
                     Agendamea · {t.appTitleSuffix}
                   </p>
                   <p className="text-xs text-[var(--text-muted)]">{t.instantSaveBadge}</p>
                 </div>
-                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
-                    <Database className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                <div className="flex flex-wrap items-center justify-center gap-5 pt-1 text-xs font-medium text-[var(--text-secondary)]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Database className="h-3.5 w-3.5 text-[var(--accent)]" />
                     <span>SQLite WAL</span>
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
-                    <Sparkles className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-[var(--accent)]" />
                     <span>28+ {t.themesCountUnit}</span>
                   </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-medium text-[var(--text-secondary)]">
-                    <Globe className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                  <span className="inline-flex items-center gap-1.5">
+                    <Globe className="h-3.5 w-3.5 text-[var(--accent)]" />
                     <span>73 · {meta.nativeName}</span>
                   </span>
                 </div>
               </div>
             )}
 
-            {/* STEP 4: 4 PLANNING VIEWS */}
-            {step === 3 && (
-              <div className="grid grid-cols-2 gap-2.5">
-                {/* List Card */}
-                <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="flex h-6 w-6 items-center justify-center rounded-md shrink-0"
-                      style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
-                    >
-                      <List className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
-                      {t.viewList}
-                    </span>
-                  </div>
-                  <div className="flex h-12 flex-col justify-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full border border-[var(--accent)] shrink-0" />
-                      <span className="h-1.5 flex-1 rounded-full bg-[var(--border-strong)]" />
+            {/* STEP 5 / 7: 4 PLANNING VIEWS (Clean 2x2 Grid, Zero Nested Wireframe Boxes) */}
+            {step === 4 && (
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { Icon: List, title: t.viewList, desc: t.welcomeCardListDesc },
+                  { Icon: Columns3, title: t.viewKanban, desc: t.welcomeCardKanbanDesc },
+                  { Icon: Calendar, title: t.viewCalendar, desc: t.welcomeCardCalendarDesc },
+                  { Icon: Grid2x2, title: t.viewMatrix, desc: t.welcomeCardMatrixDesc },
+                ].map(({ Icon, title, desc }) => (
+                  <div
+                    key={title}
+                    className="flex flex-col justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+                      <span className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
+                        {title}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className="h-2.5 w-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: 'var(--accent)' }}
-                      />
-                      <span className="h-1.5 w-2/3 rounded-full bg-[var(--border)]" />
-                    </div>
+                    <p className="text-[11px] leading-relaxed text-[var(--text-muted)]">
+                      {desc}
+                    </p>
                   </div>
-                  <p className="text-[11px] leading-snug text-[var(--text-muted)]">
-                    {t.welcomeCardListDesc}
-                  </p>
-                </div>
-
-                {/* Kanban Card */}
-                <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="flex h-6 w-6 items-center justify-center rounded-md shrink-0"
-                      style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
-                    >
-                      <Columns3 className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
-                      {t.viewKanban}
-                    </span>
-                  </div>
-                  <div className="grid h-12 grid-cols-3 items-start gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] p-2">
-                    {[2, 1, 2].map((count, colIdx) => (
-                      <div key={colIdx} className="space-y-1">
-                        {Array.from({ length: count }).map((_, rowIdx) => (
-                          <div
-                            key={rowIdx}
-                            className="h-3 rounded-sm border border-[var(--border)] bg-[var(--surface)]"
-                          />
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[11px] leading-snug text-[var(--text-muted)]">
-                    {t.welcomeCardKanbanDesc}
-                  </p>
-                </div>
-
-                {/* Calendar Card */}
-                <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="flex h-6 w-6 items-center justify-center rounded-md shrink-0"
-                      style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
-                    >
-                      <Calendar className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
-                      {t.viewCalendar}
-                    </span>
-                  </div>
-                  <div className="grid h-12 grid-cols-7 content-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] p-2">
-                    {Array.from({ length: 14 }).map((_, idx) => (
-                      <span
-                        key={idx}
-                        className="h-2.5 rounded-[2px]"
-                        style={{
-                          backgroundColor:
-                            idx === 4 || idx === 9 ? 'var(--accent)' : 'var(--border)',
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-[11px] leading-snug text-[var(--text-muted)]">
-                    {t.welcomeCardCalendarDesc}
-                  </p>
-                </div>
-
-                {/* Eisenhower Matrix Card */}
-                <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="flex h-6 w-6 items-center justify-center rounded-md shrink-0"
-                      style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
-                    >
-                      <Grid2x2 className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
-                      {t.viewMatrix}
-                    </span>
-                  </div>
-                  <div className="grid h-12 grid-cols-2 content-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] p-1.5">
-                    {(['I', 'II', 'III', 'IV'] as const).map((quad, idx) => (
-                      <div
-                        key={quad}
-                        className="flex h-4 items-center justify-center rounded-sm border border-[var(--border)] font-mono-tabular text-[9px] font-semibold"
-                        style={{
-                          backgroundColor:
-                            idx === 0 ? 'var(--accent-soft)' : 'var(--surface)',
-                          color: idx === 0 ? 'var(--accent)' : 'var(--text-muted)',
-                        }}
-                      >
-                        {quad}
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[11px] leading-snug text-[var(--text-muted)]">
-                    {t.welcomeCardMatrixDesc}
-                  </p>
-                </div>
+                ))}
               </div>
             )}
 
-            {/* STEP 5: SMART DETAILS & KEYBOARD SHORTCUTS */}
-            {step === 4 && (
-              <div className="space-y-3">
-                {/* Realistic Task Card Anatomy Preview */}
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3.5">
-                  <div className="flex items-start gap-2.5">
+            {/* STEP 6 / 7: SMART DETAILS & KEYBOARD SHORTCUTS (1 Task Row + Flat Shortcut Line) */}
+            {step === 5 && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4">
+                  <div className="flex items-start gap-3">
                     <span
-                      className="mt-0.5 flex h-4 w-4 items-center justify-center rounded-full shrink-0"
+                      className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
                       style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
                     >
                       <Check className="h-2.5 w-2.5" />
                     </span>
-                    <div className="min-w-0 flex-1 space-y-2">
+                    <div className="min-w-0 flex-1 space-y-2.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
                           Agendamea · {t.today}
                         </span>
-                        <span className="inline-flex items-center gap-1 rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono-tabular text-[10px] font-medium text-[var(--accent)] shrink-0">
-                          <Clock className="h-2.5 w-2.5" />
+                        <span className="inline-flex items-center gap-1 font-mono-tabular text-[11px] font-medium text-[var(--accent)] shrink-0">
+                          <Clock className="h-3 w-3" />
                           <span>14:30</span>
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">
-                          <Calendar className="h-2.5 w-2.5 text-[var(--text-muted)]" />
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-secondary)]">
+                        <span className="inline-flex items-center gap-1">
+                          <Calendar className="h-3 w-3 text-[var(--text-muted)]" />
                           <span>{t.today}</span>
                         </span>
-                        <span className="inline-flex items-center gap-0.5 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">
-                          <Hash className="h-2.5 w-2.5 text-[var(--accent)]" />
+                        <span className="inline-flex items-center gap-0.5 text-[var(--accent)]">
+                          <Hash className="h-3 w-3" />
                           <span>{t.important.toLowerCase()}</span>
                         </span>
-                        <span className="inline-flex items-center gap-0.5 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-secondary)]">
-                          <Hash className="h-2.5 w-2.5 text-[var(--accent)]" />
+                        <span className="inline-flex items-center gap-0.5 text-[var(--accent)]">
+                          <Hash className="h-3 w-3" />
                           <span>{t.priorityHigh.toLowerCase()}</span>
                         </span>
-                        <span className="ms-auto font-mono-tabular text-[10px] text-[var(--text-muted)]">
+                        <span className="ms-auto font-mono-tabular text-[11px] text-[var(--text-muted)]">
                           2 / 3 {t.subtaskCountUnit}
                         </span>
                       </div>
@@ -667,22 +657,18 @@ export function WelcomeModal({
                   </div>
                 </div>
 
-                {/* Keyboard Shortcuts Strip */}
-                <div className="grid grid-cols-3 gap-2">
+                {/* Flat Keyboard Shortcuts Row (Zero outer cards) */}
+                <div className="grid grid-cols-3 gap-3 pt-1">
                   {[
                     { keycap: 'N', label: t.shortcutNewTask },
                     { keycap: 'Ctrl+K', label: t.shortcutSearch },
                     { keycap: 'Alt+↑/↓', label: t.shortcutReorder },
                   ].map((item) => (
-                    <div
-                      key={item.keycap}
-                      className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-2.5 text-center"
-                    >
-                      <kbd className="inline-flex items-center gap-1 rounded-md border border-[var(--border-strong)] bg-[var(--canvas)] px-2 py-0.5 font-mono-tabular text-[11px] font-semibold text-[var(--text-primary)] shadow-2xs whitespace-nowrap">
-                        <Keyboard className="h-2.5 w-2.5 text-[var(--text-muted)] shrink-0" />
-                        <span>{item.keycap}</span>
+                    <div key={item.keycap} className="flex flex-col items-center gap-1 text-center">
+                      <kbd className="font-mono-tabular text-xs font-semibold text-[var(--accent)]">
+                        {item.keycap}
                       </kbd>
-                      <span className="line-clamp-2 text-[10px] leading-tight text-[var(--text-muted)]">
+                      <span className="line-clamp-2 text-[11px] leading-snug text-[var(--text-muted)]">
                         {item.label}
                       </span>
                     </div>
@@ -691,9 +677,9 @@ export function WelcomeModal({
               </div>
             )}
 
-            {/* STEP 6: PRIVACY & CLOUD BACKUP */}
-            {step === 5 && (
-              <div className="space-y-2.5">
+            {/* STEP 7 / 7: PRIVACY & CLOUD BACKUP (Flat Divider List, Zero Boxes) */}
+            {step === 6 && (
+              <div className="divide-y divide-[var(--border)]">
                 {[
                   {
                     Icon: Shield,
@@ -724,16 +710,8 @@ export function WelcomeModal({
                     action: null,
                   },
                 ].map(({ Icon, title, desc, action }) => (
-                  <div
-                    key={title}
-                    className="flex items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5"
-                  >
-                    <span
-                      className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg shrink-0"
-                      style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </span>
+                  <div key={title} className="flex items-start gap-3 py-3 first:pt-1 last:pb-1">
+                    <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--accent)]" />
                     <div className="min-w-0 flex-1">
                       <p className="font-display text-xs font-semibold text-[var(--text-primary)]">
                         {title}
@@ -750,8 +728,8 @@ export function WelcomeModal({
           </div>
         </div>
 
-        {/* Fixed Single-Line Footer Navigation */}
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--canvas)] px-5 py-3.5 shrink-0">
+        {/* Fixed 56px Footer: Next/Start Button Never Moves Across Steps */}
+        <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--canvas)] px-5">
           {/* Interactive Step Indicators */}
           <div className="flex items-center gap-1.5" role="tablist" aria-label="Agendamea">
             {Array.from({ length: TOTAL_STEPS }).map((_, idx) => {
@@ -773,7 +751,7 @@ export function WelcomeModal({
             })}
           </div>
 
-          {/* Action Buttons (Always Single Line, High Contrast & Unselectable) */}
+          {/* Action Buttons (Fixed coordinates, High Contrast & Unselectable) */}
           <div className="flex items-center gap-2 shrink-0 flex-nowrap">
             {!isFirst && (
               <button
