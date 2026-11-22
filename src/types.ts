@@ -27,6 +27,14 @@ export type AppIconId = 'match-theme' | 'obsidian-light' | ThemeId;
 
 export type CloseBehavior = 'ask' | 'tray' | 'quit';
 
+export type SettingsTabId =
+  | 'appearance'
+  | 'accessibility'
+  | 'general'
+  | 'data'
+  | 'trash'
+  | 'about';
+
 export type SmartView = 'all' | 'today' | 'important' | 'completed';
 
 export type ActiveView =
@@ -154,6 +162,9 @@ export interface SubtaskPatch {
 
 export interface UpdateCheckResult {
   ok: boolean;
+  storeManaged?: boolean;
+  nativeAutoUpdateReady?: boolean;
+  downloaded?: boolean;
   currentVersion: string;
   latestVersion: string;
   updateAvailable: boolean;

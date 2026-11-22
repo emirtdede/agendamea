@@ -410,6 +410,15 @@ export function compileSeedToDictionary(
     cloudCustomFolderHint: `OneDrive / Google Drive / Dropbox · ${backupRestore}`,
     copyDiagnosticsButton: `${currentVersion} · ${settings}`,
     diagnosticsCopiedToast: `${currentVersion} · ${autoSaved}`,
+    updateReadyToInstallLabel: `${updateAvailable} · ${autoSaved}`,
+    restartAndUpdateButton: `${retry} & ${downloadAndUpdate}`,
+    settingsBackToTasks: allTasks,
+    settingsNavGroupPersonalization: appearance,
+    settingsNavGroupWorkspace: tasks,
+    settingsNavGroupSystem: updatesTitle,
+    settingsTabAppearance: `${appearance} & ${colorTheme}`,
+    settingsTabGeneral: `${generalAndTheme} · ${languageTitle}`,
+    settingsTabAbout: `${updatesTitle} & ${currentVersion}`,
   };
 }
 

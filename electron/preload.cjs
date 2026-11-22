@@ -38,11 +38,22 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
   getInitialLocale: () => ipcRenderer.invoke('app:get-initial-locale'),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   downloadAndInstallUpdate: (url) => ipcRenderer.invoke('updater:download-and-install', url),
+  quitAndInstallUpdate: () => ipcRenderer.invoke('updater:quit-and-install'),
   pickCloudSyncFolder: () => ipcRenderer.invoke('onedrive:pick-folder'),
   openOneDriveFolder: (folderPath) => ipcRenderer.invoke('onedrive:open-folder', folderPath),
   onUpdateProgress: (callback) => {
     const listener = (_event, percent) => callback(Number(percent) || 0);
     ipcRenderer.on('updater:progress', listener);
     return () => ipcRenderer.removeListener('updater:progress', listener);
+  },
+  onUpdateDownloaded: (callback) => {
+    const listener = (_event, info) => callback({ version: String(info?.version || '') });
+    ipcRenderer.on('updater:downloaded', listener);
+    return () => ipcRenderer.removeListener('updater:downloaded', listener);
+  },
+  onUpdateError: (callback) => {
+    const listener = (_event, message) => callback(String(message || ''));
+    ipcRenderer.on('updater:error', listener);
+    return () => ipcRenderer.removeListener('updater:error', listener);
   },
 });

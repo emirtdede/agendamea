@@ -943,6 +943,63 @@ ipcMain.handle('icon:apply', (event, payload) => {
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/emirtdede/agendamea/releases/latest';
 const GITHUB_RELEASES_HTML = 'https://github.com/emirtdede/agendamea/releases/latest';
 
+let nativeAutoUpdater = null;
+let nativeCheckHasUpdate = false;
+let nativeDownloadedVersion = null;
+
+function canUseNativeAutoUpdater() {
+  return (
+    Boolean(app.isPackaged) &&
+    !process.windowsStore &&
+    !process.env.PORTABLE_EXECUTABLE_FILE &&
+    fs.existsSync(path.join(process.resourcesPath || '', 'app-update.yml'))
+  );
+}
+
+function getNativeAutoUpdater() {
+  if (!canUseNativeAutoUpdater()) return null;
+  if (nativeAutoUpdater) return nativeAutoUpdater;
+  try {
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.allowPrerelease = false;
+    autoUpdater.disableWebInstaller = true;
+    autoUpdater.logger = null;
+
+    autoUpdater.on('download-progress', (progress) => {
+      const pct = Math.min(100, Math.max(0, Math.round(Number(progress?.percent) || 0)));
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:progress', pct);
+      }
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      nativeDownloadedVersion =
+        (info && typeof info.version === 'string' && info.version) || nativeDownloadedVersion || '';
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:downloaded', {
+          version: nativeDownloadedVersion,
+        });
+      }
+    });
+
+    autoUpdater.on('error', (err) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(
+          'updater:error',
+          err instanceof Error ? err.message : 'Update error',
+        );
+      }
+    });
+
+    nativeAutoUpdater = autoUpdater;
+    return nativeAutoUpdater;
+  } catch {
+    return null;
+  }
+}
+
 function compareSemver(a, b) {
   const cleanA = String(a || '').trim().replace(/^v/i, '').split('-')[0];
   const cleanB = String(b || '').trim().replace(/^v/i, '').split('-')[0];
@@ -1038,6 +1095,49 @@ ipcMain.handle('onedrive:open-folder', async (_event, customFolderPath) => {
 ipcMain.handle('updater:check', async () => {
   const currentVersion = app.getVersion() || '1.0.0';
   const checkedAt = new Date().toISOString();
+
+  // Microsoft Store handles updates exclusively (Policy 10.2.7)
+  if (process.windowsStore) {
+    return {
+      ok: true,
+      storeManaged: true,
+      currentVersion,
+      latestVersion: currentVersion,
+      updateAvailable: false,
+      releaseName: `Agendamea v${currentVersion}`,
+      releaseNotes: '',
+      publishedAt: null,
+      releaseUrl: GITHUB_RELEASES_HTML,
+      setupUrl: null,
+      portableUrl: null,
+      msixUrl: null,
+      checkedAt,
+    };
+  }
+
+  let nativeAutoUpdateReady = false;
+  let nativeLatestVersion = null;
+  const nativeUpdater = getNativeAutoUpdater();
+  if (nativeUpdater) {
+    try {
+      const checkResult = await nativeUpdater.checkForUpdates();
+      const ver = checkResult?.updateInfo?.version;
+      if (typeof ver === 'string' && compareSemver(ver, currentVersion) > 0) {
+        nativeAutoUpdateReady = true;
+        nativeCheckHasUpdate = true;
+        nativeLatestVersion = ver;
+      } else {
+        nativeCheckHasUpdate = false;
+      }
+    } catch {
+      nativeCheckHasUpdate = false;
+    }
+  }
+
+  const alreadyDownloaded =
+    Boolean(nativeDownloadedVersion) &&
+    compareSemver(nativeDownloadedVersion, currentVersion) > 0;
+
   try {
     const res = await fetch(GITHUB_RELEASES_API, {
       signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(8000) : undefined,
@@ -1047,6 +1147,24 @@ ipcMain.handle('updater:check', async () => {
       },
     });
     if (!res.ok) {
+      if (nativeAutoUpdateReady && nativeLatestVersion) {
+        return {
+          ok: true,
+          currentVersion,
+          latestVersion: nativeLatestVersion,
+          updateAvailable: true,
+          nativeAutoUpdateReady: true,
+          downloaded: alreadyDownloaded,
+          releaseName: `Agendamea v${nativeLatestVersion}`,
+          releaseNotes: '',
+          publishedAt: null,
+          releaseUrl: GITHUB_RELEASES_HTML,
+          setupUrl: null,
+          portableUrl: null,
+          msixUrl: null,
+          checkedAt,
+        };
+      }
       return {
         ok: false,
         currentVersion,
@@ -1063,7 +1181,12 @@ ipcMain.handle('updater:check', async () => {
       };
     }
     const data = await res.json();
-    const latestVersion = String(data?.tag_name || currentVersion).replace(/^v/i, '') || currentVersion;
+    const apiLatestVersion =
+      String(data?.tag_name || currentVersion).replace(/^v/i, '') || currentVersion;
+    const latestVersion =
+      nativeLatestVersion && compareSemver(nativeLatestVersion, apiLatestVersion) >= 0
+        ? nativeLatestVersion
+        : apiLatestVersion;
     const updateAvailable = compareSemver(latestVersion, currentVersion) > 0;
     const assets = Array.isArray(data?.assets) ? data.assets : [];
     const setupAsset = assets.find(
@@ -1080,6 +1203,8 @@ ipcMain.handle('updater:check', async () => {
       currentVersion,
       latestVersion,
       updateAvailable,
+      nativeAutoUpdateReady,
+      downloaded: alreadyDownloaded,
       releaseName:
         typeof data?.name === 'string' && data.name ? data.name : `Agendamea v${latestVersion}`,
       releaseNotes: typeof data?.body === 'string' ? data.body.slice(0, 4000) : '',
@@ -1101,6 +1226,24 @@ ipcMain.handle('updater:check', async () => {
       checkedAt,
     };
   } catch {
+    if (nativeAutoUpdateReady && nativeLatestVersion) {
+      return {
+        ok: true,
+        currentVersion,
+        latestVersion: nativeLatestVersion,
+        updateAvailable: true,
+        nativeAutoUpdateReady: true,
+        downloaded: alreadyDownloaded,
+        releaseName: `Agendamea v${nativeLatestVersion}`,
+        releaseNotes: '',
+        publishedAt: null,
+        releaseUrl: GITHUB_RELEASES_HTML,
+        setupUrl: null,
+        portableUrl: null,
+        msixUrl: null,
+        checkedAt,
+      };
+    }
     return {
       ok: false,
       currentVersion,
@@ -1122,6 +1265,18 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
   if (process.windowsStore) {
     return { ok: false, storeManaged: true };
   }
+
+  // Primary zero-cost native path: electron-updater differential (.blockmap) download + SHA-512 verification
+  const nativeUpdater = getNativeAutoUpdater();
+  if (nativeUpdater && nativeCheckHasUpdate) {
+    try {
+      await nativeUpdater.downloadUpdate();
+      return { ok: true, downloaded: true, nativeAutoUpdater: true };
+    } catch {
+      // Fall back cleanly to direct GitHub installer download below
+    }
+  }
+
   const win = resolveSenderWindow(event);
   if (typeof downloadUrl !== 'string' || !isAllowedUpdateDownloadUrl(downloadUrl)) {
     void shell.openExternal(GITHUB_RELEASES_HTML);
@@ -1181,6 +1336,30 @@ ipcMain.handle('updater:download-and-install', async (event, downloadUrl) => {
     void shell.openExternal(downloadUrl);
     return { ok: true, launchedExternal: true };
   }
+});
+
+ipcMain.handle('updater:quit-and-install', () => {
+  if (process.windowsStore) {
+    return { ok: false, storeManaged: true };
+  }
+  const nativeUpdater = getNativeAutoUpdater();
+  if (!nativeUpdater || !nativeDownloadedVersion) {
+    return { ok: false };
+  }
+  isQuitting = true;
+  if (tray) {
+    try {
+      tray.destroy();
+    } catch {
+      // Ignore already destroyed tray
+    }
+    tray = null;
+  }
+  stopBackend();
+  setImmediate(() => {
+    nativeUpdater.quitAndInstall(true, true);
+  });
+  return { ok: true };
 });
 
 app

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowDownToLine,
+  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
@@ -12,6 +13,7 @@ import {
   FolderOpen,
   Keyboard,
   Lock,
+  Menu,
   Minus,
   Monitor,
   Moon,
@@ -21,13 +23,14 @@ import {
   RefreshCw,
   RotateCcw,
   Scale,
+  Settings,
   Shield,
+  SlidersHorizontal,
   Sparkles,
   Sun,
   Trash2,
   Unlock,
   Upload,
-  X,
   ZoomIn,
 } from 'lucide-react';
 import { api } from '../api/client';
@@ -39,10 +42,10 @@ import type {
   Category,
   CloseBehavior,
   OneDriveStatus,
+  SettingsTabId,
   ThemeId,
   ThemeMode,
   Todo,
-  UpdateCheckResult,
 } from '../types';
 import {
   COLOR_THEMES,
@@ -54,11 +57,17 @@ import { BrandMark } from './BrandMark';
 import { ColorDot } from './ColorDot';
 import { ColorSpectrumPicker } from './ColorSpectrumPicker';
 import { LegalDocumentView } from './LegalDocumentView';
-import { UpdateAndLanguageSection } from './UpdateSettingsSection';
+import {
+  LanguageSelectorSection,
+  UpdatesSection,
+  type AppUpdateState,
+} from './UpdateSettingsSection';
 import { VelliumLogo } from './VelliumLogo';
 
 interface SettingsModalProps {
   onClose: () => void;
+  initialTab?: SettingsTabId;
+  onOpenMobileSidebar?: () => void;
   themeMode: ThemeMode;
   themeId: ThemeId;
   customThemeColor: string;
@@ -85,13 +94,10 @@ interface SettingsModalProps {
   onToggleDragLock: (locked: boolean) => void;
   autoUpdateCheck: boolean;
   onToggleAutoUpdateCheck: (enabled: boolean) => void;
-  updateState: {
-    status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'error';
-    result: UpdateCheckResult | null;
-    downloadPercent: number | null;
-  };
+  updateState: AppUpdateState;
   onCheckForUpdates: () => Promise<void>;
   onDownloadAndInstall: () => Promise<void>;
+  onQuitAndInstallUpdate?: () => Promise<void>;
   totalTodoCount: number;
   completedTodoCount: number;
   onClearAllCompleted: () => Promise<void>;
@@ -127,6 +133,8 @@ function formatDeletedAt(iso: string | null, intlLocale: string): string {
 
 export function SettingsModal({
   onClose,
+  initialTab = 'appearance',
+  onOpenMobileSidebar,
   themeMode,
   themeId,
   customThemeColor,
@@ -156,6 +164,7 @@ export function SettingsModal({
   updateState,
   onCheckForUpdates,
   onDownloadAndInstall,
+  onQuitAndInstallUpdate,
   totalTodoCount,
   completedTodoCount,
   onClearAllCompleted,
@@ -171,7 +180,7 @@ export function SettingsModal({
   onOpenWelcomeGuide,
 }: SettingsModalProps) {
   const { lang, t, meta, getThemeDisplayName, legalDocs } = useI18n();
-  const [activeTab, setActiveTab] = useState<'general' | 'trash'>('general');
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
   const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocId | null>(null);
   const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -196,6 +205,10 @@ export function SettingsModal({
   const isMountedRef = useRef(true);
 
   useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
     isMountedRef.current = true;
     void api
       .getOneDriveStatus()
@@ -206,6 +219,15 @@ export function SettingsModal({
     return () => {
       isMountedRef.current = false;
     };
+  }, []);
+
+  const handleSelectTab = useCallback((nextTab: SettingsTabId) => {
+    setActiveTab(nextTab);
+    setActiveLegalDoc(null);
+    setConfirmEmptyTrash(false);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
   }, []);
 
   const handleOneDriveConnectOrSync = async () => {
@@ -226,9 +248,7 @@ export function SettingsModal({
       }
     } catch (err) {
       if (isMountedRef.current) {
-        setImportError(
-          localizeErrorMessage(err, t.operationFailedToast, lang, t),
-        );
+        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
       }
     } finally {
       if (isMountedRef.current) setIsOneDriveBusy(false);
@@ -247,7 +267,8 @@ export function SettingsModal({
       const blob = await res.blob();
       const disp = res.headers.get('content-disposition') ?? '';
       const match = /filename="([^"]+)"/i.exec(disp);
-      const fileName = match?.[1] || `agendamea-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      const fileName =
+        match?.[1] || `agendamea-backup-${new Date().toISOString().slice(0, 10)}.json`;
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -300,9 +321,7 @@ export function SettingsModal({
       }
     } catch (err) {
       if (isMountedRef.current) {
-        setImportError(
-          localizeErrorMessage(err, t.operationFailedToast, lang, t),
-        );
+        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
       }
     } finally {
       if (isMountedRef.current) setIsOneDriveBusy(false);
@@ -352,9 +371,7 @@ export function SettingsModal({
       }
     } catch (err) {
       if (isMountedRef.current) {
-        setImportError(
-          localizeErrorMessage(err, t.importRestoreFailedError, lang, t),
-        );
+        setImportError(localizeErrorMessage(err, t.importRestoreFailedError, lang, t));
       }
     } finally {
       if (isMountedRef.current) setIsOneDriveBusy(false);
@@ -397,29 +414,26 @@ export function SettingsModal({
 
   const trashCount = trashedCategories.length + trashedTodos.length;
 
-  const runTrashItemOp = useCallback(
-    async (key: string, op: () => Promise<void>) => {
-      setBusyTrashIds((prev) => {
-        if (prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.add(key);
-        return next;
-      });
-      try {
-        await op();
-      } finally {
-        if (isMountedRef.current) {
-          setBusyTrashIds((prev) => {
-            if (!prev.has(key)) return prev;
-            const next = new Set(prev);
-            next.delete(key);
-            return next;
-          });
-        }
+  const runTrashItemOp = useCallback(async (key: string, op: () => Promise<void>) => {
+    setBusyTrashIds((prev) => {
+      if (prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+    try {
+      await op();
+    } finally {
+      if (isMountedRef.current) {
+        setBusyTrashIds((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
   const safeClose = useCallback(() => {
     if (isImporting) return;
@@ -496,9 +510,7 @@ export function SettingsModal({
       await onImportBackup(pendingImport.payload);
       setPendingImport(null);
     } catch (err) {
-      setImportError(
-        localizeErrorMessage(err, t.importRestoreFailedError, lang, t),
-      );
+      setImportError(localizeErrorMessage(err, t.importRestoreFailedError, lang, t));
     } finally {
       setIsImporting(false);
     }
@@ -520,504 +532,656 @@ export function SettingsModal({
     { id: 'accessibility', title: t.legalAccessibilityTitle, Icon: Shield },
   ];
 
+  const navGroups: Array<{
+    groupTitle: string;
+    items: Array<{
+      id: SettingsTabId;
+      label: string;
+      Icon: React.ComponentType<{ className?: string }>;
+      badge?: number;
+      hasDot?: boolean;
+    }>;
+  }> = [
+    {
+      groupTitle: t.settingsNavGroupPersonalization,
+      items: [
+        { id: 'appearance', label: t.settingsTabAppearance, Icon: Palette },
+        { id: 'accessibility', label: t.accessibilitySectionTitle, Icon: ZoomIn },
+      ],
+    },
+    {
+      groupTitle: t.settingsNavGroupWorkspace,
+      items: [
+        { id: 'general', label: t.settingsTabGeneral, Icon: SlidersHorizontal },
+        { id: 'data', label: t.dataAndBackupTitle, Icon: Cloud },
+        {
+          id: 'trash',
+          label: t.tabTrash,
+          Icon: Trash2,
+          badge: trashCount > 0 ? trashCount : undefined,
+        },
+      ],
+    },
+    {
+      groupTitle: t.settingsNavGroupSystem,
+      items: [
+        {
+          id: 'about',
+          label: t.settingsTabAbout,
+          Icon: Shield,
+          hasDot: updateState.status === 'available' || updateState.status === 'downloaded',
+        },
+      ],
+    },
+  ];
+
+  const allNavItems = navGroups.flatMap((g) => g.items);
+  const currentTabMeta = allNavItems.find((item) => item.id === activeTab) ?? allNavItems[0];
+  const CurrentTabIcon = currentTabMeta.Icon;
+
+  const activeIconColors = resolveAppIconColors(
+    appIconId,
+    themeId,
+    themeMode,
+    customThemeColor,
+    customIconColor,
+  );
+  const activeIconLabel =
+    appIconId === 'match-theme'
+      ? t.appIconMatchTheme
+      : appIconId === 'obsidian-light'
+        ? t.appIconLightMono
+        : appIconId === 'custom'
+          ? `${t.appIconCustom} (${customIconColor.toUpperCase()})`
+          : (() => {
+              const matched = COLOR_THEMES.find((item) => item.id === appIconId);
+              return matched
+                ? getThemeDisplayName(matched.id, matched.name)
+                : t.appIconMatchTheme;
+            })();
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="settings-modal-title"
+    <section
+      data-testid="settings-page"
+      aria-labelledby="settings-page-title"
+      className="flex flex-1 min-h-0 min-w-0 flex-col lg:flex-row bg-[var(--canvas)] overflow-hidden"
     >
-      {/* Backdrop */}
-      <button
-        type="button"
-        aria-label={t.closeMenu}
-        disabled={isImporting}
-        onClick={safeClose}
-        className="fixed inset-0 bg-black/45 backdrop-blur-[2px]"
-      />
-
-      {/* Dialog Surface */}
-      <div className="relative z-10 flex max-h-[88vh] w-full max-w-[580px] flex-col overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl">
-        {/* Header */}
-        <div className="border-b border-[var(--border)] px-5 pt-4 pb-3 sm:px-6 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2
-                id="settings-modal-title"
-                className="font-display text-base font-bold tracking-tight text-[var(--text-primary)]"
-              >
-                {activeLegalDoc ? legalDocs[activeLegalDoc].title : t.settings}
-              </h2>
-              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-                {activeLegalDoc ? legalDocs[activeLegalDoc].subtitle : t.settingsSubtitle}
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={isImporting}
-              onClick={safeClose}
-              aria-label={t.closeMenu}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+      {/* Power-Pilot-Style Left Split Navigation Rail (Desktop >= 1024px) */}
+      <aside
+        aria-label={t.settings}
+        className="hidden lg:flex w-[224px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] select-none"
+      >
+        <div className="app-drag-region flex h-14 shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-4">
+          <div
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+            style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
+          >
+            <Settings className="h-3.5 w-3.5" />
           </div>
-
-          {/* Modal Navigation Tabs (hidden when reading a legal sub-page) */}
-          {!activeLegalDoc && (
-            <div
-              role="tablist"
-              aria-label={t.settings}
-              className="grid grid-cols-2 gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-1"
+          <div className="min-w-0">
+            <h2
+              id="settings-page-title"
+              className="font-display text-[14.5px] font-bold tracking-tight text-[var(--text-primary)] truncate"
             >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'general'}
-                onClick={() => {
-                  setActiveTab('general');
-                  setConfirmEmptyTrash(false);
-                }}
-                className={`rounded-lg py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${activeTab === 'general'
-                    ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-              >
-                {t.tabGeneral}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'trash'}
-                onClick={() => setActiveTab('trash')}
-                className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${activeTab === 'trash'
-                    ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-              >
-                <span>{t.tabTrash}</span>
-                {trashCount > 0 && (
-                  <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
-                    ({trashCount})
-                  </span>
-                )}
-              </button>
-            </div>
-          )}
+              {t.settings}
+            </h2>
+            <p className="text-[11px] text-[var(--text-muted)] truncate">{t.autoSavedBadge}</p>
+          </div>
         </div>
 
-        {/* Scrollable Content */}
+        <nav
+          role="tablist"
+          aria-orientation="vertical"
+          aria-label={t.settings}
+          className="flex-1 overflow-y-auto px-3 py-4 space-y-5"
+        >
+          {navGroups.map((group) => (
+            <div key={group.groupTitle} className="space-y-1">
+              <p className="px-2.5 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">
+                {group.groupTitle}
+              </p>
+              {group.items.map(({ id, label, Icon, badge, hasDot }) => {
+                const isSelected = activeTab === id && !activeLegalDoc;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    data-testid={`settings-tab-${id}`}
+                    aria-selected={isSelected}
+                    onClick={() => handleSelectTab(id)}
+                    className={`group flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors ${
+                      isSelected
+                        ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0">
+                      <Icon
+                        className={`h-4 w-4 shrink-0 ${
+                          isSelected
+                            ? 'text-[var(--accent)]'
+                            : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]'
+                        }`}
+                      />
+                      <span className="truncate">{label}</span>
+                    </span>
+                    {badge !== undefined && (
+                      <span
+                        className={`rounded-md px-1.5 py-0.5 font-mono-tabular text-[11px] shrink-0 ${
+                          isSelected
+                            ? 'bg-[var(--surface)] text-[var(--accent)] font-semibold'
+                            : 'bg-[var(--surface-subtle)] text-[var(--text-muted)]'
+                        }`}
+                      >
+                        {badge}
+                      </span>
+                    )}
+                    {hasDot && (
+                      <span
+                        aria-hidden="true"
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: 'var(--accent)' }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        <div className="border-t border-[var(--border)] p-3 space-y-2">
+          <button
+            type="button"
+            data-testid="settings-back-button"
+            disabled={isImporting}
+            onClick={safeClose}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{t.settingsBackToTasks}</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Compact / Responsive Top Bar + Horizontal Pill Tabs (< 1024px) */}
+      <div className="lg:hidden shrink-0 border-b border-[var(--border)] bg-[var(--surface)] select-none">
+        <div className="app-drag-region flex items-center justify-between gap-2 pl-4 pr-32 pt-3 pb-2">
+          <div className="app-no-drag flex items-center gap-2 min-w-0">
+            {onOpenMobileSidebar && (
+              <button
+                type="button"
+                onClick={onOpenMobileSidebar}
+                aria-label={t.openMenu}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] md:hidden shrink-0"
+              >
+                <Menu className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              data-testid="settings-back-button-compact"
+              disabled={isImporting}
+              onClick={safeClose}
+              aria-label={t.settingsBackToTasks}
+              title={t.settingsBackToTasks}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 shrink-0 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="min-w-0">
+              <h2 className="font-display text-sm font-bold tracking-tight text-[var(--text-primary)] truncate">
+                {t.settings}
+              </h2>
+              <p className="text-[11px] text-[var(--text-muted)] truncate">{t.autoSavedBadge}</p>
+            </div>
+          </div>
+        </div>
+
+        <div
+          role="tablist"
+          aria-label={t.settings}
+          className="flex flex-wrap items-center gap-1.5 px-4 pb-3"
+        >
+          {allNavItems.map(({ id, label, Icon, badge, hasDot }) => {
+            const isSelected = activeTab === id && !activeLegalDoc;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                data-testid={`settings-compact-tab-${id}`}
+                aria-selected={isSelected}
+                onClick={() => handleSelectTab(id)}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                  isSelected
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
+                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <Icon
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    isSelected ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
+                  }`}
+                />
+                <span>{label}</span>
+                {badge !== undefined && (
+                  <span className="font-mono-tabular text-[10.5px] opacity-80">({badge})</span>
+                )}
+                {hasDot && (
+                  <span
+                    aria-hidden="true"
+                    className="h-1.5 w-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: 'var(--accent)' }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Right Scrollable Settings Content Pane */}
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--canvas)]">
+        {/* Desktop Active Section Header Bar (pr-36 safely clears fixed WindowControls) */}
+        <header className="hidden lg:flex app-drag-region h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)]/75 pl-8 pr-36 select-none">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <CurrentTabIcon className="h-4 w-4 text-[var(--accent)] shrink-0" />
+            <h1 className="font-display text-[15px] font-bold tracking-tight text-[var(--text-primary)] whitespace-nowrap shrink-0">
+              {activeLegalDoc ? legalDocs[activeLegalDoc].title : currentTabMeta.label}
+            </h1>
+            <span className="hidden xl:inline min-w-0 text-xs text-[var(--text-muted)] truncate">
+              · {activeLegalDoc ? legalDocs[activeLegalDoc].subtitle : t.settingsSubtitle}
+            </span>
+          </div>
+          <span className="app-no-drag inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)] whitespace-nowrap shrink-0">
+            <Check className="h-3 w-3 text-emerald-500 shrink-0" />
+            <span>{t.autoSavedBadge}</span>
+          </span>
+        </header>
+
+        {/* Scrollable Content Body */}
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 space-y-6"
+          className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-7"
         >
-          {activeLegalDoc ? (
-            <LegalDocumentView
-              doc={legalDocs[activeLegalDoc]}
-              backLabel={t.backToSettingsButton}
-              onBack={() => setActiveLegalDoc(null)}
-            />
-          ) : activeTab === 'general' ? (
-            <>
-              {/* Appearance Mode (Light / Dark / System Auto-Follow) */}
-              <section aria-label={t.appearanceModeTitle} className="space-y-2.5">
-                <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                  {t.appearanceModeTitle}
-                </h3>
-                <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-subtle)] p-1">
-                  <button
-                    type="button"
-                    data-testid="theme-mode-light"
-                    onClick={() => onChangeMode('light')}
-                    aria-pressed={themeMode === 'light'}
-                    className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors whitespace-nowrap ${themeMode === 'light'
-                        ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] shadow-xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                      }`}
-                  >
-                    <Sun className="h-4 w-4" />
-                    <span>{t.lightMode}</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="theme-mode-dark"
-                    onClick={() => onChangeMode('dark')}
-                    aria-pressed={themeMode === 'dark'}
-                    className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors whitespace-nowrap ${themeMode === 'dark'
-                        ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] shadow-xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                      }`}
-                  >
-                    <Moon className="h-4 w-4" />
-                    <span>{t.darkMode}</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="theme-mode-system"
-                    onClick={() => onChangeMode('system')}
-                    aria-pressed={themeMode === 'system'}
-                    className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors whitespace-nowrap ${themeMode === 'system'
-                        ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] shadow-xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                      }`}
-                  >
-                    <Monitor className="h-4 w-4" />
-                    <span>{t.systemMode}</span>
-                  </button>
-                </div>
-              </section>
-
-              {/* 14 Color Themes */}
-              <section aria-label={t.colorThemeTitle} className="space-y-2.5">
-                <div className="flex items-center justify-between">
+          <div className="mx-auto w-full max-w-[700px] space-y-6">
+            {activeLegalDoc ? (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6">
+                <LegalDocumentView
+                  doc={legalDocs[activeLegalDoc]}
+                  backLabel={t.backToSettingsButton}
+                  onBack={() => setActiveLegalDoc(null)}
+                />
+              </div>
+            ) : activeTab === 'appearance' ? (
+              <>
+                {/* Appearance Mode (Light / Dark / System Auto-Follow) */}
+                <section aria-label={t.appearanceModeTitle} className="space-y-2.5">
                   <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                    {t.colorThemeTitle}
+                    {t.appearanceModeTitle}
                   </h3>
-                  <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                    {COLOR_THEMES.length + 1} {t.themesCountUnit}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {COLOR_THEMES.map((theme) => {
-                    const isSelected = theme.id === themeId;
-                    const effectiveMode = resolveEffectiveThemeMode(themeMode);
-                    const swatch = effectiveMode === 'dark' ? theme.swatchDark : theme.swatch;
-                    return (
+                  <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1.5">
+                    <button
+                      type="button"
+                      data-testid="theme-mode-light"
+                      onClick={() => onChangeMode('light')}
+                      aria-pressed={themeMode === 'light'}
+                      className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                        themeMode === 'light'
+                          ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] border border-[var(--accent)]/40'
+                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      <Sun className="h-4 w-4" />
+                      <span>{t.lightMode}</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="theme-mode-dark"
+                      onClick={() => onChangeMode('dark')}
+                      aria-pressed={themeMode === 'dark'}
+                      className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                        themeMode === 'dark'
+                          ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] border border-[var(--accent)]/40'
+                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      <Moon className="h-4 w-4" />
+                      <span>{t.darkMode}</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="theme-mode-system"
+                      onClick={() => onChangeMode('system')}
+                      aria-pressed={themeMode === 'system'}
+                      className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                        themeMode === 'system'
+                          ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] border border-[var(--accent)]/40'
+                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      <Monitor className="h-4 w-4" />
+                      <span>{t.systemMode}</span>
+                    </button>
+                  </div>
+                </section>
+
+                {/* 14 Built-in Color Themes + Custom HEX Theme */}
+                <section aria-label={t.colorThemeTitle} className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+                      {t.colorThemeTitle}
+                    </h3>
+                    <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
+                      {COLOR_THEMES.length + 1} {t.themesCountUnit}
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {COLOR_THEMES.map((theme) => {
+                        const isSelected = theme.id === themeId;
+                        const effectiveMode = resolveEffectiveThemeMode(themeMode);
+                        const swatch = effectiveMode === 'dark' ? theme.swatchDark : theme.swatch;
+                        return (
+                          <button
+                            key={theme.id}
+                            type="button"
+                            onClick={() => onChangeTheme(theme.id)}
+                            aria-pressed={isSelected}
+                            className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
+                              isSelected
+                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              <span
+                                aria-hidden="true"
+                                className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
+                                style={{ backgroundColor: swatch }}
+                              />
+                              <span className="truncate whitespace-nowrap">
+                                {getThemeDisplayName(theme.id, theme.name)}
+                              </span>
+                            </span>
+                            {isSelected && (
+                              <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                            )}
+                          </button>
+                        );
+                      })}
+
+                      {/* Custom HEX Color Theme Slot */}
                       <button
-                        key={theme.id}
                         type="button"
-                        onClick={() => onChangeTheme(theme.id)}
-                        aria-pressed={isSelected}
-                        className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${isSelected
+                        data-testid="custom-theme-button"
+                        onClick={() => onChangeTheme('custom')}
+                        aria-pressed={themeId === 'custom'}
+                        className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
+                          themeId === 'custom'
                             ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                            : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                          }`}
+                            : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                        }`}
                       >
                         <span className="flex items-center gap-2 min-w-0">
-                          <span
-                            aria-hidden="true"
-                            className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
-                            style={{ backgroundColor: swatch }}
-                          />
+                          {themeId === 'custom' ? (
+                            <span
+                              aria-hidden="true"
+                              className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
+                              style={{ backgroundColor: customThemeColor }}
+                            />
+                          ) : (
+                            <span
+                              aria-hidden="true"
+                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--accent)]"
+                            >
+                              <Palette className="h-3.5 w-3.5" />
+                            </span>
+                          )}
                           <span className="truncate whitespace-nowrap">
-                            {getThemeDisplayName(theme.id, theme.name)}
+                            {themeId === 'custom'
+                              ? customThemeColor.toUpperCase()
+                              : t.customThemeButton}
                           </span>
                         </span>
-                        {isSelected && (
+                        {themeId === 'custom' && (
                           <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                         )}
                       </button>
-                    );
-                  })}
-
-                  {/* Empty Custom HEX Color Theme Slot */}
-                  <button
-                    type="button"
-                    data-testid="custom-theme-button"
-                    onClick={() => onChangeTheme('custom')}
-                    aria-pressed={themeId === 'custom'}
-                    className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
-                      themeId === 'custom'
-                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                        : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      {themeId === 'custom' ? (
-                        <span
-                          aria-hidden="true"
-                          className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
-                          style={{ backgroundColor: customThemeColor }}
-                        />
-                      ) : (
-                        <span
-                          aria-hidden="true"
-                          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--accent)]"
-                        >
-                          <Palette className="h-3.5 w-3.5" />
-                        </span>
-                      )}
-                      <span className="truncate whitespace-nowrap">
-                        {themeId === 'custom' ? customThemeColor.toUpperCase() : t.customThemeButton}
-                      </span>
-                    </span>
-                    {themeId === 'custom' && (
-                      <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                    )}
-                  </button>
-                </div>
-
-                {/* Inline In-App Full-Spectrum Custom HEX Theme Editor */}
-                {themeId === 'custom' && (
-                  <div
-                    data-testid="custom-theme-editor"
-                    className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[var(--text-primary)]">
-                        {t.customThemeHexTitle}
-                      </p>
-                      <p className="text-[11px] text-[var(--text-muted)]">
-                        {t.customThemeHexHint}
-                      </p>
                     </div>
-                    <ColorSpectrumPicker
-                      value={customThemeColor}
-                      onChange={onChangeCustomThemeColor}
-                      hexInputLabel={t.customColorHexLabel}
-                      hexInputTestId="custom-theme-hex-input"
-                    />
-                  </div>
-                )}
-              </section>
 
-              <div className="h-px bg-[var(--border)]" />
-
-              {/* Collapsible Single-Button Dynamic System-Wide App Icon Selector */}
-              <section aria-label={t.appIconSectionTitle} className="space-y-2.5">
-                {(() => {
-                  const activeIconColors = resolveAppIconColors(
-                    appIconId,
-                    themeId,
-                    themeMode,
-                    customThemeColor,
-                    customIconColor,
-                  );
-                  const activeIconLabel =
-                    appIconId === 'match-theme'
-                      ? t.appIconMatchTheme
-                      : appIconId === 'obsidian-light'
-                        ? t.appIconLightMono
-                        : appIconId === 'custom'
-                          ? `${t.appIconCustom} (${customIconColor.toUpperCase()})`
-                          : (() => {
-                              const matched = COLOR_THEMES.find((item) => item.id === appIconId);
-                              return matched
-                                ? getThemeDisplayName(matched.id, matched.name)
-                                : t.appIconMatchTheme;
-                            })();
-
-                  return (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                          {t.appIconSectionTitle}
-                        </h3>
-                        <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                          {activeIconColors.bg.toUpperCase()}
-                        </span>
+                    {themeId === 'custom' && (
+                      <div
+                        data-testid="custom-theme-editor"
+                        className="rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-[var(--text-primary)]">
+                            {t.customThemeHexTitle}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-muted)]">
+                            {t.customThemeHexHint}
+                          </p>
+                        </div>
+                        <ColorSpectrumPicker
+                          value={customThemeColor}
+                          onChange={onChangeCustomThemeColor}
+                          hexInputLabel={t.customColorHexLabel}
+                          hexInputTestId="custom-theme-hex-input"
+                        />
                       </div>
+                    )}
+                  </div>
+                </section>
 
-                      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]">
-                        <button
-                          type="button"
-                          data-testid="app-icon-toggle-btn"
-                          onClick={() => setIsAppIconOpen((prev) => !prev)}
-                          aria-expanded={isAppIconOpen}
-                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-hover)]/60 transition-colors"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <BrandMark
-                              className="h-8 w-8 shrink-0"
-                              bgColor={activeIconColors.bg}
-                              fgColor={activeIconColors.fg}
-                              borderColor={activeIconColors.border}
-                            />
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                                {activeIconLabel}
-                              </p>
-                              <p className="text-xs text-[var(--text-muted)] truncate">
-                                {t.appIconSectionDesc}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shrink-0">
-                            <span className="font-mono-tabular text-[11px]">
-                              {COLOR_THEMES.length + 1}
-                            </span>
-                            <ChevronDown
-                              className={`h-3.5 w-3.5 transition-transform ${
-                                isAppIconOpen ? 'rotate-180' : ''
-                              }`}
-                            />
-                          </span>
-                        </button>
+                {/* Collapsible Single-Button Dynamic System-Wide App Icon Selector */}
+                <section aria-label={t.appIconSectionTitle} className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+                      {t.appIconSectionTitle}
+                    </h3>
+                    <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
+                      {activeIconColors.bg.toUpperCase()}
+                    </span>
+                  </div>
 
-                        {isAppIconOpen && (
-                          <div
-                            data-testid="app-icon-panel"
-                            className="border-t border-[var(--border)] bg-[var(--surface-subtle)]/50 p-3 space-y-3"
-                          >
-                            {/* Quick Sync & Monochrome Modes */}
-                            <div className="grid grid-cols-2 gap-1.5">
-                              {(
-                                [
-                                  { id: 'match-theme' as AppIconId, label: t.appIconMatchTheme },
-                                  { id: 'obsidian-light' as AppIconId, label: t.appIconLightMono },
-                                ] as const
-                              ).map((opt) => {
-                                const selected = appIconId === opt.id;
-                                const previewColors = resolveAppIconColors(
-                                  opt.id,
-                                  themeId,
-                                  themeMode,
-                                  customThemeColor,
-                                  customIconColor,
-                                );
-                                return (
-                                  <button
-                                    key={opt.id}
-                                    type="button"
-                                    data-testid={`app-icon-${opt.id}`}
-                                    aria-pressed={selected}
-                                    onClick={() => onChangeAppIcon(opt.id)}
-                                    className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-medium transition-colors ${
-                                      selected
-                                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                                    }`}
-                                  >
-                                    <span className="flex items-center gap-2 min-w-0">
-                                      <BrandMark
-                                        className="h-5 w-5 rounded-md shrink-0"
-                                        bgColor={previewColors.bg}
-                                        fgColor={previewColors.fg}
-                                        borderColor={previewColors.border}
-                                      />
-                                      <span className="truncate">{opt.label}</span>
-                                    </span>
-                                    {selected && (
-                                      <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                  <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                    <button
+                      type="button"
+                      data-testid="app-icon-toggle-btn"
+                      onClick={() => setIsAppIconOpen((prev) => !prev)}
+                      aria-expanded={isAppIconOpen}
+                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-hover)]/60 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <BrandMark
+                          className="h-8 w-8 shrink-0"
+                          bgColor={activeIconColors.bg}
+                          fgColor={activeIconColors.fg}
+                          borderColor={activeIconColors.border}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                            {activeIconLabel}
+                          </p>
+                          <p className="text-xs text-[var(--text-muted)] truncate">
+                            {t.appIconSectionDesc}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] shrink-0">
+                        <span className="font-mono-tabular text-[11px]">
+                          {COLOR_THEMES.length + 1}
+                        </span>
+                        <ChevronDown
+                          className={`h-3.5 w-3.5 transition-transform ${
+                            isAppIconOpen ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </span>
+                    </button>
 
-                            {/* All 14 Built-In Theme Icons (1-to-1 with Color Themes) + Custom HEX Icon */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                              {COLOR_THEMES.map((item) => {
-                                const selected = appIconId === item.id;
-                                const previewColors = resolveAppIconColors(
-                                  item.id,
-                                  themeId,
-                                  themeMode,
-                                  customThemeColor,
-                                  customIconColor,
-                                );
-                                const label = getThemeDisplayName(item.id, item.name);
-                                return (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    data-testid={`app-icon-${item.id}`}
-                                    aria-pressed={selected}
-                                    onClick={() => onChangeAppIcon(item.id)}
-                                    className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
-                                      selected
-                                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                                    }`}
-                                  >
-                                    <span className="flex items-center gap-2 min-w-0">
-                                      <BrandMark
-                                        className="h-5 w-5 rounded-md shrink-0"
-                                        bgColor={previewColors.bg}
-                                        fgColor={previewColors.fg}
-                                        borderColor={previewColors.border}
-                                      />
-                                      <span className="truncate">{label}</span>
-                                    </span>
-                                    {selected && (
-                                      <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                                    )}
-                                  </button>
-                                );
-                              })}
-
-                              {/* Custom HEX Color App Icon Button */}
+                    {isAppIconOpen && (
+                      <div
+                        data-testid="app-icon-panel"
+                        className="border-t border-[var(--border)] bg-[var(--surface-subtle)]/50 p-3.5 space-y-3"
+                      >
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(
+                            [
+                              { id: 'match-theme' as AppIconId, label: t.appIconMatchTheme },
+                              { id: 'obsidian-light' as AppIconId, label: t.appIconLightMono },
+                            ] as const
+                          ).map((opt) => {
+                            const selected = appIconId === opt.id;
+                            const previewColors = resolveAppIconColors(
+                              opt.id,
+                              themeId,
+                              themeMode,
+                              customThemeColor,
+                              customIconColor,
+                            );
+                            return (
                               <button
+                                key={opt.id}
                                 type="button"
-                                data-testid="app-icon-custom"
-                                aria-pressed={appIconId === 'custom'}
-                                onClick={() => onChangeAppIcon('custom')}
-                                className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
-                                  appIconId === 'custom'
+                                data-testid={`app-icon-${opt.id}`}
+                                aria-pressed={selected}
+                                onClick={() => onChangeAppIcon(opt.id)}
+                                className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                                  selected
                                     ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                                    : 'border-dashed border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                                    : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                                 }`}
                               >
                                 <span className="flex items-center gap-2 min-w-0">
-                                  {appIconId === 'custom' ? (
-                                    <BrandMark
-                                      className="h-5 w-5 rounded-md shrink-0"
-                                      bgColor={activeIconColors.bg}
-                                      fgColor={activeIconColors.fg}
-                                      borderColor={activeIconColors.border}
-                                    />
-                                  ) : (
-                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--border-strong)] text-[var(--accent)]">
-                                      <Palette className="h-3 w-3" />
-                                    </span>
-                                  )}
-                                  <span className="truncate">
-                                    {appIconId === 'custom'
-                                      ? customIconColor.toUpperCase()
-                                      : t.appIconCustom}
-                                  </span>
+                                  <BrandMark
+                                    className="h-5 w-5 rounded-md shrink-0"
+                                    bgColor={previewColors.bg}
+                                    fgColor={previewColors.fg}
+                                    borderColor={previewColors.border}
+                                  />
+                                  <span className="truncate">{opt.label}</span>
                                 </span>
-                                {appIconId === 'custom' && (
+                                {selected && (
                                   <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                                 )}
                               </button>
-                            </div>
+                            );
+                          })}
+                        </div>
 
-                            {/* Full-Spectrum Custom Icon Color Picker */}
-                            {appIconId === 'custom' && (
-                              <div
-                                data-testid="custom-icon-editor"
-                                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                          {COLOR_THEMES.map((item) => {
+                            const selected = appIconId === item.id;
+                            const previewColors = resolveAppIconColors(
+                              item.id,
+                              themeId,
+                              themeMode,
+                              customThemeColor,
+                              customIconColor,
+                            );
+                            const label = getThemeDisplayName(item.id, item.name);
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                data-testid={`app-icon-${item.id}`}
+                                aria-pressed={selected}
+                                onClick={() => onChangeAppIcon(item.id)}
+                                className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                                  selected
+                                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                                    : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                                }`}
                               >
-                                <ColorSpectrumPicker
-                                  value={customIconColor}
-                                  onChange={onChangeCustomIconColor}
-                                  hexInputLabel={`${t.appIconCustom} (HEX)`}
-                                  hexInputTestId="custom-icon-hex-input"
-                                  compact
-                                  previewNode={
-                                    <BrandMark
-                                      className="h-7 w-7 shrink-0"
-                                      bgColor={activeIconColors.bg}
-                                      fgColor={activeIconColors.fg}
-                                      borderColor={activeIconColors.border}
-                                    />
-                                  }
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <BrandMark
+                                    className="h-5 w-5 rounded-md shrink-0"
+                                    bgColor={previewColors.bg}
+                                    fgColor={previewColors.fg}
+                                    borderColor={previewColors.border}
+                                  />
+                                  <span className="truncate">{label}</span>
+                                </span>
+                                {selected && (
+                                  <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+                                )}
+                              </button>
+                            );
+                          })}
+
+                          <button
+                            type="button"
+                            data-testid="app-icon-custom"
+                            aria-pressed={appIconId === 'custom'}
+                            onClick={() => onChangeAppIcon('custom')}
+                            className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                              appIconId === 'custom'
+                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                                : 'border-dashed border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              {appIconId === 'custom' ? (
+                                <BrandMark
+                                  className="h-5 w-5 rounded-md shrink-0"
+                                  bgColor={activeIconColors.bg}
+                                  fgColor={activeIconColors.fg}
+                                  borderColor={activeIconColors.border}
                                 />
-                              </div>
+                              ) : (
+                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--border-strong)] text-[var(--accent)]">
+                                  <Palette className="h-3 w-3" />
+                                </span>
+                              )}
+                              <span className="truncate">
+                                {appIconId === 'custom'
+                                  ? customIconColor.toUpperCase()
+                                  : t.appIconCustom}
+                              </span>
+                            </span>
+                            {appIconId === 'custom' && (
+                              <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                             )}
+                          </button>
+                        </div>
+
+                        {appIconId === 'custom' && (
+                          <div
+                            data-testid="custom-icon-editor"
+                            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                          >
+                            <ColorSpectrumPicker
+                              value={customIconColor}
+                              onChange={onChangeCustomIconColor}
+                              hexInputLabel={`${t.appIconCustom} (HEX)`}
+                              hexInputTestId="custom-icon-hex-input"
+                              compact
+                              previewNode={
+                                <BrandMark
+                                  className="h-7 w-7 shrink-0"
+                                  bgColor={activeIconColors.bg}
+                                  fgColor={activeIconColors.fg}
+                                  borderColor={activeIconColors.border}
+                                />
+                              }
+                            />
                           </div>
                         )}
                       </div>
-                    </>
-                  );
-                })()}
-              </section>
-
-              <div className="h-px bg-[var(--border)]" />
-
-              {/* Accessibility Section (Zoom %, High Contrast, Reduced Motion) */}
+                    )}
+                  </div>
+                </section>
+              </>
+            ) : activeTab === 'accessibility' ? (
               <section aria-label={t.accessibilitySectionTitle} className="space-y-3">
-                <div className="flex items-center gap-1.5">
-                  <ZoomIn className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-                  <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                    {t.accessibilitySectionTitle}
-                  </h3>
-                </div>
-
-                <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]">
+                <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
                   {/* Zoom Percentage */}
-                  <div className="space-y-2.5 px-4 py-3">
+                  <div className="space-y-3 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-[var(--text-primary)]">
@@ -1037,7 +1201,7 @@ export function SettingsModal({
                             );
                             if (idx > 0) onChangeZoomPercent(ZOOM_PRESETS[idx - 1]);
                           }}
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
                         >
                           <Minus className="h-3.5 w-3.5" />
                         </button>
@@ -1060,7 +1224,7 @@ export function SettingsModal({
                               onChangeZoomPercent(ZOOM_PRESETS[idx + 1]);
                             }
                           }}
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
                         >
                           <Plus className="h-3.5 w-3.5" />
                         </button>
@@ -1076,10 +1240,10 @@ export function SettingsModal({
                             type="button"
                             data-testid={`zoom-preset-${preset}`}
                             onClick={() => onChangeZoomPercent(preset)}
-                            className={`rounded-md border px-2 py-1 font-mono-tabular text-[11px] font-medium transition-colors whitespace-nowrap ${
+                            className={`rounded-md border px-2.5 py-1 font-mono-tabular text-xs font-medium transition-colors whitespace-nowrap ${
                               active
                                 ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]'
-                                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
                             }`}
                           >
                             {preset}%
@@ -1090,7 +1254,7 @@ export function SettingsModal({
                         <button
                           type="button"
                           onClick={() => onChangeZoomPercent(100)}
-                          className="ms-auto rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
+                          className="ms-auto rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
                         >
                           {t.zoomResetButton}
                         </button>
@@ -1099,7 +1263,7 @@ export function SettingsModal({
                   </div>
 
                   {/* High Contrast */}
-                  <div className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="flex items-center justify-between gap-4 px-4 py-3.5">
                     <div className="min-w-0">
                       <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
                         <Contrast className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
@@ -1116,7 +1280,7 @@ export function SettingsModal({
                       className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                         highContrast
                           ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                          : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
                       }`}
                     >
                       {highContrast ? t.enabledBadge : t.disabledBadge}
@@ -1124,7 +1288,7 @@ export function SettingsModal({
                   </div>
 
                   {/* Reduced Motion */}
-                  <div className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="flex items-center justify-between gap-4 px-4 py-3.5">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-[var(--text-primary)]">
                         {t.reducedMotionTitle}
@@ -1140,7 +1304,7 @@ export function SettingsModal({
                       className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                         reducedMotion
                           ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                          : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
                       }`}
                     >
                       {reducedMotion ? t.enabledBadge : t.disabledBadge}
@@ -1148,113 +1312,167 @@ export function SettingsModal({
                   </div>
                 </div>
               </section>
+            ) : activeTab === 'general' ? (
+              <>
+                {/* 73-Language Selector */}
+                <LanguageSelectorSection />
 
-              <div className="h-px bg-[var(--border)]" />
+                {/* Close Behavior, Windows Startup & Global Quick-Add */}
+                <section aria-label={t.closeBehaviorSectionTitle} className="space-y-2.5">
+                  <div>
+                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+                      {t.closeBehaviorSectionTitle}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                      {t.closeBehaviorDesc}
+                    </p>
+                  </div>
 
-              {/* Close & System Tray Behavior */}
-              <section aria-label={t.closeBehaviorSectionTitle} className="space-y-2.5">
-                <div>
-                  <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                    {t.closeBehaviorSectionTitle}
-                  </h3>
-                  <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
-                    {t.closeBehaviorDesc}
-                  </p>
-                </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        { id: 'ask' as CloseBehavior, label: t.closeBehaviorAsk, Icon: Sparkles },
+                        {
+                          id: 'tray' as CloseBehavior,
+                          label: t.closeBehaviorTray,
+                          Icon: ArrowDownToLine,
+                        },
+                        { id: 'quit' as CloseBehavior, label: t.closeBehaviorQuit, Icon: Power },
+                      ] as const
+                    ).map(({ id, label, Icon }) => {
+                      const selected = closeBehavior === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          data-testid={`close-behavior-${id}`}
+                          aria-pressed={selected}
+                          onClick={() => onChangeCloseBehavior(id)}
+                          className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                            selected
+                              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                              : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                  {(
-                    [
-                      { id: 'ask' as CloseBehavior, label: t.closeBehaviorAsk, Icon: Sparkles },
-                      { id: 'tray' as CloseBehavior, label: t.closeBehaviorTray, Icon: ArrowDownToLine },
-                      { id: 'quit' as CloseBehavior, label: t.closeBehaviorQuit, Icon: Power },
-                    ] as const
-                  ).map(({ id, label, Icon }) => {
-                    const selected = closeBehavior === id;
-                    return (
+                  <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[var(--text-primary)]">
+                          {t.launchAtStartupTitle}
+                        </p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          {t.launchAtStartupDesc}
+                        </p>
+                      </div>
                       <button
-                        key={id}
                         type="button"
-                        data-testid={`close-behavior-${id}`}
-                        aria-pressed={selected}
-                        onClick={() => onChangeCloseBehavior(id)}
-                        className={`flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-                          selected
+                        role="switch"
+                        data-testid="toggle-launch-at-startup"
+                        aria-checked={launchAtStartup}
+                        onClick={() => onToggleLaunchAtStartup?.(!launchAtStartup)}
+                        className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                          launchAtStartup
                             ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                            : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                            : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
                         }`}
                       >
-                        <Icon className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{label}</span>
+                        {launchAtStartup ? t.enabledBadge : t.disabledBadge}
                       </button>
-                    );
-                  })}
-                </div>
-
-                {/* Windows Startup in Tray & Global Quick-Add Shortcut (Ctrl+Alt+N) */}
-                <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]">
-                  <div className="flex items-center justify-between gap-4 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">
-                        {t.launchAtStartupTitle}
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)]">{t.launchAtStartupDesc}</p>
                     </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      data-testid="toggle-launch-at-startup"
-                      aria-checked={launchAtStartup}
-                      onClick={() => onToggleLaunchAtStartup?.(!launchAtStartup)}
-                      className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                        launchAtStartup
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                      }`}
-                    >
-                      {launchAtStartup ? t.enabledBadge : t.disabledBadge}
-                    </button>
-                  </div>
 
-                  <div className="flex items-center justify-between gap-4 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">
-                        {t.globalQuickAddTitle}
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)]">{t.globalQuickAddDesc}</p>
+                    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[var(--text-primary)]">
+                          {t.globalQuickAddTitle}
+                        </p>
+                        <p className="text-xs text-[var(--text-muted)]">{t.globalQuickAddDesc}</p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        data-testid="toggle-global-quick-add"
+                        aria-checked={globalQuickAddShortcut}
+                        onClick={() =>
+                          onToggleGlobalQuickAddShortcut?.(!globalQuickAddShortcut)
+                        }
+                        className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                          globalQuickAddShortcut
+                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                            : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                        }`}
+                      >
+                        {globalQuickAddShortcut ? t.enabledBadge : t.disabledBadge}
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      data-testid="toggle-global-quick-add"
-                      aria-checked={globalQuickAddShortcut}
-                      onClick={() => onToggleGlobalQuickAddShortcut?.(!globalQuickAddShortcut)}
-                      className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                        globalQuickAddShortcut
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                      }`}
-                    >
-                      {globalQuickAddShortcut ? t.enabledBadge : t.disabledBadge}
-                    </button>
+
+                    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[var(--text-primary)]">
+                          {t.dragReorderTitle}
+                        </p>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          {dragLocked ? t.dragLockedDesc : t.dragUnlockedDesc}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!dragLocked}
+                        aria-label={t.dragReorderTitle}
+                        onClick={() => onToggleDragLock(!dragLocked)}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                          dragLocked
+                            ? 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                            : 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {dragLocked ? (
+                          <>
+                            <Lock className="h-3.5 w-3.5" />
+                            <span>{t.lockedBadge}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Unlock className="h-3.5 w-3.5 text-[var(--accent)]" />
+                            <span>{t.unlockedBadge}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </section>
+                </section>
 
-              <div className="h-px bg-[var(--border)]" />
-
-              {/* 73-Language Selector + Manual & Automatic Update System */}
-              <UpdateAndLanguageSection
-                autoUpdateCheck={autoUpdateCheck}
-                onToggleAutoUpdateCheck={onToggleAutoUpdateCheck}
-                updateState={updateState}
-                onCheckForUpdates={onCheckForUpdates}
-                onDownloadAndInstall={onDownloadAndInstall}
-              />
-
-              <div className="h-px bg-[var(--border)]" />
-
-              {/* Data & Backup (User-friendly non-technical descriptions) */}
+                {/* Keyboard Shortcuts */}
+                <section aria-label={t.keyboardShortcutsTitle} className="space-y-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <Keyboard className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+                      {t.keyboardShortcutsTitle}
+                    </h3>
+                  </div>
+                  <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                    {shortcuts.map((item) => (
+                      <div
+                        key={item.keys}
+                        className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs"
+                      >
+                        <span className="text-[var(--text-secondary)]">{item.label}</span>
+                        <kbd className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 font-mono-tabular text-[11px] text-[var(--text-primary)] whitespace-nowrap">
+                          {item.keys}
+                        </kbd>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </>
+            ) : activeTab === 'data' ? (
               <section aria-label={t.dataAndBackupTitle} className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
@@ -1268,7 +1486,7 @@ export function SettingsModal({
                 {importError && (
                   <div
                     role="alert"
-                    className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-400"
+                    className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-600 dark:text-red-400"
                   >
                     {importError}
                   </div>
@@ -1278,7 +1496,7 @@ export function SettingsModal({
                   <div
                     role="alertdialog"
                     aria-label={t.backupRestoreTitle}
-                    className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-3 space-y-2.5"
+                    className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3.5 space-y-2.5"
                   >
                     <p className="text-xs leading-relaxed text-[var(--text-primary)]">
                       <strong>{pendingImport.fileName}</strong> ({pendingImport.summary})
@@ -1305,49 +1523,14 @@ export function SettingsModal({
                   </div>
                 )}
 
-                <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]">
-                  <div className="flex items-center justify-between gap-4 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[var(--text-primary)]">
-                        {t.dragReorderTitle}
-                      </p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {dragLocked ? t.dragLockedDesc : t.dragUnlockedDesc}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={!dragLocked}
-                      aria-label={t.dragReorderTitle}
-                      onClick={() => onToggleDragLock(!dragLocked)}
-                      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${dragLocked
-                          ? 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                          : 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                        }`}
-                    >
-                      {dragLocked ? (
-                        <>
-                          <Lock className="h-3.5 w-3.5" />
-                          <span>{t.lockedBadge}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Unlock className="h-3.5 w-3.5 text-[var(--accent)]" />
-                          <span>{t.unlockedBadge}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 px-4 py-3">
-                    <div className="min-w-0">
+                <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                  {/* JSON Backup & Restore */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5">
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-[var(--text-primary)]">
                         {t.backupRestoreTitle}
                       </p>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {t.backupRestoreDesc}
-                      </p>
+                      <p className="text-xs text-[var(--text-muted)]">{t.backupRestoreDesc}</p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <input
@@ -1362,7 +1545,7 @@ export function SettingsModal({
                         type="button"
                         disabled={isImporting}
                         onClick={() => fileInputRef.current?.click()}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
                       >
                         <Upload className="h-3.5 w-3.5" />
                         <span>{isImporting ? t.restoringButton : t.restoreButton}</span>
@@ -1372,7 +1555,7 @@ export function SettingsModal({
                         disabled={isExportingBackup}
                         data-testid="download-backup-link"
                         onClick={() => void handleDownloadBackup()}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
                       >
                         {backupDownloaded ? (
                           <Check className="h-3.5 w-3.5 text-emerald-500" />
@@ -1386,11 +1569,8 @@ export function SettingsModal({
                     </div>
                   </div>
 
-                  {/* Zero-Cost OneDrive Cloud Sync Card */}
-                  <div
-                    data-testid="onedrive-sync-card"
-                    className="px-4 py-3.5 space-y-3"
-                  >
+                  {/* Zero-Cost OneDrive & Custom Cloud Folder Sync Card */}
+                  <div data-testid="onedrive-sync-card" className="px-4 py-4 space-y-3">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
@@ -1409,7 +1589,7 @@ export function SettingsModal({
                               type="button"
                               disabled={isOneDriveBusy}
                               onClick={() => void handleOneDriveDisconnect()}
-                              className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                              className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
                             >
                               {t.onedriveDisconnectButton}
                             </button>
@@ -1443,7 +1623,7 @@ export function SettingsModal({
                       )}
                     </div>
 
-                    <div className="flex flex-nowrap items-center gap-1.5 pt-0.5 overflow-x-auto">
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                       <button
                         type="button"
                         disabled={isOneDriveBusy}
@@ -1465,7 +1645,7 @@ export function SettingsModal({
                         type="button"
                         disabled={isOneDriveBusy || !oneDriveStatus?.hasRemoteBackup}
                         onClick={() => void handleOneDriveRestore()}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
                       >
                         <Upload className="h-3.5 w-3.5 shrink-0" />
                         <span>{t.onedriveRestoreButton}</span>
@@ -1476,7 +1656,7 @@ export function SettingsModal({
                         data-testid="onedrive-pick-folder-btn"
                         disabled={isOneDriveBusy}
                         onClick={() => void handleOneDrivePickFolder()}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
                       >
                         <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
                         <span>{t.cloudPickFolderButton}</span>
@@ -1485,7 +1665,7 @@ export function SettingsModal({
                       <button
                         type="button"
                         onClick={() => void handleOneDriveOpenFolder()}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
                       >
                         <FolderOpen className="h-3.5 w-3.5 shrink-0" />
                         <span>{t.onedriveOpenFolderButton}</span>
@@ -1493,7 +1673,7 @@ export function SettingsModal({
                     </div>
 
                     {oneDriveStatus?.connected && (
-                      <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2">
                         <span className="text-xs font-medium text-[var(--text-secondary)]">
                           {t.onedriveAutoSyncTitle}
                         </span>
@@ -1506,7 +1686,7 @@ export function SettingsModal({
                           className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors shrink-0 ${
                             oneDriveStatus.autoSync
                               ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                              : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                              : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                           }`}
                         >
                           {oneDriveStatus.autoSync ? t.enabledBadge : t.disabledBadge}
@@ -1515,7 +1695,8 @@ export function SettingsModal({
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between gap-4 px-4 py-3">
+                  {/* Move Completed to Trash */}
+                  <div className="flex items-center justify-between gap-4 px-4 py-3.5">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-[var(--text-primary)]">
                         {t.moveCompletedToTrashTitle}
@@ -1538,7 +1719,7 @@ export function SettingsModal({
                           setIsClearingCompleted(false);
                         }
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       <span>{isClearingCompleted ? t.movingButton : t.moveButton}</span>
@@ -1546,320 +1727,315 @@ export function SettingsModal({
                   </div>
                 </div>
               </section>
+            ) : activeTab === 'trash' ? (
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs text-[var(--text-muted)]">{t.trashIntroDesc}</p>
 
-              <div className="h-px bg-[var(--border)]" />
-
-              {/* Keyboard Shortcuts */}
-              <section aria-label={t.keyboardShortcutsTitle} className="space-y-2.5">
-                <div className="flex items-center gap-1.5">
-                  <Keyboard className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-                  <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                    {t.keyboardShortcutsTitle}
-                  </h3>
-                </div>
-                <div className="space-y-1.5">
-                  {shortcuts.map((item) => (
-                    <div
-                      key={item.keys}
-                      className="flex items-center justify-between gap-3 text-xs"
-                    >
-                      <span className="text-[var(--text-secondary)]">{item.label}</span>
-                      <span className="font-mono-tabular text-[var(--text-muted)] whitespace-nowrap">
-                        {item.keys}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <div className="h-px bg-[var(--border)]" />
-
-              {/* Legal Pages & Microsoft Store Compliance Section */}
-              <section aria-label={t.legalSectionTitle} className="space-y-2.5">
-                <div>
-                  <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                    {t.legalSectionTitle}
-                  </h3>
-                  <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
-                    {t.legalSectionSubtitle}
-                  </p>
-                </div>
-
-                <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]">
-                  {legalItems.map(({ id, title, Icon }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setActiveLegalDoc(id)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
-                    >
-                      <span className="flex items-center gap-2.5 min-w-0">
-                        <Icon className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
-                        <span className="truncate">{title}</span>
-                      </span>
-                      <ChevronRight className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <div className="h-px bg-[var(--border)]" />
-
-              {/* About & Publisher */}
-              <section
-                aria-label="Agendamea"
-                className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]"
-              >
-                <div className="flex items-center gap-2">
-                  <VelliumLogo className="h-4 w-4 text-[var(--text-primary)] shrink-0" />
-                  <span className="font-display font-semibold text-[var(--text-primary)]">
-                    Agendamea
-                  </span>
-                  <span className="font-mono-tabular">v1.0.0</span>
-                  <span>·</span>
-                  <span>© 2026 Vellium</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    data-testid="copy-diagnostics-btn"
-                    onClick={() => void handleCopyDiagnostics()}
-                    className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
-                  >
-                    {diagnosticsCopied ? (
-                      <Check className="h-3 w-3 text-emerald-500 shrink-0" />
-                    ) : (
-                      <Copy className="h-3 w-3 text-[var(--accent)] shrink-0" />
-                    )}
-                    <span>
-                      {diagnosticsCopied ? t.diagnosticsCopiedToast : t.copyDiagnosticsButton}
-                    </span>
-                  </button>
-                  {onOpenWelcomeGuide && (
-                    <button
-                      type="button"
-                      data-testid="settings-open-welcome-guide"
-                      onClick={onOpenWelcomeGuide}
-                      className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
-                    >
-                      <Sparkles className="h-3 w-3 text-[var(--accent)] shrink-0" />
-                      <span>{t.welcomeReplayButton}</span>
-                    </button>
-                  )}
-                  <a
-                    href="https://vellium.dev"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
-                  >
-                    vellium.dev
-                  </a>
-                  <a
-                    href="mailto:support@vellium.dev"
-                    className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
-                  >
-                    support@vellium.dev
-                  </a>
-                </div>
-              </section>
-            </>
-          ) : (
-            /* Trash Tab */
-            <div className="space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-xs text-[var(--text-muted)]">{t.trashIntroDesc}</p>
-
-                {trashCount > 0 &&
-                  (confirmEmptyTrash ? (
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        disabled={isEmptyingTrash}
-                        onClick={() => setConfirmEmptyTrash(false)}
-                        className="rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 whitespace-nowrap"
-                      >
-                        {t.cancelButton}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isEmptyingTrash}
-                        onClick={async () => {
-                          if (isEmptyingTrash) return;
-                          setIsEmptyingTrash(true);
-                          try {
-                            await onEmptyTrash();
-                            setConfirmEmptyTrash(false);
-                          } finally {
-                            setIsEmptyingTrash(false);
-                          }
-                        }}
-                        className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40 transition-colors whitespace-nowrap"
-                      >
-                        {isEmptyingTrash ? t.deletingButton : t.confirmDeleteAllPermanent}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmEmptyTrash(true)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors whitespace-nowrap shrink-0"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      <span>{t.emptyTrashButton}</span>
-                    </button>
-                  ))}
-              </div>
-
-              {trashCount === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--canvas)] px-6 py-12 text-center">
-                  <Trash2 className="mb-2.5 h-6 w-6 text-[var(--text-muted)]" />
-                  <p className="font-display text-sm font-semibold text-[var(--text-primary)]">
-                    {t.trashEmptyTitle}
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--text-muted)]">{t.trashEmptyDesc}</p>
-                </div>
-              ) : (
-                <>
-                  {/* Trashed Categories */}
-                  {trashedCategories.length > 0 && (
-                    <section aria-label={t.categories} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                          {t.categories}
-                        </h3>
-                        <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                          {trashedCategories.length}
-                        </span>
+                  {trashCount > 0 &&
+                    (confirmEmptyTrash ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          disabled={isEmptyingTrash}
+                          onClick={() => setConfirmEmptyTrash(false)}
+                          className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 whitespace-nowrap"
+                        >
+                          {t.cancelButton}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isEmptyingTrash}
+                          onClick={async () => {
+                            if (isEmptyingTrash) return;
+                            setIsEmptyingTrash(true);
+                            try {
+                              await onEmptyTrash();
+                              setConfirmEmptyTrash(false);
+                            } finally {
+                              setIsEmptyingTrash(false);
+                            }
+                          }}
+                          className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40 transition-colors whitespace-nowrap"
+                        >
+                          {isEmptyingTrash ? t.deletingButton : t.confirmDeleteAllPermanent}
+                        </button>
                       </div>
-                      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]">
-                        {trashedCategories.map((cat) => (
-                          <div
-                            key={cat.id}
-                            className="flex items-center justify-between gap-3 px-3.5 py-2.5"
-                          >
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <ColorDot color={cat.color} size="sm" />
-                                <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                                  {cat.name}
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmEmptyTrash(true)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors whitespace-nowrap shrink-0"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>{t.emptyTrashButton}</span>
+                      </button>
+                    ))}
+                </div>
+
+                {trashCount === 0 ? (
+                  <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-14 text-center">
+                    <Trash2 className="mb-2.5 h-6 w-6 text-[var(--text-muted)]" />
+                    <p className="font-display text-sm font-semibold text-[var(--text-primary)]">
+                      {t.trashEmptyTitle}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">{t.trashEmptyDesc}</p>
+                  </div>
+                ) : (
+                  <>
+                    {trashedCategories.length > 0 && (
+                      <section aria-label={t.categories} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+                            {t.categories}
+                          </h3>
+                          <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
+                            {trashedCategories.length}
+                          </span>
+                        </div>
+                        <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                          {trashedCategories.map((cat) => (
+                            <div
+                              key={cat.id}
+                              className="flex items-center justify-between gap-3 px-4 py-3"
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <ColorDot color={cat.color} size="sm" />
+                                  <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                                    {cat.name}
+                                  </p>
+                                </div>
+                                <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
+                                  {t.deletedPrefix}:{' '}
+                                  {formatDeletedAt(cat.deletedAt, meta.intlLocale)}
                                 </p>
                               </div>
-                              <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
-                                {t.deletedPrefix}: {formatDeletedAt(cat.deletedAt, meta.intlLocale)}
-                              </p>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={isEmptyingTrash || busyTrashIds.has(`cat:${cat.id}`)}
+                                  onClick={() =>
+                                    void runTrashItemOp(`cat:${cat.id}`, () =>
+                                      onRestoreCategory(cat.id),
+                                    )
+                                  }
+                                  aria-label={`${t.restoreItemButton}: ${cat.name}`}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                  <span>{t.restoreItemButton}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isEmptyingTrash || busyTrashIds.has(`cat:${cat.id}`)}
+                                  onClick={() =>
+                                    void runTrashItemOp(`cat:${cat.id}`, () =>
+                                      onPermanentDeleteCategory(cat.id),
+                                    )
+                                  }
+                                  aria-label={`${t.permanentDeleteTitle}: ${cat.name}`}
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
+                                  title={t.permanentDeleteTitle}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                disabled={isEmptyingTrash || busyTrashIds.has(`cat:${cat.id}`)}
-                                onClick={() =>
-                                  void runTrashItemOp(`cat:${cat.id}`, () =>
-                                    onRestoreCategory(cat.id),
-                                  )
-                                }
-                                aria-label={`${t.restoreItemButton}: ${cat.name}`}
-                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                              >
-                                <RotateCcw className="h-3 w-3" />
-                                <span>{t.restoreItemButton}</span>
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isEmptyingTrash || busyTrashIds.has(`cat:${cat.id}`)}
-                                onClick={() =>
-                                  void runTrashItemOp(`cat:${cat.id}`, () =>
-                                    onPermanentDeleteCategory(cat.id),
-                                  )
-                                }
-                                aria-label={`${t.permanentDeleteTitle}: ${cat.name}`}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
-                                title={t.permanentDeleteTitle}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )}
+                          ))}
+                        </div>
+                      </section>
+                    )}
 
-                  {/* Trashed Todos */}
-                  {trashedTodos.length > 0 && (
-                    <section aria-label={t.tasksTitle} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                          {t.tasksTitle}
-                        </h3>
-                        <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                          {trashedTodos.length}
-                        </span>
-                      </div>
-                      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--canvas)]">
-                        {trashedTodos.map((todo) => (
-                          <div
-                            key={todo.id}
-                            className="flex items-center justify-between gap-3 px-3.5 py-2.5"
-                          >
-                            <div className="min-w-0">
-                              <p
-                                className={`truncate text-sm font-medium ${todo.completed
-                                    ? 'line-through text-[var(--text-muted)]'
-                                    : 'text-[var(--text-primary)]'
+                    {trashedTodos.length > 0 && (
+                      <section aria-label={t.tasksTitle} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+                            {t.tasksTitle}
+                          </h3>
+                          <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
+                            {trashedTodos.length}
+                          </span>
+                        </div>
+                        <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                          {trashedTodos.map((todo) => (
+                            <div
+                              key={todo.id}
+                              className="flex items-center justify-between gap-3 px-4 py-3"
+                            >
+                              <div className="min-w-0">
+                                <p
+                                  className={`truncate text-sm font-medium ${
+                                    todo.completed
+                                      ? 'line-through text-[var(--text-muted)]'
+                                      : 'text-[var(--text-primary)]'
                                   }`}
-                              >
-                                {todo.title}
-                              </p>
-                              <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
-                                {t.deletedPrefix}:{' '}
-                                {formatDeletedAt(todo.deletedAt, meta.intlLocale)}
-                                {todo.subtasks.length > 0
-                                  ? ` · ${todo.subtasks.length} ${t.subtaskCountUnit}`
-                                  : ''}
-                              </p>
+                                >
+                                  {todo.title}
+                                </p>
+                                <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
+                                  {t.deletedPrefix}:{' '}
+                                  {formatDeletedAt(todo.deletedAt, meta.intlLocale)}
+                                  {todo.subtasks.length > 0
+                                    ? ` · ${todo.subtasks.length} ${t.subtaskCountUnit}`
+                                    : ''}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={isEmptyingTrash || busyTrashIds.has(`todo:${todo.id}`)}
+                                  onClick={() =>
+                                    void runTrashItemOp(`todo:${todo.id}`, () =>
+                                      onRestoreTodo(todo.id),
+                                    )
+                                  }
+                                  aria-label={`${t.restoreItemButton}: ${todo.title}`}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                                >
+                                  <RotateCcw className="h-3 w-3" />
+                                  <span>{t.restoreItemButton}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isEmptyingTrash || busyTrashIds.has(`todo:${todo.id}`)}
+                                  onClick={() =>
+                                    void runTrashItemOp(`todo:${todo.id}`, () =>
+                                      onPermanentDeleteTodo(todo.id),
+                                    )
+                                  }
+                                  aria-label={`${t.permanentDeleteTitle}: ${todo.title}`}
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
+                                  title={t.permanentDeleteTitle}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                disabled={isEmptyingTrash || busyTrashIds.has(`todo:${todo.id}`)}
-                                onClick={() =>
-                                  void runTrashItemOp(`todo:${todo.id}`, () =>
-                                    onRestoreTodo(todo.id),
-                                  )
-                                }
-                                aria-label={`${t.restoreItemButton}: ${todo.title}`}
-                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                              >
-                                <RotateCcw className="h-3 w-3" />
-                                <span>{t.restoreItemButton}</span>
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isEmptyingTrash || busyTrashIds.has(`todo:${todo.id}`)}
-                                onClick={() =>
-                                  void runTrashItemOp(`todo:${todo.id}`, () =>
-                                    onPermanentDeleteTodo(todo.id),
-                                  )
-                                }
-                                aria-label={`${t.permanentDeleteTitle}: ${todo.title}`}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
-                                title={t.permanentDeleteTitle}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : (
+              /* About, Updates & Legal Tab */
+              <>
+                <UpdatesSection
+                  autoUpdateCheck={autoUpdateCheck}
+                  onToggleAutoUpdateCheck={onToggleAutoUpdateCheck}
+                  updateState={updateState}
+                  onCheckForUpdates={onCheckForUpdates}
+                  onDownloadAndInstall={onDownloadAndInstall}
+                  onQuitAndInstall={onQuitAndInstallUpdate}
+                />
+
+                {/* Legal Pages & Microsoft Store Compliance */}
+                <section aria-label={t.legalSectionTitle} className="space-y-2.5">
+                  <div>
+                    <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+                      {t.legalSectionTitle}
+                    </h3>
+                    <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                      {t.legalSectionSubtitle}
+                    </p>
+                  </div>
+
+                  <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                    {legalItems.map(({ id, title, Icon }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setActiveLegalDoc(id)}
+                        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+                      >
+                        <span className="flex items-center gap-2.5 min-w-0">
+                          <Icon className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                          <span className="truncate">{title}</span>
+                        </span>
+                        <ChevronRight className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                {/* About & Diagnostics Card */}
+                <section
+                  aria-label="Agendamea"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <VelliumLogo className="h-5 w-5 text-[var(--text-primary)] shrink-0" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-display text-sm font-bold text-[var(--text-primary)]">
+                            Agendamea
+                          </span>
+                          <span className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-1.5 py-0.5 font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                            v1.0.0
+                          </span>
+                        </div>
+                        <p className="text-xs text-[var(--text-muted)]">
+                          © 2026 Vellium · vellium.dev
+                        </p>
                       </div>
-                    </section>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        data-testid="copy-diagnostics-btn"
+                        onClick={() => void handleCopyDiagnostics()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+                      >
+                        {diagnosticsCopied ? (
+                          <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                        )}
+                        <span>
+                          {diagnosticsCopied ? t.diagnosticsCopiedToast : t.copyDiagnosticsButton}
+                        </span>
+                      </button>
+                      {onOpenWelcomeGuide && (
+                        <button
+                          type="button"
+                          data-testid="settings-open-welcome-guide"
+                          onClick={onOpenWelcomeGuide}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                          <span>{t.welcomeReplayButton}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-4 border-t border-[var(--border)] pt-3 text-xs text-[var(--text-muted)]">
+                    <a
+                      href="https://vellium.dev"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
+                    >
+                      vellium.dev
+                    </a>
+                    <a
+                      href="mailto:support@vellium.dev"
+                      className="hover:text-[var(--text-primary)] underline-offset-2 hover:underline transition-colors"
+                    >
+                      support@vellium.dev
+                    </a>
+                  </div>
+                </section>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 

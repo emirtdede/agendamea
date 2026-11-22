@@ -57,8 +57,16 @@ interface NativeWindowBridge {
   }>;
   checkForUpdates?: () => Promise<import('../types').UpdateCheckResult>;
   downloadAndInstallUpdate?: (
-    url: string,
-  ) => Promise<{ ok: boolean; launchedInstaller?: boolean; launchedExternal?: boolean }>;
+    url?: string,
+  ) => Promise<{
+    ok: boolean;
+    downloaded?: boolean;
+    nativeAutoUpdater?: boolean;
+    launchedInstaller?: boolean;
+    launchedExternal?: boolean;
+    storeManaged?: boolean;
+  }>;
+  quitAndInstallUpdate?: () => Promise<{ ok: boolean; storeManaged?: boolean }>;
   pickCloudSyncFolder?: () => Promise<{
     ok: boolean;
     canceled?: boolean;
@@ -66,6 +74,8 @@ interface NativeWindowBridge {
   }>;
   openOneDriveFolder?: (folderPath?: string | null) => Promise<{ ok: boolean; path?: string }>;
   onUpdateProgress?: (cb: (percent: number) => void) => (() => void) | void;
+  onUpdateDownloaded?: (cb: (info: { version: string }) => void) => (() => void) | void;
+  onUpdateError?: (cb: (message: string) => void) => (() => void) | void;
 }
 
 declare global {

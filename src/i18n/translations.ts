@@ -296,6 +296,15 @@ export interface UiDictionary {
   cloudCustomFolderHint: string;
   copyDiagnosticsButton: string;
   diagnosticsCopiedToast: string;
+  updateReadyToInstallLabel: string;
+  restartAndUpdateButton: string;
+  settingsBackToTasks: string;
+  settingsNavGroupPersonalization: string;
+  settingsNavGroupWorkspace: string;
+  settingsNavGroupSystem: string;
+  settingsTabAppearance: string;
+  settingsTabGeneral: string;
+  settingsTabAbout: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -582,6 +591,15 @@ export const TR_DICTIONARY: UiDictionary = {
   cloudCustomFolderHint: 'OneDrive, Google Drive, Dropbox veya istediğiniz bir yerel yedek klasörünü seçebilirsiniz.',
   copyDiagnosticsButton: 'Sistem Bilgisini Kopyala',
   diagnosticsCopiedToast: 'Sistem ve tanı bilgisi panoya kopyalandı.',
+  updateReadyToInstallLabel: 'Güncelleme indirildi ve kuruluma hazır. Yeniden başlatıldığında sessizce kurulur.',
+  restartAndUpdateButton: 'Yeniden Başlat ve Güncelle',
+  settingsBackToTasks: 'Görevlere Dön',
+  settingsNavGroupPersonalization: 'Kişiselleştirme',
+  settingsNavGroupWorkspace: 'Çalışma Alanı',
+  settingsNavGroupSystem: 'Sistem ve Hakkında',
+  settingsTabAppearance: 'Görünüm ve Tema',
+  settingsTabGeneral: 'Genel ve Dil',
+  settingsTabAbout: 'Güncelleme ve Yasal',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -868,6 +886,15 @@ export const EN_DICTIONARY: UiDictionary = {
   cloudCustomFolderHint: 'Select OneDrive, Google Drive, Dropbox, or any local folder for automatic backups.',
   copyDiagnosticsButton: 'Copy System Info',
   diagnosticsCopiedToast: 'System diagnostic info copied to clipboard.',
+  updateReadyToInstallLabel: 'Update downloaded and ready to install. It installs silently on restart.',
+  restartAndUpdateButton: 'Restart & Update',
+  settingsBackToTasks: 'Back to Tasks',
+  settingsNavGroupPersonalization: 'Personalization',
+  settingsNavGroupWorkspace: 'Workspace',
+  settingsNavGroupSystem: 'System & About',
+  settingsTabAppearance: 'Appearance & Theme',
+  settingsTabGeneral: 'General & Language',
+  settingsTabAbout: 'Updates & Legal',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {

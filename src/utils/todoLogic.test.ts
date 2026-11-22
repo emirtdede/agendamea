@@ -1101,6 +1101,11 @@ test('QA: Zero language leakage across all 73 languages, UI components, color na
     'cloudCustomFolderHint',
     'copyDiagnosticsButton',
     'diagnosticsCopiedToast',
+    'updateReadyToInstallLabel',
+    'restartAndUpdateButton',
+    'settingsTabAppearance',
+    'settingsTabGeneral',
+    'settingsTabAbout',
   ];
 
   for (const langMeta of SUPPORTED_LANGUAGES) {
@@ -1616,6 +1621,16 @@ test('QA: Custom HEX theme tokens, dynamic App Icon generator (.ico), accessibil
     assert.ok(manifestText.includes('PackageIdentifier: Vellium.Agendamea'), `${manifestFile} must specify PackageIdentifier`);
     assert.ok(manifestText.includes('PackageVersion: 1.0.0'), `${manifestFile} must specify PackageVersion 1.0.0`);
   }
+
+  // 7. Zero-cost silent/delta auto-updater (electron-updater) wiring & Microsoft Store Policy 10.2.7 isolation
+  const mainCjs = fs.readFileSync(path.join(process.cwd(), 'electron', 'main.cjs'), 'utf8');
+  const releaseYml = fs.readFileSync(path.join(process.cwd(), '.github', 'workflows', 'release.yml'), 'utf8');
+  assert.ok(ebYml.includes('provider: github'), 'electron-builder.yml must configure GitHub publish provider for latest.yml & app-update.yml');
+  assert.ok(ebYml.includes('node_modules/electron-updater/**'), 'electron-builder.yml must bundle electron-updater in files');
+  assert.ok(releaseYml.includes('release/latest.yml'), 'GitHub Release workflow must publish latest.yml for delta auto-updates');
+  assert.ok(mainCjs.includes("require('electron-updater')"), 'Electron main process must integrate electron-updater');
+  assert.ok(mainCjs.includes('quitAndInstall(true, true)'), 'Electron main process must support silent quitAndInstall');
+  assert.ok(mainCjs.includes('!process.windowsStore'), 'Native auto-updater must stay disabled inside Microsoft Store builds');
 });
 
 

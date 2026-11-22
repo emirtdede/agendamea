@@ -58,6 +58,7 @@ import type {
   LayoutMode,
   OneDriveStatus,
   Priority,
+  SettingsTabId,
   SortOption,
   StatusFilter,
   ThemeId,
@@ -85,6 +86,7 @@ import {
   sortCategoriesWithPin,
 } from './utils/todoLogic';
 import { SettingsModal } from './components/SettingsModal';
+import type { AppUpdateState } from './components/UpdateSettingsSection';
 
 function readInitialTheme(): {
   mode: ThemeMode;
@@ -168,16 +170,13 @@ export default function App() {
     readInitialSidebarCollapsed(),
   );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('appearance');
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(false);
   const welcomeCheckedRef = useRef(false);
   const iconInitializedRef = useRef(false);
   const iconDirtyRef = useRef(false);
 
-  const [updateState, setUpdateState] = useState<{
-    status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'error';
-    result: UpdateCheckResult | null;
-    downloadPercent: number | null;
-  }>({
+  const [updateState, setUpdateState] = useState<AppUpdateState>({
     status: 'idle',
     result: null,
     downloadPercent: null,
@@ -351,17 +350,40 @@ export default function App() {
     };
   }, [scheduleFocus]);
 
-  // Listen to Electron native update download progress if available
+  // Listen to Electron native update progress, downloaded & error events
   useEffect(() => {
-    const unsub = window.agendameaWindow?.onUpdateProgress?.((pct) => {
+    const unsubProgress = window.agendameaWindow?.onUpdateProgress?.((pct) => {
       setUpdateState((prev) =>
         prev.status === 'downloading' ? { ...prev, downloadPercent: pct } : prev,
       );
     });
+    const unsubDownloaded = window.agendameaWindow?.onUpdateDownloaded?.((info) => {
+      setUpdateState((prev) => ({
+        status: 'downloaded',
+        result: prev.result
+          ? {
+              ...prev.result,
+              latestVersion: info.version || prev.result.latestVersion,
+              downloaded: true,
+            }
+          : prev.result,
+        downloadPercent: 100,
+      }));
+      showInfoToast(tRef.current.updateReadyToInstallLabel, 'info');
+    });
+    const unsubError = window.agendameaWindow?.onUpdateError?.(() => {
+      setUpdateState((prev) =>
+        prev.status === 'downloading'
+          ? { ...prev, status: prev.result?.updateAvailable ? 'available' : 'error', downloadPercent: null }
+          : prev,
+      );
+    });
     return () => {
-      if (typeof unsub === 'function') unsub();
+      if (typeof unsubProgress === 'function') unsubProgress();
+      if (typeof unsubDownloaded === 'function') unsubDownloaded();
+      if (typeof unsubError === 'function') unsubError();
     };
-  }, []);
+  }, [showInfoToast]);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) {
@@ -573,7 +595,13 @@ export default function App() {
           });
           return;
         }
-        if (res.updateAvailable) {
+        if (res.downloaded) {
+          setUpdateState({
+            status: 'downloaded',
+            result: res,
+            downloadPercent: 100,
+          });
+        } else if (res.updateAvailable) {
           setUpdateState({
             status: 'available',
             result: res,
@@ -627,22 +655,38 @@ export default function App() {
     if (!res) return;
     const installerUrl = res.setupUrl || res.msixUrl || null;
     const downloadUrl = installerUrl || res.portableUrl || res.releaseUrl;
-    if (window.agendameaWindow?.downloadAndInstallUpdate && installerUrl) {
+    if (window.agendameaWindow?.downloadAndInstallUpdate && (res.nativeAutoUpdateReady || installerUrl)) {
       setUpdateState((prev) => ({
         ...prev,
         status: 'downloading',
         downloadPercent: 5,
       }));
-      await window.agendameaWindow.downloadAndInstallUpdate(installerUrl);
-      setUpdateState((prev) => ({
-        ...prev,
-        status: 'available',
-        downloadPercent: null,
-      }));
+      const outcome = await window.agendameaWindow.downloadAndInstallUpdate(installerUrl || '');
+      if (outcome?.downloaded) {
+        setUpdateState((prev) => ({
+          ...prev,
+          status: 'downloaded',
+          downloadPercent: 100,
+        }));
+      } else {
+        setUpdateState((prev) =>
+          prev.status === 'downloaded'
+            ? prev
+            : {
+                ...prev,
+                status: 'available',
+                downloadPercent: null,
+              },
+        );
+      }
       return;
     }
     window.open(downloadUrl, '_blank', 'noopener,noreferrer');
   }, [updateState.result]);
+
+  const handleQuitAndInstallUpdate = useCallback(async () => {
+    await window.agendameaWindow?.quitAndInstallUpdate?.();
+  }, []);
 
   // Handle Windows Jump List / PWA shortcut launch query params (?view=... & ?action=new)
   useEffect(() => {
@@ -1702,16 +1746,26 @@ export default function App() {
   );
 
   const handleSelectView = useCallback((view: ActiveView) => {
+    setIsSettingsOpen(false);
     setActiveView(view);
     setStatusFilter('all');
     setTagFilter(null);
+  }, []);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    if (value.trim().length > 0) {
+      setIsSettingsOpen(false);
+    }
   }, []);
 
   const handleTagClick = useCallback((tag: string) => {
     setTagFilter((prev) => (prev && prev.toLowerCase() === tag.toLowerCase() ? null : tag));
   }, []);
 
-  const handleOpenSettings = useCallback(() => {
+  const handleOpenSettings = useCallback((tab: SettingsTabId = 'appearance') => {
+    setSettingsInitialTab(tab);
+    setSelectedTodoId(null);
     setIsSettingsOpen(true);
   }, []);
 
@@ -1729,6 +1783,8 @@ export default function App() {
       }
       void api.updateSettings({ onboardingCompleted: true }).catch(() => {});
       if (openSettingsAfter) {
+        setSettingsInitialTab('data');
+        setSelectedTodoId(null);
         setIsSettingsOpen(true);
       } else {
         scheduleFocus(() => quickAddRef.current?.focus(), 60);
@@ -1821,9 +1877,10 @@ export default function App() {
           isCollapsed={sidebarCollapsed}
           onToggleCollapse={handleToggleSidebarCollapse}
           searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
+          onSearchChange={handleSearchChange}
           searchInputRef={searchInputRef}
-          onOpenSettings={handleOpenSettings}
+          isSettingsOpen={isSettingsOpen}
+          onOpenSettings={() => handleOpenSettings('appearance')}
           onCreateCategory={handleCreateCategory}
           onUpdateCategory={handleUpdateCategory}
           onTogglePinCategory={handleTogglePinCategory}
@@ -1833,13 +1890,65 @@ export default function App() {
           onCloseMobile={handleCloseMobileSidebar}
         />
 
-        {/* Main Content Area */}
+        {/* Main Content Area (Tasks Workspace OR Full-Page Tabbed Settings) */}
         <div className="relative flex flex-1 min-w-0 flex-col h-full overflow-hidden">
-          <div
-            aria-hidden="true"
-            className="app-drag-region absolute left-0 right-36 top-0 z-10 h-9 select-none"
-          />
+          {!isSettingsOpen && (
+            <div
+              aria-hidden="true"
+              className="app-drag-region absolute left-0 right-36 top-0 z-10 h-9 select-none"
+            />
+          )}
 
+          {isSettingsOpen ? (
+            <SettingsModal
+              onClose={handleCloseSettings}
+              initialTab={settingsInitialTab}
+              onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
+              themeMode={themeMode}
+              themeId={themeId}
+              customThemeColor={customThemeColor}
+              appIconId={appIconId}
+              customIconColor={customIconColor}
+              zoomPercent={zoomPercent}
+              highContrast={highContrast}
+              reducedMotion={reducedMotion}
+              closeBehavior={closeBehavior}
+              launchAtStartup={launchAtStartup}
+              globalQuickAddShortcut={globalQuickAddShortcut}
+              dragLocked={dragLocked}
+              onChangeMode={handleModeChange}
+              onChangeTheme={handleThemeChange}
+              onChangeCustomThemeColor={handleCustomThemeColorChange}
+              onChangeAppIcon={handleAppIconChange}
+              onChangeCustomIconColor={handleCustomIconColorChange}
+              onChangeZoomPercent={handleZoomPercentChange}
+              onToggleHighContrast={handleToggleHighContrast}
+              onToggleReducedMotion={handleToggleReducedMotion}
+              onChangeCloseBehavior={handleCloseBehaviorChange}
+              onToggleLaunchAtStartup={handleToggleLaunchAtStartup}
+              onToggleGlobalQuickAddShortcut={handleToggleGlobalQuickAddShortcut}
+              onToggleDragLock={handleToggleDragLock}
+              autoUpdateCheck={autoUpdateCheck}
+              onToggleAutoUpdateCheck={handleToggleAutoUpdateCheck}
+              updateState={updateState}
+              onCheckForUpdates={handleManualCheckForUpdates}
+              onDownloadAndInstall={handleDownloadAndInstallUpdate}
+              onQuitAndInstallUpdate={handleQuitAndInstallUpdate}
+              totalTodoCount={todos.length}
+              completedTodoCount={counts.smart.completed}
+              onClearAllCompleted={handleClearAllCompleted}
+              onImportBackup={handleImportBackup}
+              onApplyRestoredBootstrap={handleApplyRestoredBootstrap}
+              trashedCategories={trashedCategories}
+              trashedTodos={trashedTodos}
+              onRestoreTodo={handleRestoreTodo}
+              onPermanentDeleteTodo={handlePermanentDeleteTodo}
+              onRestoreCategory={handleRestoreCategory}
+              onPermanentDeleteCategory={handlePermanentDeleteCategory}
+              onEmptyTrash={handleEmptyTrash}
+              onOpenWelcomeGuide={handleOpenWelcomeGuide}
+            />
+          ) : (
           <main className="flex-1 overflow-y-auto px-4 pt-11 pb-8 sm:px-8 sm:pt-10">
             <div className="mx-auto w-full max-w-[820px] space-y-5">
               {/* Workspace Title & Date Line */}
@@ -2261,10 +2370,11 @@ export default function App() {
               )}
             </div>
           </main>
+          )}
         </div>
 
         {/* Right Detail Inspector Panel */}
-        {selectedTodo && (
+        {!isSettingsOpen && selectedTodo && (
           <>
             <button
               type="button"
@@ -2295,55 +2405,6 @@ export default function App() {
           onResumeUndo={resumeUndoToast}
           onClearInfo={clearInfoToast}
         />
-
-        {/* Settings Modal (Statically bundled to prevent runtime temp/chunk load errors in Portable mode) */}
-        {isSettingsOpen && (
-          <SettingsModal
-            onClose={handleCloseSettings}
-            themeMode={themeMode}
-            themeId={themeId}
-            customThemeColor={customThemeColor}
-            appIconId={appIconId}
-            customIconColor={customIconColor}
-            zoomPercent={zoomPercent}
-            highContrast={highContrast}
-            reducedMotion={reducedMotion}
-            closeBehavior={closeBehavior}
-            launchAtStartup={launchAtStartup}
-            globalQuickAddShortcut={globalQuickAddShortcut}
-            dragLocked={dragLocked}
-            onChangeMode={handleModeChange}
-            onChangeTheme={handleThemeChange}
-            onChangeCustomThemeColor={handleCustomThemeColorChange}
-            onChangeAppIcon={handleAppIconChange}
-            onChangeCustomIconColor={handleCustomIconColorChange}
-            onChangeZoomPercent={handleZoomPercentChange}
-            onToggleHighContrast={handleToggleHighContrast}
-            onToggleReducedMotion={handleToggleReducedMotion}
-            onChangeCloseBehavior={handleCloseBehaviorChange}
-            onToggleLaunchAtStartup={handleToggleLaunchAtStartup}
-            onToggleGlobalQuickAddShortcut={handleToggleGlobalQuickAddShortcut}
-            onToggleDragLock={handleToggleDragLock}
-            autoUpdateCheck={autoUpdateCheck}
-            onToggleAutoUpdateCheck={handleToggleAutoUpdateCheck}
-            updateState={updateState}
-            onCheckForUpdates={handleManualCheckForUpdates}
-            onDownloadAndInstall={handleDownloadAndInstallUpdate}
-            totalTodoCount={todos.length}
-            completedTodoCount={counts.smart.completed}
-            onClearAllCompleted={handleClearAllCompleted}
-            onImportBackup={handleImportBackup}
-            onApplyRestoredBootstrap={handleApplyRestoredBootstrap}
-            trashedCategories={trashedCategories}
-            trashedTodos={trashedTodos}
-            onRestoreTodo={handleRestoreTodo}
-            onPermanentDeleteTodo={handlePermanentDeleteTodo}
-            onRestoreCategory={handleRestoreCategory}
-            onPermanentDeleteCategory={handlePermanentDeleteCategory}
-            onEmptyTrash={handleEmptyTrash}
-            onOpenWelcomeGuide={handleOpenWelcomeGuide}
-          />
-        )}
 
         {/* PowerPilot-Style Close Action Modal (Minimize to Tray vs Quit Completely) */}
         {isCloseModalOpen && (

@@ -56,6 +56,7 @@ interface SidebarProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   searchInputRef: React.RefObject<HTMLInputElement | null>;
+  isSettingsOpen?: boolean;
   onOpenSettings: () => void;
   onCreateCategory: (payload: { id: string; name: string; color: string }) => Promise<void>;
   onUpdateCategory: (id: string, patch: CategoryPatch) => Promise<void>;
@@ -77,6 +78,7 @@ export const Sidebar = React.memo(function Sidebar({
   searchQuery,
   onSearchChange,
   searchInputRef,
+  isSettingsOpen = false,
   onOpenSettings,
   onCreateCategory,
   onUpdateCategory,
@@ -356,7 +358,7 @@ export const Sidebar = React.memo(function Sidebar({
         {/* Smart Views */}
         <nav aria-label={t.allTasks} className="space-y-0.5">
           {smartItems.map(({ id, label, Icon }) => {
-            const isActive = activeView.type === 'smart' && activeView.id === id;
+            const isActive = !isSettingsOpen && activeView.type === 'smart' && activeView.id === id;
             const count = counts.smart[id];
 
             if (compact) {
@@ -443,7 +445,7 @@ export const Sidebar = React.memo(function Sidebar({
 
           <div className="space-y-0.5">
             {categories.map((cat) => {
-              const isActive = activeView.type === 'category' && activeView.id === cat.id;
+              const isActive = !isSettingsOpen && activeView.type === 'category' && activeView.id === cat.id;
               const isEditing = !compact && editingCatId === cat.id;
               const isConfirmingDelete = !compact && confirmDeleteId === cat.id;
               const count = counts.categories[cat.id] ?? 0;
@@ -811,13 +813,18 @@ export const Sidebar = React.memo(function Sidebar({
           <button
             type="button"
             data-testid="open-settings-button"
+            aria-current={isSettingsOpen ? 'page' : undefined}
             onClick={() => {
               onCloseMobile();
               onOpenSettings();
             }}
             aria-label={t.settings}
             title={t.settings}
-            className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+            className={`mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+              isSettingsOpen
+                ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+            }`}
           >
             <Settings className="h-4 w-4" />
           </button>
@@ -825,13 +832,22 @@ export const Sidebar = React.memo(function Sidebar({
           <button
             type="button"
             data-testid="open-settings-button"
+            aria-current={isSettingsOpen ? 'page' : undefined}
             onClick={() => {
               onCloseMobile();
               onOpenSettings();
             }}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+            className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-colors ${
+              isSettingsOpen
+                ? 'bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+            }`}
           >
-            <Settings className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+            <Settings
+              className={`h-4 w-4 shrink-0 ${
+                isSettingsOpen ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
+              }`}
+            />
             <span className="whitespace-nowrap">{t.settings}</span>
           </button>
         )}
