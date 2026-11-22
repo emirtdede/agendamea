@@ -395,6 +395,26 @@ function readSettingsOffline(db) {
   if (rawVoiceTtsEnabled === '1' || rawVoiceTtsEnabled === 'true') settings.voiceTtsEnabled = true;
   else if (rawVoiceTtsEnabled === '0' || rawVoiceTtsEnabled === 'false') settings.voiceTtsEnabled = false;
   if (map.get('voiceTtsVoice')) settings.voiceTtsVoice = map.get('voiceTtsVoice');
+  const rawTtsStyle = map.get('voiceTtsStyle');
+  if (
+    rawTtsStyle === 'natural' ||
+    rawTtsStyle === 'crisp' ||
+    rawTtsStyle === 'calm' ||
+    rawTtsStyle === 'bright' ||
+    rawTtsStyle === 'studio'
+  ) {
+    settings.voiceTtsStyle = rawTtsStyle;
+  }
+  const rawChimePreset = map.get('voiceChimePreset');
+  if (
+    rawChimePreset === 'soft' ||
+    rawChimePreset === 'crystal' ||
+    rawChimePreset === 'studio' ||
+    rawChimePreset === 'minimal' ||
+    rawChimePreset === 'none'
+  ) {
+    settings.voiceChimePreset = rawChimePreset;
+  }
   if (map.get('voiceMicDeviceId')) settings.voiceMicDeviceId = map.get('voiceMicDeviceId');
   const rawNoiseSup = map.get('voiceNoiseSuppression');
   if (rawNoiseSup === '1' || rawNoiseSup === 'true') settings.voiceNoiseSuppression = true;
@@ -509,6 +529,24 @@ function writeSettingsPatchOffline(db, patch) {
   }
   if (typeof patch.voiceTtsVoice === 'string') {
     stmt.run('voiceTtsVoice', patch.voiceTtsVoice.trim().slice(0, 160));
+  }
+  if (
+    patch.voiceTtsStyle === 'natural' ||
+    patch.voiceTtsStyle === 'crisp' ||
+    patch.voiceTtsStyle === 'calm' ||
+    patch.voiceTtsStyle === 'bright' ||
+    patch.voiceTtsStyle === 'studio'
+  ) {
+    stmt.run('voiceTtsStyle', patch.voiceTtsStyle);
+  }
+  if (
+    patch.voiceChimePreset === 'soft' ||
+    patch.voiceChimePreset === 'crystal' ||
+    patch.voiceChimePreset === 'studio' ||
+    patch.voiceChimePreset === 'minimal' ||
+    patch.voiceChimePreset === 'none'
+  ) {
+    stmt.run('voiceChimePreset', patch.voiceChimePreset);
   }
   if (typeof patch.voiceMicDeviceId === 'string') {
     stmt.run('voiceMicDeviceId', patch.voiceMicDeviceId.trim().slice(0, 200));

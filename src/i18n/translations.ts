@@ -509,6 +509,30 @@ export interface UiDictionary {
   ctxRename: string;
   ctxDeleteSubtask: string;
   ctxCopiedToast: string;
+  aiVoiceNeuralEngineBadge: string;
+  aiVoiceChimeLabel: string;
+  aiVoiceChimeSoft: string;
+  aiVoiceChimeCrystal: string;
+  aiVoiceChimeStudio: string;
+  aiVoiceChimeMinimal: string;
+  aiVoiceChimeNone: string;
+  aiVoiceTtsStyleLabel: string;
+  aiVoiceTtsStyleNatural: string;
+  aiVoiceTtsStyleCrisp: string;
+  aiVoiceTtsStyleCalm: string;
+  aiVoiceTtsStyleBright: string;
+  aiVoiceTtsStyleStudio: string;
+  aiVoiceTtsPreviewButton: string;
+  aiVoiceTtsStopPreviewButton: string;
+  aiVoiceTtsPreviewSample: string;
+  aiVoicePiperSectionTitle: string;
+  aiVoicePiperSectionDesc: string;
+  aiVoiceGenderFemale: string;
+  aiVoiceGenderMale: string;
+  aiVoicePiperActiveBadge: string;
+  aiVoicePiperSelectButton: string;
+  aiVoicePiperGroupLabel: string;
+  aiVoiceSystemGroupLabel: string;
 }
 
 export const TR_DICTIONARY: UiDictionary = {
@@ -925,7 +949,7 @@ export const TR_DICTIONARY: UiDictionary = {
   overlayConfirmButton: 'Onayla',
   overlayCancelButton: 'Vazgeç',
   overlayStopButton: 'Durdur',
-  overlayKeyboardPlaceholder: 'Komut veya soru yazın (ör. yarin 15:00 sunum ekle)...',
+  overlayKeyboardPlaceholder: 'Komut veya soru yazın (ör. yarın 15:00 sunum ekle)...',
   overlaySendButton: 'Gönder',
   overlaySpeechPackHint: 'Windows ses paketi ayarlarını aç (ms-settings:speech)',
   overlayTryAgainLabel: 'Tekrar Dinle',
@@ -1015,6 +1039,31 @@ export const TR_DICTIONARY: UiDictionary = {
   ctxRename: 'Yeniden Adlandır',
   ctxDeleteSubtask: 'Alt Görevi Sil',
   ctxCopiedToast: 'Panoya kopyalandı.',
+  aiVoiceNeuralEngineBadge: 'RNNoise + Silero VAD v5',
+  aiVoiceChimeLabel: 'Dikte Başlangıç Sesi',
+  aiVoiceChimeSoft: 'Yumuşak Çan',
+  aiVoiceChimeCrystal: 'Kristal Melodi',
+  aiVoiceChimeStudio: 'Stüdyo Tonu',
+  aiVoiceChimeMinimal: 'Minimal Tık',
+  aiVoiceChimeNone: 'Sessiz (Kapalı)',
+  aiVoiceTtsStyleLabel: 'Ses Tonu ve Hız',
+  aiVoiceTtsStyleNatural: 'Doğal (Dengeli)',
+  aiVoiceTtsStyleCrisp: 'Hızlı Asistan',
+  aiVoiceTtsStyleCalm: 'Sakin ve Derin',
+  aiVoiceTtsStyleBright: 'Canlı ve Sıcak',
+  aiVoiceTtsStyleStudio: 'Net ve Yavaş',
+  aiVoiceTtsPreviewButton: 'Sesi Dinle',
+  aiVoiceTtsStopPreviewButton: 'Durdur',
+  aiVoiceTtsPreviewSample: 'Merhaba, ben Agendamea sesli asistanınız. Bugünkü görevleriniz hazır.',
+  aiVoicePiperSectionTitle: 'Yerel Neural Sesler (Kadın / Erkek - Piper ONNX)',
+  aiVoicePiperSectionDesc:
+    'İnternetsiz çalışan doğal kadın ve erkek ses paketlerini tek tıkla indirip kullanın (~60 MB, MIT / CC0).',
+  aiVoiceGenderFemale: 'Kadın',
+  aiVoiceGenderMale: 'Erkek',
+  aiVoicePiperActiveBadge: 'Aktif Ses',
+  aiVoicePiperSelectButton: 'Seç',
+  aiVoicePiperGroupLabel: 'Yerel Neural Sesler (Kadın / Erkek)',
+  aiVoiceSystemGroupLabel: 'Windows Sistem Sesleri (OneCore)',
 };
 
 export const EN_DICTIONARY: UiDictionary = {
@@ -1521,6 +1570,31 @@ export const EN_DICTIONARY: UiDictionary = {
   ctxRename: 'Rename',
   ctxDeleteSubtask: 'Delete Subtask',
   ctxCopiedToast: 'Copied to clipboard.',
+  aiVoiceNeuralEngineBadge: 'RNNoise + Silero VAD v5',
+  aiVoiceChimeLabel: 'Dictation Ready Sound',
+  aiVoiceChimeSoft: 'Soft Chime',
+  aiVoiceChimeCrystal: 'Crystal Bell',
+  aiVoiceChimeStudio: 'Studio Tone',
+  aiVoiceChimeMinimal: 'Minimal Pop',
+  aiVoiceChimeNone: 'Silent (Off)',
+  aiVoiceTtsStyleLabel: 'Voice Tone & Speed',
+  aiVoiceTtsStyleNatural: 'Natural (Balanced)',
+  aiVoiceTtsStyleCrisp: 'Fast Assistant',
+  aiVoiceTtsStyleCalm: 'Calm & Deep',
+  aiVoiceTtsStyleBright: 'Bright & Warm',
+  aiVoiceTtsStyleStudio: 'Clear & Slow',
+  aiVoiceTtsPreviewButton: 'Preview Voice',
+  aiVoiceTtsStopPreviewButton: 'Stop',
+  aiVoiceTtsPreviewSample: 'Hello, I am your Agendamea voice assistant. Your tasks for today are ready.',
+  aiVoicePiperSectionTitle: 'Local Neural Voices (Female / Male - Piper ONNX)',
+  aiVoicePiperSectionDesc:
+    'Download optional offline natural female and male voice packs with one click (~60 MB, MIT / CC0).',
+  aiVoiceGenderFemale: 'Female',
+  aiVoiceGenderMale: 'Male',
+  aiVoicePiperActiveBadge: 'Active Voice',
+  aiVoicePiperSelectButton: 'Use',
+  aiVoicePiperGroupLabel: 'Local Neural Voices (Female / Male)',
+  aiVoiceSystemGroupLabel: 'Windows System Voices (OneCore)',
 };
 
 export const THEME_COLOR_DICT_KEYS: Record<string, keyof UiDictionary> = {
@@ -1579,8 +1653,10 @@ export function localizeErrorMessage(
     return fallback;
   }
   const msg = err.message.trim().toLowerCase();
-  // Catch raw browser/V8 English technical errors across all languages (including Turkish)
+  // Catch raw browser/V8 English technical errors and standardized client network codes across all languages
   if (
+    msg === 'network_timeout' ||
+    msg === 'network_unreachable' ||
     /^(failed to fetch|networkerror|load failed|unexpected token|unexpected end of json|http \d{3})/i.test(
       msg,
     )

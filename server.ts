@@ -9,20 +9,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TodoDatabase, ValidationError } from './src/db/database.ts';
 import type { CloudProviderId, DetectedCloudProvider, OneDriveStatus } from './src/types.ts';
+import { decodeJsonRequestBuffer } from './src/utils/jsonBodyDecoder.ts';
 import { getLocalDateString } from './src/utils/todoLogic.ts';
 import releaseUtils from './shared/releaseUtils.cjs';
 import hardwareProfiler from './shared/hardwareProfiler.cjs';
 import aiCatalog from './shared/aiCatalog.cjs';
 import modelManagerMod from './shared/modelManager.cjs';
+import piperVoicesMod from './shared/piperVoices.cjs';
 import embeddingWorkerMod from './electron/ai/embeddingWorker.cjs';
 import sttServiceMod from './electron/ai/sttService.cjs';
 import llmServiceMod from './electron/ai/llmService.cjs';
 import voiceOrchestratorMod from './electron/ai/voiceOrchestrator.cjs';
 import versionMod from './shared/version.cjs';
+import sharedConstants from './shared/constants.cjs';
 
 const APP_VERSION = versionMod.APP_VERSION;
-const GITHUB_RELEASES_API = 'https://api.github.com/repos/emirtdede/agendamea/releases/latest';
-const GITHUB_RELEASES_HTML = 'https://github.com/emirtdede/agendamea/releases/latest';
+const GITHUB_RELEASES_API = sharedConstants.GITHUB_RELEASES_API;
+const GITHUB_RELEASES_HTML = sharedConstants.GITHUB_RELEASES_HTML;
+const MAX_SSE_CLIENTS = 32;
+const MAX_ASK_TEXT_LEN = 2000;
+const MAX_PCM_SAMPLES = 480_000;
 
 function assertSafeLocalSyncFolder(rawPath: string): string {
   const trimmed = rawPath.trim();
@@ -505,7 +511,7 @@ async function startServer() {
     });
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
       'User-Agent': `Agendamea-Webhook/${APP_VERSION}`,
       'X-Agendamea-Event': event,
     };
@@ -543,11 +549,12 @@ async function startServer() {
           break;
         }
       } catch (err) {
+        const isTimeout = err instanceof Error && err.name === 'AbortError';
         lastResult = {
           ok: false,
           latencyMs: Date.now() - startedAt,
           attempts: attempt,
-          error: err instanceof Error ? err.message : 'Webhook gönderilemedi.',
+          error: isTimeout ? 'Webhook zaman aşımına uğradı.' : 'Webhook hedefine ulaşılamadı.',
         };
       } finally {
         clearTimeout(timer);
@@ -663,20 +670,38 @@ async function startServer() {
     if (process.env.NODE_ENV === 'production' && !process.env.CSP_HEADER_VALUE) {
       res.setHeader(
         'Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
       );
     }
     next();
   });
 
   app.use(
-    express.json({
-      limit: '5mb',
-      verify: (req, _res, buf) => {
-        (req as express.Request & { rawBody?: string }).rawBody = buf.toString('utf8');
+    express.raw({
+      type: (req) => {
+        const ct = String(req.headers['content-type'] ?? '').toLowerCase();
+        return ct.includes('application/json') || ct.includes('+json');
       },
+      limit: '5mb',
     }),
   );
+  app.use((req, res, next) => {
+    if (Buffer.isBuffer(req.body)) {
+      const rawText = decodeJsonRequestBuffer(req.body);
+      (req as express.Request & { rawBody?: string }).rawBody = rawText;
+      if (!rawText.trim()) {
+        req.body = {};
+      } else {
+        try {
+          req.body = JSON.parse(rawText);
+        } catch {
+          res.status(400).json({ error: 'Geçersiz JSON istek gövdesi.' });
+          return;
+        }
+      }
+    }
+    next();
+  });
   app.use('/api', (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
 
@@ -772,6 +797,10 @@ async function startServer() {
 
   // Live change notification stream for external CLI / MCP / Webhook mutations
   app.get('/api/events', (req, res) => {
+    if (sseClients.size >= MAX_SSE_CLIENTS) {
+      res.status(503).json({ error: 'Maksimum canlı bağlantı sınırına ulaşıldı.' });
+      return;
+    }
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -1540,7 +1569,7 @@ async function startServer() {
           'Desteklenmeyen webhook eylemi (add, update, complete, pin, delete, restore, clear_completed, subtask.*, category.*, trash.empty).',
       });
     } catch (err) {
-      recordIncoming('incoming.error', 500, false, err instanceof Error ? err.message : 'Error');
+      recordIncoming('incoming.error', 500, false, 'Internal webhook error');
       sendRouteError(res, 'POST /api/webhook/incoming', err, 'Gelen webhook işlenemedi.');
     }
   });
@@ -1842,10 +1871,17 @@ async function startServer() {
     ? path.resolve(process.env.AGENDAMEA_DATA_DIR)
     : path.join(process.cwd(), 'data');
   const aiModelsDir = path.join(aiDataDir, 'models');
+  const aiTtsVoicesDir = path.join(aiDataDir, 'tts-voices');
   const modelManager = new modelManagerMod.ModelManager({
     modelsDir: aiModelsDir,
     onProgressEvent: (prog: Record<string, unknown>) => {
       broadcastSseEvent({ type: 'ai.download.progress', ...prog });
+    },
+  });
+  const piperVoiceManager = new piperVoicesMod.PiperVoiceManager({
+    voicesDir: aiTtsVoicesDir,
+    onProgressEvent: (prog: Record<string, unknown>) => {
+      broadcastSseEvent({ type: 'tts.download.progress', ...prog });
     },
   });
   const embeddingService = new embeddingWorkerMod.EmbeddingService();
@@ -1940,8 +1976,8 @@ async function startServer() {
       externalKind,
       externalBaseUrl:
         externalKind === 'lmstudio'
-          ? String(process.env.AGENDAMEA_LMSTUDIO_URL || 'http://127.0.0.1:1234').replace(/\/+$/, '')
-          : String(process.env.AGENDAMEA_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/+$/, ''),
+          ? String(process.env.AGENDAMEA_LMSTUDIO_URL || sharedConstants.DEFAULT_LMSTUDIO_URL).replace(/\/+$/, '')
+          : String(process.env.AGENDAMEA_OLLAMA_URL || sharedConstants.DEFAULT_OLLAMA_URL).replace(/\/+$/, ''),
       externalModel: resolvedExternalModel,
     });
 
@@ -1957,6 +1993,8 @@ async function startServer() {
       voiceAutoStopMs: s.voiceAutoStopMs ?? 1500,
       voiceTtsEnabled: s.voiceTtsEnabled !== false,
       voiceTtsVoice: s.voiceTtsVoice || '',
+      voiceTtsStyle: s.voiceTtsStyle || 'natural',
+      voiceChimePreset: s.voiceChimePreset || 'soft',
       voiceMicDeviceId: s.voiceMicDeviceId || '',
       voiceNoiseSuppression: s.voiceNoiseSuppression !== false,
       voiceSensitivity: s.voiceSensitivity || 'auto',
@@ -2011,15 +2049,15 @@ async function startServer() {
       },
       completeTask: (selector: string, completed = true) => {
         const target = resolveTodoByVoiceSelector(selector);
-        if (!target) throw new Error('Gorev bulunamadi.');
+        if (!target) throw new Error('Görev bulunamadı.');
         const updated = db.updateTodo(target.id, { completed });
-        if (!updated) throw new Error('Gorev bulunamadi.');
+        if (!updated) throw new Error('Görev bulunamadı.');
         dispatchConfiguredWebhook('todo.updated', updated);
         return updated;
       },
       deleteTask: (selector: string) => {
         const target = resolveTodoByVoiceSelector(selector);
-        if (!target) throw new Error('Gorev bulunamadi.');
+        if (!target) throw new Error('Görev bulunamadı.');
         const trashed = db.softDeleteTodo(target.id);
         if (trashed) dispatchConfiguredWebhook('todo.deleted', trashed);
         return trashed;
@@ -2193,9 +2231,11 @@ async function startServer() {
 
   app.get('/api/ai/rag/search', async (req, res) => {
     try {
-      const q = typeof req.query.q === 'string' ? req.query.q : '';
-      const topK = Number(req.query.topK) || 5;
-      const minScore = req.query.minScore !== undefined ? Number(req.query.minScore) : 0.35;
+      const q = typeof req.query.q === 'string' ? req.query.q.slice(0, MAX_ASK_TEXT_LEN) : '';
+      const rawTopK = Number(req.query.topK);
+      const topK = Number.isFinite(rawTopK) ? Math.min(50, Math.max(1, Math.trunc(rawTopK))) : 5;
+      const rawMinScore = req.query.minScore !== undefined ? Number(req.query.minScore) : 0.35;
+      const minScore = Number.isFinite(rawMinScore) ? Math.min(1, Math.max(0, rawMinScore)) : 0.35;
       const result = await runHybridRagQuery(q, { topK, minScore });
       res.json(result);
     } catch (err) {
@@ -2205,9 +2245,11 @@ async function startServer() {
 
   app.post('/api/ai/rag/search', async (req, res) => {
     try {
-      const q = typeof req.body?.query === 'string' ? req.body.query : '';
-      const topK = Number(req.body?.topK) || 5;
-      const minScore = req.body?.minScore !== undefined ? Number(req.body.minScore) : 0.35;
+      const q = typeof req.body?.query === 'string' ? req.body.query.slice(0, MAX_ASK_TEXT_LEN) : '';
+      const rawTopK = Number(req.body?.topK);
+      const topK = Number.isFinite(rawTopK) ? Math.min(50, Math.max(1, Math.trunc(rawTopK))) : 5;
+      const rawMinScore = req.body?.minScore !== undefined ? Number(req.body.minScore) : 0.35;
+      const minScore = Number.isFinite(rawMinScore) ? Math.min(1, Math.max(0, rawMinScore)) : 0.35;
       const result = await runHybridRagQuery(q, { topK, minScore });
       res.json(result);
     } catch (err) {
@@ -2218,7 +2260,7 @@ async function startServer() {
   app.post('/api/ai/ask', async (req, res) => {
     try {
       const body = req.body ?? {};
-      const text = typeof body.text === 'string' ? body.text : '';
+      const text = typeof body.text === 'string' ? body.text.trim().slice(0, MAX_ASK_TEXT_LEN) : '';
       const language =
         typeof body.language === 'string' && body.language.trim()
           ? body.language.trim()
@@ -2268,8 +2310,16 @@ async function startServer() {
       let samples: Float32Array | null = null;
       if (typeof body.pcmBase64 === 'string' && body.pcmBase64.length > 0) {
         const rawBuf = Buffer.from(body.pcmBase64, 'base64');
+        if (rawBuf.byteLength > MAX_PCM_SAMPLES * 4) {
+          res.status(413).json({ ok: false, code: 'AUDIO_TOO_LONG', error: 'Ses kaydı en fazla 30 saniye olabilir.' });
+          return;
+        }
         samples = sttServiceMod.toFloat32Array(rawBuf);
       } else if (Array.isArray(body.pcm)) {
+        if (body.pcm.length > MAX_PCM_SAMPLES) {
+          res.status(413).json({ ok: false, code: 'AUDIO_TOO_LONG', error: 'Ses kaydı en fazla 30 saniye olabilir.' });
+          return;
+        }
         samples = sttServiceMod.toFloat32Array(body.pcm);
       }
       if (!samples) {
@@ -2282,6 +2332,93 @@ async function startServer() {
       res.json(sttRes);
     } catch (err) {
       sendRouteError(res, 'POST /api/ai/transcribe', err, 'Ses deşifre edilemedi.');
+    }
+  });
+
+  // Local Offline Neural TTS Voice Packs (Piper VITS ONNX - Female & Male)
+  app.get('/api/ai/tts-voices', (_req, res) => {
+    try {
+      res.json({ voices: piperVoiceManager.listVoices() });
+    } catch (err) {
+      sendRouteError(res, 'GET /api/ai/tts-voices', err, 'Ses paketleri listelenemedi.');
+    }
+  });
+
+  app.post('/api/ai/tts-voices/download', async (req, res) => {
+    try {
+      const voiceId = typeof req.body?.voiceId === 'string' ? req.body.voiceId.trim() : '';
+      if (!voiceId || !piperVoicesMod.PIPER_VOICES_BY_ID[voiceId]) {
+        res.status(400).json({ ok: false, error: 'Geçersiz ses paketi kimliği.' });
+        return;
+      }
+      const result = await piperVoiceManager.downloadVoice(voiceId);
+      res.json(result);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/tts-voices/download', err, 'Ses paketi indirilemedi.');
+    }
+  });
+
+  app.post('/api/ai/tts-voices/cancel', (req, res) => {
+    try {
+      const voiceId = typeof req.body?.voiceId === 'string' ? req.body.voiceId.trim() : '';
+      if (!voiceId || !piperVoicesMod.PIPER_VOICES_BY_ID[voiceId]) {
+        res.status(400).json({ ok: false, error: 'Geçersiz ses paketi kimliği.' });
+        return;
+      }
+      res.json(piperVoiceManager.cancelDownload(voiceId));
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/tts-voices/cancel', err, 'İndirme iptal edilemedi.');
+    }
+  });
+
+  app.delete('/api/ai/tts-voices/:id', (req, res) => {
+    try {
+      const voiceId = String(req.params.id || '').trim();
+      if (!voiceId || !piperVoicesMod.PIPER_VOICES_BY_ID[voiceId]) {
+        res.status(404).json({ ok: false, error: 'Ses paketi bulunamadı.' });
+        return;
+      }
+      res.json(piperVoiceManager.deleteVoice(voiceId));
+    } catch (err) {
+      sendRouteError(res, 'DELETE /api/ai/tts-voices/:id', err, 'Ses paketi silinemedi.');
+    }
+  });
+
+  app.get('/api/ai/tts-voices/:id/config', (req, res) => {
+    try {
+      const voiceId = String(req.params.id || '').trim();
+      if (!voiceId || !piperVoicesMod.PIPER_VOICES_BY_ID[voiceId]) {
+        res.status(404).json({ error: 'Ses paketi bulunamadı.' });
+        return;
+      }
+      const paths = piperVoiceManager.getVoicePaths(voiceId);
+      if (!paths.installed) {
+        res.status(404).json({ error: 'Ses paketi henüz indirilmedi.' });
+        return;
+      }
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.sendFile(paths.configPath);
+    } catch (err) {
+      sendRouteError(res, 'GET /api/ai/tts-voices/:id/config', err, 'Ses yapılandırması okunamadı.');
+    }
+  });
+
+  app.get('/api/ai/tts-voices/:id/onnx', (req, res) => {
+    try {
+      const voiceId = String(req.params.id || '').trim();
+      if (!voiceId || !piperVoicesMod.PIPER_VOICES_BY_ID[voiceId]) {
+        res.status(404).json({ error: 'Ses paketi bulunamadı.' });
+        return;
+      }
+      const paths = piperVoiceManager.getVoicePaths(voiceId);
+      if (!paths.installed) {
+        res.status(404).json({ error: 'Ses paketi henüz indirilmedi.' });
+        return;
+      }
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.sendFile(paths.onnxPath);
+    } catch (err) {
+      sendRouteError(res, 'GET /api/ai/tts-voices/:id/onnx', err, 'Ses modeli okunamadı.');
     }
   });
 
@@ -2347,6 +2484,9 @@ async function startServer() {
       '.html': 'text/html; charset=utf-8',
       '.js': 'application/javascript; charset=utf-8',
       '.mjs': 'application/javascript; charset=utf-8',
+      '.wasm': 'application/wasm',
+      '.onnx': 'application/octet-stream',
+      '.data': 'application/octet-stream',
       '.css': 'text/css; charset=utf-8',
       '.svg': 'image/svg+xml',
       '.json': 'application/json; charset=utf-8',
@@ -2373,9 +2513,11 @@ async function startServer() {
       '.xml',
       '.txt',
     ]);
+    const MAX_PRELOAD_FILE_BYTES = 2 * 1024 * 1024;
 
-    // Preload all dist assets into RAM at startup so Windows Portable %TEMP% cleanup
-    // can never cause ENOENT on index.html or JS/CSS bundles while the app is running
+    // Preload core UI shell dist assets into RAM at startup so Windows Portable %TEMP% cleanup
+    // can never cause ENOENT on index.html or JS/CSS bundles while the app is running.
+    // Large on-demand neural voice binaries (voice-assets/, >2 MB .wasm/.onnx/.data) stream from disk.
     const inMemoryAssets = new Map<string, InMemoryAsset>();
     const preloadDir = (dir: string, prefix = '') => {
       try {
@@ -2383,8 +2525,11 @@ async function startServer() {
           const fullPath = path.join(dir, entry.name);
           const relKey = prefix ? `${prefix}/${entry.name}` : entry.name;
           if (entry.isDirectory()) {
+            if (relKey === 'voice-assets') continue;
             preloadDir(fullPath, relKey);
           } else if (entry.isFile()) {
+            const stat = fs.statSync(fullPath);
+            if (stat.size > MAX_PRELOAD_FILE_BYTES) continue;
             const ext = path.extname(entry.name).toLowerCase();
             const contentType = MIME_BY_EXT[ext] ?? 'application/octet-stream';
             const raw = fs.readFileSync(fullPath);
@@ -2454,7 +2599,22 @@ async function startServer() {
       next();
     });
 
-    app.use(express.static(distDir));
+    app.use(
+      express.static(distDir, {
+        setHeaders: (res, filePath) => {
+          const ext = path.extname(filePath).toLowerCase();
+          if (ext === '.wasm') {
+            res.setHeader('Content-Type', 'application/wasm');
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+          } else if (ext === '.mjs' || ext === '.js') {
+            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+          } else if (ext === '.onnx' || ext === '.data') {
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+          }
+        },
+      }),
+    );
 
     app.get('*', (req, res) => {
       const indexEntry = inMemoryAssets.get('index.html');
@@ -2612,6 +2772,9 @@ async function startServer() {
     }
     for (const activeId of Array.from(modelManager.activeControllers.keys())) {
       modelManager.cancelDownload(activeId, { cleanPart: false });
+    }
+    for (const activeVoiceId of Array.from(piperVoiceManager.activeControllers.keys())) {
+      piperVoiceManager.cancelDownload(activeVoiceId);
     }
     const unloadPromise = Promise.allSettled([
       sttService.unload(),

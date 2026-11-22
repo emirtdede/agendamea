@@ -23,10 +23,11 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "node scripts/sync-voice-assets.mjs && tsx server.ts",
     "start": "node server.ts",
     "build:server": "node scripts/build-server.mjs",
-    "build": "vite build && npm run build:server",
+    "build": "node scripts/sync-voice-assets.mjs && vite build && npm run build:server",
+    "sync:voice-assets": "node scripts/sync-voice-assets.mjs",
     "preview": "vite preview",
     "electron:dev": "electron .",
     "electron:rebuild": "electron-builder install-app-deps",
@@ -42,7 +43,10 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@diffusionstudio/piper-wasm": "^1.0.0",
     "@fugood/whisper.node": "^1.2.0-rc.2",
+    "@ricky0123/vad-web": "^0.0.31",
+    "@sapphi-red/web-noise-suppressor": "^0.4.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/better-sqlite3": "^9.6.0",
     "@vitejs/plugin-react": "^6.1.1",

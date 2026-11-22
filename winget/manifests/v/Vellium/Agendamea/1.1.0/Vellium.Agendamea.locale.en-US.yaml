@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: Vellium.Agendamea
+PackageVersion: 1.1.0
+PackageLocale: en-US
+Publisher: Vellium
+PublisherUrl: https://vellium.dev
+PublisherSupportUrl: https://github.com/emirtdede/agendamea/issues
+PrivacyUrl: https://vellium.dev
+Author: Vellium
+PackageName: Agendamea
+PackageUrl: https://github.com/emirtdede/agendamea
+License: MIT
+LicenseUrl: https://github.com/emirtdede/agendamea/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Vellium (vellium.dev)
+ShortDescription: Fast, offline-first daily task manager, local AI voice planner, CLI & MCP suite for Windows 10/11.
+Description: Agendamea is a fast, local-first daily task manager, on-device neural voice assistant, and headless automation suite for Windows 10/11 featuring WAL SQLite v4 with Hybrid RAG, 4 planning views (List, Kanban, Calendar, Eisenhower Matrix), 100% offline RNNoise/Silero VAD/Piper Neural TTS/Whisper/Qwen3/Ollama voice dictation, Notification Center with Focus Mode, fully customizable keyboard shortcuts, universal right-click context menus, a built-in 22-tool MCP server, short terminal CLI (ag), headless bi-directional webhooks, serverless multi-cloud folder sync, custom HEX themes, dynamic system-wide icons, 73 languages, and a modern frameless monochrome WPF installer.
+Moniker: agendamea
+Tags:
+  - todo
+  - tasks
+  - planner
+  - kanban
+  - productivity
+  - offline
+  - sqlite
+  - local-ai
+  - mcp
+  - cli
+  - webhooks
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

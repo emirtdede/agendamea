@@ -39,6 +39,30 @@ export type SettingsTabId =
   | 'about';
 
 export type VoiceSensitivityMode = 'auto' | 'low' | 'medium' | 'high';
+export type VoiceTtsStyle = 'natural' | 'crisp' | 'calm' | 'bright' | 'studio';
+export type VoiceChimePreset = 'soft' | 'crystal' | 'studio' | 'minimal' | 'none';
+export type PiperVoiceGender = 'female' | 'male';
+
+export interface PiperVoiceStatus {
+  id: string;
+  name: string;
+  language: string;
+  baseLang: string;
+  gender: PiperVoiceGender;
+  quality: string;
+  sampleRate: number;
+  license: string;
+  expectedBytes: number;
+  installed: boolean;
+  bytes: number;
+  downloading: boolean;
+  progress: {
+    voiceId: string;
+    receivedBytes: number;
+    totalBytes: number;
+    percent: number;
+  } | null;
+}
 
 export type NotificationProfileId =
   | 'balanced'
@@ -155,6 +179,8 @@ export interface AppSettings {
   voiceAutoStopMs?: number;
   voiceTtsEnabled?: boolean;
   voiceTtsVoice?: string;
+  voiceTtsStyle?: VoiceTtsStyle;
+  voiceChimePreset?: VoiceChimePreset;
   voiceMicDeviceId?: string;
   voiceNoiseSuppression?: boolean;
   voiceSensitivity?: VoiceSensitivityMode;
@@ -256,6 +282,8 @@ export interface AiStatusPayload {
     voiceAutoStopMs: number;
     voiceTtsEnabled: boolean;
     voiceTtsVoice: string;
+    voiceTtsStyle: VoiceTtsStyle;
+    voiceChimePreset: VoiceChimePreset;
     voiceMicDeviceId: string;
     voiceNoiseSuppression: boolean;
     voiceSensitivity: VoiceSensitivityMode;

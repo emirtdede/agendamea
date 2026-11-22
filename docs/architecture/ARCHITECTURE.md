@@ -1,12 +1,12 @@
-# Agendamea Architecture & Security Reference (`v1.0.0`)
+# Agendamea Architecture & Security Reference (`v1.1.0`)
 
 ## 1. Process Model
 
 Agendamea runs as a three-layer local-first architecture:
 
-1. **Renderer (`src/`)**: React 19 + TypeScript 7 + Tailwind CSS v4 SPA. Runs without Node.js access (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`).
-2. **Electron Main Process (`electron/main.cjs` + `electron/preload.cjs`)**: Manages the frameless desktop window, enforces `app.requestSingleInstanceLock()`, resolves the physical `.ico` asset from `app.asar.unpacked`, starts the embedded Express server on loopback, and exposes a strictly allowlisted `window.agendameaWindow` IPC bridge.
-3. **Loopback Local Server (`server.ts` -> `dist-server/server.mjs`)**: Express 4 HTTP server bound exclusively to `127.0.0.1` (default port `47821`, with automatic fallback to `47822..47840` or OS-assigned ephemeral port if Windows Hyper-V/WinNAT reserves a port range). Production static files from `dist/` are served with `node:zlib` memory-cached gzip compression.
+1. **Renderer (`src/`)**: React 19 + TypeScript 7 + Tailwind CSS v4 SPA. Runs without Node.js access (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`). Includes an on-demand 100% offline neural voice pipeline (Mozilla RNNoise WASM, Silero VAD v5 ONNX, and Piper VITS ONNX Neural TTS) plus a shared singleton SSE event bus (`src/api/eventStream.ts`).
+2. **Electron Main Process (`electron/main.cjs` + `electron/preload.cjs`)**: Manages the frameless desktop window and taskbar voice overlay (`electron/voiceOverlay.cjs`), enforces `app.requestSingleInstanceLock()`, resolves physical `.ico` assets from `app.asar.unpacked`, starts the embedded Express server on loopback, and exposes a strictly allowlisted `window.agendameaWindow` IPC bridge.
+3. **Loopback Local Server (`server.ts` -> `dist-server/server.mjs`)**: Express 4 HTTP server bound exclusively to `127.0.0.1` (default port `38721` / `47821`, with automatic fallback if Windows Hyper-V/WinNAT reserves a port range). Core UI shell static files from `dist/` are served with `node:zlib` memory-cached gzip compression, while large neural voice WASM/ONNX binaries stream on demand from disk with `application/wasm` MIME headers.
 
 ## 2. Database Schema (`src/db/database.ts`)
 
@@ -15,13 +15,15 @@ Agendamea uses `better-sqlite3` with:
 - `PRAGMA synchronous = NORMAL`
 - `PRAGMA foreign_keys = ON`
 - `PRAGMA busy_timeout = 5000`
-- `PRAGMA user_version = 3`
+- `PRAGMA user_version = 4`
 
 ### Tables
 - `categories`: `id`, `name`, `color`, `pinned`, `sort_order`, `created_at`, `deleted_at`
 - `todos`: `id`, `title`, `notes`, `completed`, `important`, `pinned`, `priority`, `start_date`, `due_date`, `due_time`, `tags` (JSON array, max 12), `category_id`, `sort_order`, `created_at`, `updated_at`, `deleted_at`
 - `subtasks`: `id`, `todo_id` (`ON DELETE CASCADE`), `title`, `completed`, `sort_order`
-- `settings`: Key-value preferences (`themeMode`, `themeId`, `dragLocked`, `sidebarCollapsed`, `themeCustomized`, `language`, `autoUpdateCheck`, `onedriveAutoSync`, `onedriveCustomPath`)
+- `rag_chunks` & `rag_chunks_fts`: Chunked task/note FTS5 full-text index and vector embedding cache (`content_hash`) for hybrid local RAG search
+- `webhook_logs`: Persistent delivery and incoming trigger audit log
+- `settings`: Key-value preferences (theme, icons, accessibility, 73-language locale, custom keyboard shortcuts, notification profiles/channels, cloud sync, webhooks, local AI tiers/Ollama, voice mic/VAD/TTS/chime)
 
 ### Self-Healing Startup Recovery
 If SQLite fails to open or migrate a corrupted database file, `TodoDatabase.openDatabaseWithRecovery()` moves the broken file to `<db>.corrupt-<timestamp>.bak`, removes stale `-wal`/`-shm` sidecars, and initializes a fresh database cleanly.

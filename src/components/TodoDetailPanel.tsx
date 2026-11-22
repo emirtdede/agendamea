@@ -16,6 +16,7 @@ interface TodoDetailPanelProps {
     patch: TodoPatch,
     options?: { keepalive?: boolean },
   ) => Promise<boolean>;
+  onToggleComplete?: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   onAddSubtask: (todoId: string, title: string) => Promise<boolean>;
   onToggleSubtask: (todoId: string, subtaskId: string, completed: boolean) => Promise<void>;
@@ -55,6 +56,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
   todayStr,
   onClose,
   onUpdate,
+  onToggleComplete,
   onDelete,
   onAddSubtask,
   onToggleSubtask,
@@ -275,7 +277,11 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => void onUpdate(todo.id, { completed: !todo.completed })}
+            onClick={() =>
+              onToggleComplete
+                ? onToggleComplete(todo.id, !todo.completed)
+                : void onUpdate(todo.id, { completed: !todo.completed })
+            }
             aria-pressed={todo.completed}
             className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
           >

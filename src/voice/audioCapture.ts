@@ -1,9 +1,13 @@
 /**
- * WBS-3.1 + v1.1.0 Audio Upgrade:
- * Secure Context AudioWorklet Capture + 300 ms Ring Buffer + 120 ms Ready Chime +
- * Web Audio Highpass/Lowpass Noise Filter + Continuous EMA Adaptive Noise-Floor VAD +
+ * WBS-3.1 + v1.1.0 Neural Audio Upgrade:
+ * Secure Context AudioWorklet Capture + 300 ms Ring Buffer + Selectable Ready Chimes +
+ * Mozilla RNNoise WASM Neural Noise Suppression (48 kHz) + Web Audio Bandpass Filter +
+ * Silero VAD v5 ONNX Neural Speech Detector with Continuous EMA Adaptive Noise-Floor Fallback +
  * No-Speech Timeout + Microphone Device Enumeration & Live Test Meter.
  */
+
+import type { VoiceChimePreset, VoiceSensitivityMode } from '../types';
+import { createRnnoiseNode, SileroVadEngine, type RnnoiseHandle } from './neuralAudio';
 
 export const TARGET_SAMPLE_RATE = 16000;
 export const DEFAULT_AUTO_STOP_MS = 1500;
@@ -14,7 +18,7 @@ export const SPEECH_RMS_THRESHOLD = 0.018;
 export const SPEECH_AMPLITUDE_THRESHOLD = 0.02;
 export const MIN_SPEECH_RATIO = 0.1;
 
-export type VoiceSensitivityMode = 'auto' | 'low' | 'medium' | 'high';
+export type { VoiceChimePreset, VoiceSensitivityMode };
 
 export interface AudioInputDeviceInfo {
   deviceId: string;
@@ -33,12 +37,12 @@ export interface VadStateResult {
 
 const SENSITIVITY_CONFIG: Record<
   VoiceSensitivityMode,
-  { multiplier: number; minThreshold: number; maxThreshold: number }
+  { multiplier: number; minThreshold: number; maxThreshold: number; neuralProbThreshold: number }
 > = {
-  auto: { multiplier: 2.5, minThreshold: 0.015, maxThreshold: 0.085 },
-  low: { multiplier: 3.2, minThreshold: 0.024, maxThreshold: 0.11 },
-  medium: { multiplier: 2.3, minThreshold: 0.014, maxThreshold: 0.075 },
-  high: { multiplier: 1.75, minThreshold: 0.009, maxThreshold: 0.055 },
+  auto: { multiplier: 2.5, minThreshold: 0.015, maxThreshold: 0.085, neuralProbThreshold: 0.5 },
+  low: { multiplier: 3.2, minThreshold: 0.024, maxThreshold: 0.11, neuralProbThreshold: 0.68 },
+  medium: { multiplier: 2.3, minThreshold: 0.014, maxThreshold: 0.075, neuralProbThreshold: 0.48 },
+  high: { multiplier: 1.75, minThreshold: 0.009, maxThreshold: 0.055, neuralProbThreshold: 0.32 },
 };
 
 /**
@@ -91,7 +95,7 @@ export class VoiceVadController {
     this.maxRingSamples = Math.round((RING_BUFFER_MS / 1000) * this.sampleRate);
   }
 
-  pushFrame(pcm: Float32Array): VadStateResult {
+  pushFrame(pcm: Float32Array, neuralSpeechProb?: number | null): VadStateResult {
     const frameDurationMs = (pcm.length / this.sampleRate) * 1000;
     let sumSq = 0;
     for (let i = 0; i < pcm.length; i += 1) {
@@ -101,8 +105,8 @@ export class VoiceVadController {
 
     // Continuous EMA ambient noise-floor calibration so steady fan/AC/room noise
     // never prevents dictation from detecting trailing silence and auto-stopping.
+    const cfg = SENSITIVITY_CONFIG[this.sensitivity] ?? SENSITIVITY_CONFIG.auto;
     if (this.adaptiveNoiseFloor) {
-      const cfg = SENSITIVITY_CONFIG[this.sensitivity] ?? SENSITIVITY_CONFIG.auto;
       if (this.noiseSamplesCount < 3 && !this.hasSpoken) {
         this.noiseSamplesCount += 1;
         this.noiseFloor =
@@ -123,7 +127,12 @@ export class VoiceVadController {
       }
     }
 
-    const isSpeech = rms >= this.rmsThreshold;
+    // When Silero VAD v5 neural speech probability is available, trust the neural human-speech
+    // classifier (rejecting fan, keyboard, and TV noise) with a minimal non-zero RMS floor.
+    const isSpeech =
+      typeof neuralSpeechProb === 'number' && Number.isFinite(neuralSpeechProb)
+        ? neuralSpeechProb >= cfg.neuralProbThreshold && rms >= 0.003
+        : rms >= this.rmsThreshold;
 
     if (!this.hasSpoken) {
       if (isSpeech) {
@@ -297,47 +306,75 @@ export async function enumerateAudioInputDevices(
 export class MicLevelMonitor {
   private stream: MediaStream | null = null;
   private audioCtx: AudioContext | null = null;
+  private rnnoiseHandle: RnnoiseHandle | null = null;
   private rafId: number | null = null;
   private active = false;
+  private startSeq = 0;
 
   async start(
     options: { deviceId?: string; noiseSuppression?: boolean },
     onLevel: (level: number) => void,
   ): Promise<boolean> {
     this.stop();
+    const seq = ++this.startSeq;
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
       return false;
     }
     try {
+      const useNoiseFilter = options.noiseSuppression !== false;
       const audioConstraints: MediaTrackConstraints = {
         channelCount: 1,
-        echoCancellation: options.noiseSuppression !== false,
-        noiseSuppression: options.noiseSuppression !== false,
+        echoCancellation: useNoiseFilter,
+        noiseSuppression: useNoiseFilter,
         autoGainControl: true,
       };
       if (options.deviceId && options.deviceId !== 'default') {
         audioConstraints.deviceId = { ideal: options.deviceId };
       }
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
         video: false,
       });
-      this.audioCtx = new AudioContext();
-      if (this.audioCtx.state === 'suspended') {
-        await this.audioCtx.resume();
+      if (seq !== this.startSeq) {
+        stream.getTracks().forEach((t) => t.stop());
+        return false;
       }
-      const source = this.audioCtx.createMediaStreamSource(this.stream);
-      const analyser = this.audioCtx.createAnalyser();
+      this.stream = stream;
+      const audioCtx = new AudioContext({ sampleRate: 48000 });
+      this.audioCtx = audioCtx;
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+      if (seq !== this.startSeq) {
+        this.cleanupResources();
+        return false;
+      }
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
 
-      if (options.noiseSuppression !== false) {
-        const highpass = this.audioCtx.createBiquadFilter();
+      if (useNoiseFilter) {
+        const rnnoise = await createRnnoiseNode(audioCtx);
+        if (seq !== this.startSeq) {
+          rnnoise?.destroy();
+          this.cleanupResources();
+          return false;
+        }
+        this.rnnoiseHandle = rnnoise;
+
+        const highpass = audioCtx.createBiquadFilter();
         highpass.type = 'highpass';
         highpass.frequency.value = 85;
-        const lowpass = this.audioCtx.createBiquadFilter();
+        const lowpass = audioCtx.createBiquadFilter();
         lowpass.type = 'lowpass';
         lowpass.frequency.value = 7800;
-        source.connect(highpass);
+
+        if (rnnoise) {
+          source.connect(rnnoise.node);
+          rnnoise.node.connect(highpass);
+        } else {
+          source.connect(highpass);
+        }
         highpass.connect(lowpass);
         lowpass.connect(analyser);
       } else {
@@ -347,7 +384,7 @@ export class MicLevelMonitor {
       const data = new Float32Array(analyser.fftSize);
       this.active = true;
       const tick = () => {
-        if (!this.active) return;
+        if (!this.active || seq !== this.startSeq) return;
         analyser.getFloatTimeDomainData(data);
         let sumSq = 0;
         for (let i = 0; i < data.length; i += 1) {
@@ -360,17 +397,19 @@ export class MicLevelMonitor {
       this.rafId = window.requestAnimationFrame(tick);
       return true;
     } catch {
-      this.stop();
+      this.cleanupResources();
       return false;
     }
   }
 
-  stop(): void {
+  private cleanupResources(): void {
     this.active = false;
     if (this.rafId !== null) {
       window.cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+    this.rnnoiseHandle?.destroy();
+    this.rnnoiseHandle = null;
     try {
       this.stream?.getTracks().forEach((t) => t.stop());
     } catch {
@@ -384,34 +423,101 @@ export class MicLevelMonitor {
     this.stream = null;
     this.audioCtx = null;
   }
+
+  stop(): void {
+    this.startSeq += 1;
+    this.cleanupResources();
+  }
 }
 
 /**
- * Plays a gentle 120 ms two-tone chime on the very first captured audio frame (R-09)
- * so the user knows WASAPI is live and listening.
+ * Plays a crisp, selectable dictation ready chime on the first captured audio frame (R-09)
+ * or during settings preview. Supports 5 presets: soft, crystal, studio, minimal, none.
  */
-export function playReadyChime(ctx?: AudioContext | null): void {
+export function playReadyChime(
+  ctx?: AudioContext | null,
+  preset: VoiceChimePreset = 'soft',
+): void {
+  if (preset === 'none') return;
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     const audioCtx = ctx ?? new AudioCtx();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
     const now = audioCtx.currentTime;
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(660, now);
-    osc.frequency.exponentialRampToValueAtTime(880, now + 0.11);
-    gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.08, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start(now);
-    osc.stop(now + 0.125);
+    let closeAfterMs = 240;
+
+    if (preset === 'crystal') {
+      // Harmonic two-note crystal bell (A5 -> E6)
+      const notes = [
+        { freq: 880, start: 0, dur: 0.11, vol: 0.065 },
+        { freq: 1318.5, start: 0.075, dur: 0.15, vol: 0.055 },
+      ];
+      for (const n of notes) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(n.freq, now + n.start);
+        gain.gain.setValueAtTime(0.001, now + n.start);
+        gain.gain.linearRampToValueAtTime(n.vol, now + n.start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + n.start + n.dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + n.start);
+        osc.stop(now + n.start + n.dur + 0.01);
+      }
+      closeAfterMs = 320;
+    } else if (preset === 'studio') {
+      // Warm deep studio cue (A4 -> C#5)
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(554.37, now + 0.13);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.085, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.16);
+      closeAfterMs = 260;
+    } else if (preset === 'minimal') {
+      // Short subtle 60 ms tactile click/pop
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(740, now);
+      osc.frequency.exponentialRampToValueAtTime(620, now + 0.055);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.06, now + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.065);
+      closeAfterMs = 150;
+    } else {
+      // Default 'soft': gentle 120 ms rising chime (E5 -> A5)
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.11);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.08, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.125);
+    }
+
     if (!ctx) {
       window.setTimeout(() => {
         void audioCtx.close().catch(() => {});
-      }, 220);
+      }, closeAfterMs);
     }
   } catch {
     // Ignore chime audio restriction errors
@@ -424,7 +530,8 @@ export interface VoiceCaptureCallbacks {
   deviceId?: string;
   noiseSuppression?: boolean;
   sensitivity?: VoiceSensitivityMode;
-  onReady?: () => void;
+  chimePreset?: VoiceChimePreset;
+  onReady?: (info?: { rnnoiseActive: boolean; sileroVadActive: boolean }) => void;
   onLevel?: (rms: number) => void;
   onAutoStop?: (pcm: Float32Array, reason: 'silence' | 'max_duration' | 'no_speech') => void;
   onError?: (code: string, message: string) => void;
@@ -434,13 +541,17 @@ export class VoiceAudioCapture {
   private stream: MediaStream | null = null;
   private audioCtx: AudioContext | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
+  private rnnoiseHandle: RnnoiseHandle | null = null;
   private highpassNode: BiquadFilterNode | null = null;
   private lowpassNode: BiquadFilterNode | null = null;
   private workletNode: AudioWorkletNode | null = null;
   private silentGainNode: GainNode | null = null;
   private vad: VoiceVadController | null = null;
+  private sileroVad: SileroVadEngine | null = null;
+  private frameQueue: Promise<void> = Promise.resolve();
   private active = false;
   private starting = false;
+  private startSeq = 0;
 
   async start(callbacks: VoiceCaptureCallbacks = {}): Promise<boolean> {
     if (this.active || this.starting) return true;
@@ -449,9 +560,11 @@ export class VoiceAudioCapture {
       return false;
     }
 
+    const seq = ++this.startSeq;
     this.starting = true;
     try {
       const useNoiseFilter = callbacks.noiseSuppression !== false;
+      const chimePreset = callbacks.chimePreset ?? 'soft';
       const audioConstraints: MediaTrackConstraints = {
         channelCount: 1,
         echoCancellation: useNoiseFilter,
@@ -462,18 +575,48 @@ export class VoiceAudioCapture {
         audioConstraints.deviceId = { ideal: callbacks.deviceId };
       }
 
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
         video: false,
       });
-
-      this.audioCtx = new AudioContext();
-      if (this.audioCtx.state === 'suspended') {
-        await this.audioCtx.resume();
+      if (seq !== this.startSeq) {
+        stream.getTracks().forEach((t) => t.stop());
+        return false;
       }
-      await this.audioCtx.audioWorklet.addModule('/voice-worklet.js');
-      this.sourceNode = this.audioCtx.createMediaStreamSource(this.stream);
-      this.workletNode = new AudioWorkletNode(this.audioCtx, 'agendamea-voice-processor', {
+      this.stream = stream;
+
+      // 48 kHz matches RNNoise's native processing rate cleanly
+      const audioCtx = new AudioContext({ sampleRate: 48000 });
+      this.audioCtx = audioCtx;
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+      if (seq !== this.startSeq) {
+        this.cleanup();
+        return false;
+      }
+
+      // Initialize AudioWorklet + RNNoise WASM + Silero VAD v5 ONNX in parallel
+      const silero = new SileroVadEngine();
+      const [, rnnoise, sileroReady] = await Promise.all([
+        audioCtx.audioWorklet.addModule('/voice-worklet.js'),
+        useNoiseFilter ? createRnnoiseNode(audioCtx) : Promise.resolve(null),
+        silero.init(),
+      ]);
+
+      if (seq !== this.startSeq) {
+        rnnoise?.destroy();
+        silero.dispose();
+        this.cleanup();
+        return false;
+      }
+
+      this.rnnoiseHandle = rnnoise;
+      this.sileroVad = sileroReady ? silero : null;
+      this.frameQueue = Promise.resolve();
+
+      this.sourceNode = audioCtx.createMediaStreamSource(stream);
+      this.workletNode = new AudioWorkletNode(audioCtx, 'agendamea-voice-processor', {
         processorOptions: { targetSampleRate: TARGET_SAMPLE_RATE },
       });
 
@@ -486,44 +629,61 @@ export class VoiceAudioCapture {
       });
       this.active = true;
 
+      const rnnoiseActive = Boolean(this.rnnoiseHandle);
+      const sileroVadActive = Boolean(this.sileroVad);
+
       this.workletNode.port.onmessage = (event: MessageEvent) => {
-        if (!this.active) return;
+        if (!this.active || seq !== this.startSeq) return;
         const msg = event.data as { type?: string; pcm?: Float32Array; rms?: number };
         if (msg?.type === 'ready') {
-          playReadyChime(this.audioCtx);
-          callbacks.onReady?.();
+          playReadyChime(this.audioCtx, chimePreset);
+          callbacks.onReady?.({ rnnoiseActive, sileroVadActive });
           return;
         }
         if (msg?.type === 'pcm' && msg.pcm instanceof Float32Array) {
+          const pcmChunk = msg.pcm;
           callbacks.onLevel?.(Number(msg.rms) || 0);
-          const vadRes = this.vad?.pushFrame(msg.pcm);
-          if (vadRes && vadRes.action !== 'continue') {
-            const finalPcm = this.stop();
-            const reason =
-              vadRes.action === 'auto_stop_silence'
-                ? 'silence'
-                : vadRes.action === 'auto_stop_no_speech'
-                  ? 'no_speech'
-                  : 'max_duration';
-            callbacks.onAutoStop?.(finalPcm, reason);
-          }
+
+          const evaluateAndPush = async () => {
+            if (!this.active || seq !== this.startSeq || !this.vad) return;
+            const neuralProb = this.sileroVad ? await this.sileroVad.evaluateChunk(pcmChunk) : null;
+            if (!this.active || seq !== this.startSeq || !this.vad) return;
+            const vadRes = this.vad.pushFrame(pcmChunk, neuralProb);
+            if (vadRes.action !== 'continue') {
+              const finalPcm = this.stop();
+              const reason =
+                vadRes.action === 'auto_stop_silence'
+                  ? 'silence'
+                  : vadRes.action === 'auto_stop_no_speech'
+                    ? 'no_speech'
+                    : 'max_duration';
+              callbacks.onAutoStop?.(finalPcm, reason);
+            }
+          };
+
+          this.frameQueue = this.frameQueue.then(evaluateAndPush, evaluateAndPush);
         }
       };
 
       // Keep AudioWorklet actively scheduled on all Windows WASAPI drivers via muted sink (zero audio echo)
-      this.silentGainNode = this.audioCtx.createGain();
+      this.silentGainNode = audioCtx.createGain();
       this.silentGainNode.gain.value = 0;
 
       if (useNoiseFilter) {
-        // Voice bandpass (85 Hz - 7800 Hz) removes low-frequency desk/AC hum & high-frequency hiss
-        this.highpassNode = this.audioCtx.createBiquadFilter();
+        // Mozilla RNNoise WASM (48 kHz) -> Voice Bandpass (85 Hz - 7800 Hz) -> 16 kHz Downsampler Worklet
+        this.highpassNode = audioCtx.createBiquadFilter();
         this.highpassNode.type = 'highpass';
         this.highpassNode.frequency.value = 85;
-        this.lowpassNode = this.audioCtx.createBiquadFilter();
+        this.lowpassNode = audioCtx.createBiquadFilter();
         this.lowpassNode.type = 'lowpass';
         this.lowpassNode.frequency.value = 7800;
 
-        this.sourceNode.connect(this.highpassNode);
+        if (this.rnnoiseHandle) {
+          this.sourceNode.connect(this.rnnoiseHandle.node);
+          this.rnnoiseHandle.node.connect(this.highpassNode);
+        } else {
+          this.sourceNode.connect(this.highpassNode);
+        }
         this.highpassNode.connect(this.lowpassNode);
         this.lowpassNode.connect(this.workletNode);
       } else {
@@ -531,10 +691,13 @@ export class VoiceAudioCapture {
       }
 
       this.workletNode.connect(this.silentGainNode);
-      this.silentGainNode.connect(this.audioCtx.destination);
+      this.silentGainNode.connect(audioCtx.destination);
       return true;
     } catch (err) {
       this.cleanup();
+      if (seq !== this.startSeq) {
+        return false;
+      }
       const name = err instanceof DOMException ? err.name : 'MIC_ERROR';
       const code =
         name === 'NotAllowedError' || name === 'PermissionDeniedError'
@@ -550,6 +713,7 @@ export class VoiceAudioCapture {
   }
 
   stop(): Float32Array {
+    this.startSeq += 1;
     const pcm = this.vad ? this.vad.getMergedPcm() : new Float32Array(0);
     this.cleanup();
     return pcm;
@@ -557,6 +721,10 @@ export class VoiceAudioCapture {
 
   private cleanup(): void {
     this.active = false;
+    this.rnnoiseHandle?.destroy();
+    this.rnnoiseHandle = null;
+    this.sileroVad?.dispose();
+    this.sileroVad = null;
     for (const node of [
       this.silentGainNode,
       this.workletNode,

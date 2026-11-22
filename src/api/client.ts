@@ -23,6 +23,7 @@ const AI_SEARCH_TIMEOUT_MS = 20_000;
 const AI_ASK_TIMEOUT_MS = 45_000;
 const AI_STT_TIMEOUT_MS = 60_000;
 const AI_REINDEX_TIMEOUT_MS = 120_000;
+const AI_VOICE_DOWNLOAD_TIMEOUT_MS = 300_000;
 
 async function request<T>(
   url: string,
@@ -54,10 +55,10 @@ async function request<T>(
     });
 
     if (!res.ok) {
-      let message = 'Sunucu ile iletişim kurulamadı.';
+      let message = `HTTP ${res.status}`;
       try {
         const data = await res.json();
-        if (typeof data?.error === 'string') {
+        if (typeof data?.error === 'string' && data.error.trim()) {
           message = data.error;
         }
       } catch {
@@ -70,14 +71,14 @@ async function request<T>(
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       if (timedOut) {
-        throw new Error('Sunucu yanıt vermedi (zaman aşımı).');
+        throw new Error('NETWORK_TIMEOUT');
       }
       throw err;
     }
     if (err instanceof Error && err.message && !(err instanceof TypeError)) {
       throw err;
     }
-    throw new Error('Sunucu ile bağlantı kurulamadı.');
+    throw new Error('NETWORK_UNREACHABLE');
   } finally {
     window.clearTimeout(timer);
   }
@@ -411,5 +412,35 @@ export const api = {
       },
       AI_STT_TIMEOUT_MS,
     );
+  },
+
+  getPiperVoices(): Promise<{ voices: import('../types').PiperVoiceStatus[] }> {
+    return request('/api/ai/tts-voices');
+  },
+
+  downloadPiperVoice(
+    voiceId: string,
+  ): Promise<{ ok: boolean; voiceId?: string; alreadyInstalled?: boolean; code?: string; message?: string }> {
+    return request(
+      '/api/ai/tts-voices/download',
+      {
+        method: 'POST',
+        body: JSON.stringify({ voiceId }),
+      },
+      AI_VOICE_DOWNLOAD_TIMEOUT_MS,
+    );
+  },
+
+  cancelPiperVoiceDownload(voiceId: string): Promise<{ ok: boolean; cancelled: boolean }> {
+    return request('/api/ai/tts-voices/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ voiceId }),
+    });
+  },
+
+  deletePiperVoice(voiceId: string): Promise<{ ok: boolean; removed: boolean }> {
+    return request(`/api/ai/tts-voices/${enc(voiceId)}`, {
+      method: 'DELETE',
+    });
   },
 };

@@ -16,9 +16,14 @@ import { api } from '../api/client';
 import type { LanguageCode } from '../i18n/languages';
 import { getDictionary } from '../i18n/localesWorld';
 import { localizeErrorMessage } from '../i18n/translations';
-import type { VoiceAskResponse, VoiceSensitivityMode } from '../types';
+import type {
+  VoiceAskResponse,
+  VoiceChimePreset,
+  VoiceSensitivityMode,
+  VoiceTtsStyle,
+} from '../types';
 import { VoiceAudioCapture, VoiceVadController } from '../voice/audioCapture';
-import { speakLocalText, stopSpeaking } from '../voice/ttsPlayer';
+import { speakLocalTextAsync, stopSpeaking } from '../voice/ttsPlayer';
 
 type OverlayPhase =
   | 'idle'
@@ -53,6 +58,8 @@ export function VoiceOverlayApp() {
   const [autoStopMs, setAutoStopMs] = useState<number>(1500);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
   const [ttsVoice, setTtsVoice] = useState<string>('');
+  const [ttsStyle, setTtsStyle] = useState<VoiceTtsStyle>('natural');
+  const [chimePreset, setChimePreset] = useState<VoiceChimePreset>('soft');
   const [micDeviceId, setMicDeviceId] = useState<string>('');
   const [noiseSuppression, setNoiseSuppression] = useState<boolean>(true);
   const [sensitivity, setSensitivity] = useState<VoiceSensitivityMode>('auto');
@@ -174,6 +181,12 @@ export function VoiceOverlayApp() {
       if (settings.voiceTtsVoice !== undefined) {
         setTtsVoice(settings.voiceTtsVoice || '');
       }
+      if (settings.voiceTtsStyle) {
+        setTtsStyle(settings.voiceTtsStyle);
+      }
+      if (settings.voiceChimePreset) {
+        setChimePreset(settings.voiceChimePreset);
+      }
       if (settings.voiceMicDeviceId !== undefined) {
         setMicDeviceId(settings.voiceMicDeviceId || '');
       }
@@ -211,30 +224,32 @@ export function VoiceOverlayApp() {
 
       setPhase('result');
       if (ttsEnabled && res.spokenText) {
-        const tts = speakLocalText(res.spokenText, {
+        setIsSpeaking(true);
+        clearAutoHide();
+        void speakLocalTextAsync(res.spokenText, {
           language,
           preferredVoice: ttsVoice,
+          style: ttsStyle,
           onEnd: () => {
             if (!isMountedRef.current) return;
             setIsSpeaking(false);
             scheduleAutoHide(3000);
           },
-        });
-        if (tts.spoken) {
-          setIsSpeaking(true);
-          clearAutoHide();
-        } else {
-          setIsSpeaking(false);
-          if (tts.reason === 'NO_LANGUAGE_VOICE') {
-            setMissingVoicePack(true);
+        }).then((tts) => {
+          if (!isMountedRef.current) return;
+          if (!tts.spoken) {
+            setIsSpeaking(false);
+            if (tts.reason === 'NO_LANGUAGE_VOICE') {
+              setMissingVoicePack(true);
+            }
+            scheduleAutoHide(3500);
           }
-          scheduleAutoHide(3500);
-        }
+        });
       } else {
         scheduleAutoHide(3000);
       }
     },
-    [clearAutoHide, language, scheduleAutoHide, ttsEnabled, ttsVoice],
+    [clearAutoHide, language, scheduleAutoHide, ttsEnabled, ttsStyle, ttsVoice],
   );
 
   const runUtterance = useCallback(
@@ -317,6 +332,7 @@ export function VoiceOverlayApp() {
       deviceId?: string;
       noiseSuppression?: boolean;
       sensitivity?: VoiceSensitivityMode;
+      chimePreset?: VoiceChimePreset;
     }) => {
       clearAutoHide();
       stopSpeaking();
@@ -334,6 +350,7 @@ export function VoiceOverlayApp() {
       const effectiveNoise =
         overrides?.noiseSuppression !== undefined ? overrides.noiseSuppression : noiseSuppression;
       const effectiveSensitivity = overrides?.sensitivity ?? sensitivity;
+      const effectiveChime = overrides?.chimePreset ?? chimePreset;
       const activeDict = effectiveLanguage === language ? t : getDictionary(effectiveLanguage);
 
       if (!captureRef.current) {
@@ -345,6 +362,7 @@ export function VoiceOverlayApp() {
         deviceId: effectiveDeviceId || undefined,
         noiseSuppression: effectiveNoise,
         sensitivity: effectiveSensitivity,
+        chimePreset: effectiveChime,
         onReady: () => {
           if (!isMountedRef.current) return;
           setPhase('listening');
@@ -383,6 +401,7 @@ export function VoiceOverlayApp() {
     },
     [
       autoStopMs,
+      chimePreset,
       clearAutoHide,
       language,
       micDeviceId,
@@ -441,6 +460,7 @@ export function VoiceOverlayApp() {
             deviceId: fresh?.voiceMicDeviceId,
             noiseSuppression: fresh?.voiceNoiseSuppression,
             sensitivity: fresh?.voiceSensitivity,
+            chimePreset: fresh?.voiceChimePreset,
           });
         })();
       } else if (payload?.action === 'stop') {

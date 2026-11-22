@@ -223,11 +223,10 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
     [cliInstalled, execPath, mcpPath],
   );
 
-  const incomingWebhookCmd = useMemo(
-    () =>
-      `curl -X POST http://127.0.0.1:${runtimePort}/api/webhook/incoming -H "Content-Type: application/json" -d "{\\"title\\":\\"Yeni gorev\\",\\"priority\\":\\"high\\"}"`,
-    [runtimePort],
-  );
+  const incomingWebhookCmd = useMemo(() => {
+    const sampleTitle = (t.shortcutNewTask || 'New task').replace(/["\\]/g, '');
+    return `curl -X POST http://127.0.0.1:${runtimePort}/api/webhook/incoming -H "Content-Type: application/json; charset=utf-8" -d "{\\"title\\":\\"${sampleTitle}\\",\\"priority\\":\\"high\\"}"`;
+  }, [runtimePort, t.shortcutNewTask]);
 
   const handleCopy = async (id: string, text: string) => {
     try {

@@ -170,13 +170,15 @@ public static class ShellIntegration
             "\r\n",
             "@echo off",
             "setlocal",
+            "chcp 65001 >nul 2>&1",
             "set ELECTRON_RUN_AS_NODE=1",
             $"\"{appExe}\" \"{cliScript}\" %*",
             "endlocal");
 
+        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         foreach (var name in new[] { "ag.cmd", "agenda.cmd", "agendamea.cmd" })
         {
-            File.WriteAllText(Path.Combine(binDir, name), cmdBody, Encoding.ASCII);
+            File.WriteAllText(Path.Combine(binDir, name), cmdBody, utf8NoBom);
         }
 
         // Add binDir to HKCU\Environment\Path if not already present

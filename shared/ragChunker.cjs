@@ -195,7 +195,7 @@ function computeLexicalCoverage(query, text) {
 /**
  * Reciprocal Rank Fusion (k=60) combining FTS5 BM25 hits and chunk max-pooling vector cosine hits.
  * Returns normalized score in [0, 1], filters below minScore, and flags disambiguation when top-2 delta < 0.06.
- * @param {{ query?: string; ftsHits?: any[]; vectorHits?: any[]; k?: number; minScore?: number; topK?: number }} opts
+ * @param {{ query?: string; ftsHits?: Array<Record<string, unknown>>; vectorHits?: Array<Record<string, unknown>>; k?: number; minScore?: number; topK?: number }} opts
  */
 function fuseHybridRanks({
   query = '',

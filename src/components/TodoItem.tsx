@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Check, Pin, Star, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
 import type { Category, Todo } from '../types';
@@ -49,17 +49,30 @@ export const TodoItem = React.memo(function TodoItem({
   onContextMenu,
 }: TodoItemProps) {
   const { t, meta } = useI18n();
-  const dueInfo = formatTodoDateSchedule(
-    todo.startDate,
-    todo.dueDate,
-    todayStr,
-    meta.intlLocale,
-    {
-      today: t.today,
-      tomorrow: t.tomorrow,
-      yesterday: t.yesterday,
-    },
-    todo.dueTime,
+  const dueInfo = useMemo(
+    () =>
+      formatTodoDateSchedule(
+        todo.startDate,
+        todo.dueDate,
+        todayStr,
+        meta.intlLocale,
+        {
+          today: t.today,
+          tomorrow: t.tomorrow,
+          yesterday: t.yesterday,
+        },
+        todo.dueTime,
+      ),
+    [
+      todo.startDate,
+      todo.dueDate,
+      todo.dueTime,
+      todayStr,
+      meta.intlLocale,
+      t.today,
+      t.tomorrow,
+      t.yesterday,
+    ],
   );
   let completedSubtasks = 0;
   for (let i = 0; i < todo.subtasks.length; i += 1) {

@@ -7,22 +7,40 @@ import {
   Download,
   HardDrive,
   Mic,
+  Play,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Square,
   Trash2,
   Volume2,
   X,
 } from 'lucide-react';
 import { api } from '../../api/client';
+import { subscribeServerEvents } from '../../api/eventStream';
 import { useI18n } from '../../i18n/I18nContext';
-import type { AiStatusPayload, AiTierId, CloseBehavior, VoiceSensitivityMode } from '../../types';
+import type {
+  AiStatusPayload,
+  AiTierId,
+  CloseBehavior,
+  PiperVoiceStatus,
+  VoiceChimePreset,
+  VoiceSensitivityMode,
+  VoiceTtsStyle,
+} from '../../types';
 import {
   enumerateAudioInputDevices,
   MicLevelMonitor,
+  playReadyChime,
   type AudioInputDeviceInfo,
 } from '../../voice/audioCapture';
-import { listAvailableTtsVoices } from '../../voice/ttsPlayer';
+import { evictPiperVoiceCache } from '../../voice/piperTtsEngine';
+import {
+  listAvailableTtsVoices,
+  PIPER_VOICE_PREFIX,
+  speakLocalTextAsync,
+  stopSpeaking,
+} from '../../voice/ttsPlayer';
 import { SelectField } from '../SelectField';
 import { ShortcutRecorder } from '../ShortcutRecorder';
 
@@ -52,7 +70,7 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   onToggleLaunchAtStartup,
   onVoiceShortcutChange,
 }: AiVoiceSettingsTabProps) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [status, setStatus] = useState<AiStatusPayload | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [rescanning, setRescanning] = useState<boolean>(false);
@@ -63,6 +81,9 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   const [voiceAutoStopMs, setVoiceAutoStopMs] = useState<number>(1500);
   const [voiceTtsEnabled, setVoiceTtsEnabled] = useState<boolean>(true);
   const [voiceTtsVoice, setVoiceTtsVoice] = useState<string>('');
+  const [voiceTtsStyle, setVoiceTtsStyle] = useState<VoiceTtsStyle>('natural');
+  const [voiceChimePreset, setVoiceChimePreset] = useState<VoiceChimePreset>('soft');
+  const [previewingTts, setPreviewingTts] = useState<boolean>(false);
   const [voiceMicDeviceId, setVoiceMicDeviceId] = useState<string>('');
   const [voiceNoiseSuppression, setVoiceNoiseSuppression] = useState<boolean>(true);
   const [voiceSensitivity, setVoiceSensitivity] = useState<VoiceSensitivityMode>('auto');
@@ -70,6 +91,8 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   const [testingMic, setTestingMic] = useState<boolean>(false);
   const [micLevel, setMicLevel] = useState<number>(0);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [piperVoices, setPiperVoices] = useState<PiperVoiceStatus[]>([]);
+  const [busyPiperVoiceId, setBusyPiperVoiceId] = useState<string | null>(null);
   const [busyModelId, setBusyModelId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [reindexNotice, setReindexNotice] = useState<string | null>(null);
@@ -83,12 +106,24 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
     return () => {
       isMountedRef.current = false;
       micMonitorRef.current?.stop();
+      stopSpeaking();
     };
   }, []);
 
   const refreshMics = useCallback(async (requestPermission = false) => {
     const list = await enumerateAudioInputDevices(requestPermission);
     if (isMountedRef.current) setMicDevices(list);
+  }, []);
+
+  const refreshPiperVoices = useCallback(async () => {
+    try {
+      const res = await api.getPiperVoices();
+      if (isMountedRef.current && Array.isArray(res.voices)) {
+        setPiperVoices(res.voices);
+      }
+    } catch {
+      // Non-fatal
+    }
   }, []);
 
   const loadStatus = useCallback(async (force = false, syncFormFields = false) => {
@@ -105,6 +140,8 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
         setVoiceAutoStopMs(data.settings.voiceAutoStopMs ?? 1500);
         setVoiceTtsEnabled(data.settings.voiceTtsEnabled !== false);
         setVoiceTtsVoice(data.settings.voiceTtsVoice || '');
+        setVoiceTtsStyle(data.settings.voiceTtsStyle || 'natural');
+        setVoiceChimePreset(data.settings.voiceChimePreset || 'soft');
         setVoiceMicDeviceId(data.settings.voiceMicDeviceId || '');
         setVoiceNoiseSuppression(data.settings.voiceNoiseSuppression !== false);
         setVoiceSensitivity(data.settings.voiceSensitivity || 'auto');
@@ -146,7 +183,8 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   useEffect(() => {
     void loadStatus(false, true);
     void refreshMics(false);
-    setVoices(listAvailableTtsVoices());
+    void refreshPiperVoices();
+    setVoices(listAvailableTtsVoices(undefined, lang));
 
     const onDeviceChange = () => void refreshMics(false);
     navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange);
@@ -154,7 +192,7 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
     let cleanupVoices: (() => void) | undefined;
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       const onVoicesChanged = () => {
-        if (isMountedRef.current) setVoices(listAvailableTtsVoices());
+        if (isMountedRef.current) setVoices(listAvailableTtsVoices(undefined, lang));
       };
       window.speechSynthesis.addEventListener?.('voiceschanged', onVoicesChanged);
       cleanupVoices = () => {
@@ -166,63 +204,65 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
       navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange);
       cleanupVoices?.();
     };
-  }, [loadStatus, refreshMics]);
+  }, [lang, loadStatus, refreshMics, refreshPiperVoices]);
 
-  // Listen for live SSE model download progress events from local server
+  // Listen for live SSE model & Piper neural voice download progress events via shared singleton bus
   useEffect(() => {
-    if (typeof EventSource === 'undefined') return;
-    let source: EventSource | null = null;
-    try {
-      source = new EventSource('/api/events');
-      source.onmessage = (evt) => {
-        if (!isMountedRef.current) return;
-        try {
-          const msg = JSON.parse(evt.data) as {
-            type?: string;
-            modelId?: string;
-            receivedBytes?: number;
-            totalBytes?: number;
-            percent?: number;
-            resumed?: boolean;
-            done?: boolean;
-          };
-          if (msg.type !== 'ai.download.progress' || !msg.modelId) return;
-          if (msg.done) {
-            void refreshModelsOnly();
-            return;
-          }
-          setStatus((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              models: prev.models.map((m) =>
-                m.id === msg.modelId
-                  ? {
-                      ...m,
-                      downloading: true,
-                      progress: {
-                        modelId: msg.modelId!,
-                        receivedBytes: Number(msg.receivedBytes || 0),
-                        totalBytes: Number(msg.totalBytes || m.expectedBytes),
-                        percent: Number(msg.percent || 0),
-                        resumed: Boolean(msg.resumed),
-                      },
-                    }
-                  : m,
-              ),
-            };
-          });
-        } catch {
-          // Ignore malformed SSE event
+    return subscribeServerEvents((msg) => {
+      if (!isMountedRef.current || !msg) return;
+      if (msg.type === 'tts.download.progress' && typeof msg.voiceId === 'string') {
+        if (msg.done) {
+          void refreshPiperVoices();
+          return;
         }
-      };
-    } catch {
-      // Ignore SSE errors
-    }
-    return () => {
-      source?.close();
-    };
-  }, [refreshModelsOnly]);
+        const targetVoiceId = msg.voiceId;
+        setPiperVoices((prev) =>
+          prev.map((v) =>
+            v.id === targetVoiceId
+              ? {
+                  ...v,
+                  downloading: true,
+                  progress: {
+                    voiceId: targetVoiceId,
+                    receivedBytes: Number(msg.receivedBytes || 0),
+                    totalBytes: Number(msg.totalBytes || v.expectedBytes),
+                    percent: Number(msg.percent || 0),
+                  },
+                }
+              : v,
+          ),
+        );
+        return;
+      }
+      if (msg.type !== 'ai.download.progress' || !msg.modelId) return;
+      if (msg.done) {
+        void refreshModelsOnly();
+        return;
+      }
+      const targetModelId = msg.modelId;
+      setStatus((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          models: prev.models.map((m) =>
+            m.id === targetModelId
+              ? {
+                  ...m,
+                  downloading: true,
+                  progress: {
+                    modelId: targetModelId,
+                    receivedBytes: Number(msg.receivedBytes || 0),
+                    totalBytes: Number(msg.totalBytes || m.expectedBytes),
+                    percent: Number(msg.percent || 0),
+                    resumed: Boolean(msg.resumed),
+                  },
+                }
+              : m,
+          ),
+        };
+      });
+    });
+  }, [refreshModelsOnly, refreshPiperVoices]);
 
   // Lightweight chained fallback poll while any model download is active
   const hasActiveDownload = useMemo(
@@ -379,7 +419,10 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   const handleShortcutChange = async (next: string) => {
     setActionError(null);
     setVoiceShortcut(next);
-    onVoiceShortcutChange?.(next);
+    if (onVoiceShortcutChange) {
+      onVoiceShortcutChange(next);
+      return;
+    }
     try {
       const reg = await window.agendameaWindow?.setVoiceShortcut?.(next);
       if (reg && reg.ok === false && isMountedRef.current) {
@@ -477,6 +520,98 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
       await api.updateSettings({ voiceTtsVoice: voiceUri });
     } catch {
       if (isMountedRef.current) setActionError(t.operationFailedToast);
+    }
+  };
+
+  const handleTtsStyleChange = async (style: VoiceTtsStyle) => {
+    setActionError(null);
+    setVoiceTtsStyle(style);
+    try {
+      await api.updateSettings({ voiceTtsStyle: style });
+    } catch {
+      if (isMountedRef.current) setActionError(t.operationFailedToast);
+    }
+  };
+
+  const handleChimePresetChange = async (preset: VoiceChimePreset) => {
+    setActionError(null);
+    setVoiceChimePreset(preset);
+    if (preset !== 'none') {
+      playReadyChime(null, preset);
+    }
+    try {
+      await api.updateSettings({ voiceChimePreset: preset });
+    } catch {
+      if (isMountedRef.current) setActionError(t.operationFailedToast);
+    }
+  };
+
+  const handlePreviewTts = async (overrideVoice?: string) => {
+    if (previewingTts && !overrideVoice) {
+      stopSpeaking();
+      setPreviewingTts(false);
+      return;
+    }
+    setPreviewingTts(true);
+    const res = await speakLocalTextAsync(t.aiVoiceTtsPreviewSample, {
+      language: lang,
+      preferredVoice: overrideVoice ?? voiceTtsVoice,
+      style: voiceTtsStyle,
+      onEnd: () => {
+        if (isMountedRef.current) setPreviewingTts(false);
+      },
+    });
+    if (!res.spoken && isMountedRef.current) {
+      setPreviewingTts(false);
+    }
+  };
+
+  const handleDownloadPiperVoice = async (voiceId: string) => {
+    setActionError(null);
+    setBusyPiperVoiceId(voiceId);
+    try {
+      const res = await api.downloadPiperVoice(voiceId);
+      await refreshPiperVoices();
+      if (res.ok && isMountedRef.current) {
+        const nextVal = `${PIPER_VOICE_PREFIX}${voiceId}`;
+        setVoiceTtsVoice(nextVal);
+        await api.updateSettings({ voiceTtsVoice: nextVal, voiceTtsEnabled: true });
+        setVoiceTtsEnabled(true);
+      } else if (!res.ok && res.code !== 'CANCELLED' && isMountedRef.current) {
+        setActionError(t.operationFailedToast);
+      }
+    } catch {
+      if (isMountedRef.current) setActionError(t.operationFailedToast);
+    } finally {
+      if (isMountedRef.current) setBusyPiperVoiceId(null);
+    }
+  };
+
+  const handleCancelPiperVoice = async (voiceId: string) => {
+    setActionError(null);
+    try {
+      await api.cancelPiperVoiceDownload(voiceId);
+      await refreshPiperVoices();
+    } catch {
+      if (isMountedRef.current) setActionError(t.operationFailedToast);
+    }
+  };
+
+  const handleDeletePiperVoice = async (voiceId: string) => {
+    setActionError(null);
+    setBusyPiperVoiceId(voiceId);
+    try {
+      evictPiperVoiceCache(voiceId);
+      await api.deletePiperVoice(voiceId);
+      await refreshPiperVoices();
+      if (voiceTtsVoice === `${PIPER_VOICE_PREFIX}${voiceId}` && isMountedRef.current) {
+        setVoiceTtsVoice('');
+        await api.updateSettings({ voiceTtsVoice: '' });
+      }
+    } catch {
+      if (isMountedRef.current) setActionError(t.operationFailedToast);
+    } finally {
+      if (isMountedRef.current) setBusyPiperVoiceId(null);
     }
   };
 
@@ -838,13 +973,21 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
           )}
         </div>
 
-        {/* Noise Suppression Switch */}
+        {/* Neural Noise Suppression Switch (RNNoise WASM + Silero VAD v5) */}
         <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2.5">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-[var(--text-primary)]">
-              {t.aiVoiceNoiseSuppressionLabel}
-            </p>
-            <p className="text-[11px] text-[var(--text-muted)]">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-medium text-[var(--text-primary)]">
+                {t.aiVoiceNoiseSuppressionLabel}
+              </p>
+              <span
+                data-testid="ai-voice-neural-badge"
+                className="inline-flex items-center rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono-tabular text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+              >
+                {t.aiVoiceNeuralEngineBadge}
+              </span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
               {t.aiVoiceNoiseSuppressionDesc}
             </p>
           </div>
@@ -854,17 +997,13 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
             aria-checked={voiceNoiseSuppression}
             data-testid="ai-voice-noise-toggle"
             onClick={() => void handleNoiseSuppressionToggle(!voiceNoiseSuppression)}
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-              voiceNoiseSuppression ? 'bg-[var(--accent)]' : 'bg-[var(--surface-subtle)] border border-[var(--border)]'
+            className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+              voiceNoiseSuppression
+                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
             }`}
           >
-            <span
-              className={`inline-block h-3.5 w-3.5 rounded-full shadow transition-transform ${
-                voiceNoiseSuppression
-                  ? 'translate-x-4 bg-[var(--accent-fg)]'
-                  : 'translate-x-0.5 bg-[var(--text-muted)]'
-              }`}
-            />
+            {voiceNoiseSuppression ? t.enabledBadge : t.disabledBadge}
           </button>
         </div>
 
@@ -925,34 +1064,255 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
           </label>
         </div>
 
-        {/* TTS Read-Aloud */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
-          <label className="flex items-center gap-2 text-xs text-[var(--text-primary)] cursor-pointer">
-            <input
-              type="checkbox"
-              data-testid="ai-voice-tts-toggle"
-              checked={voiceTtsEnabled}
-              onChange={(e) => void handleTtsToggle(e.target.checked)}
-              className="h-3.5 w-3.5 rounded accent-[var(--accent)]"
-            />
-            <Volume2 className="h-3.5 w-3.5 text-[var(--accent)]" />
-            <span>{t.aiVoiceTtsToggleLabel}</span>
-          </label>
-
-          {voices.length > 0 && (
+        {/* Dictation Ready Chime Selector */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2.5">
+          <span className="text-xs font-medium text-[var(--text-primary)]">
+            {t.aiVoiceChimeLabel}
+          </span>
+          <div className="flex items-center gap-2">
             <SelectField
-              data-testid="ai-voice-tts-select"
-              value={voiceTtsVoice}
-              onChange={(e) => void handleTtsVoiceChange(e.target.value)}
-              wrapperClassName="max-w-[240px] w-full sm:w-auto"
+              data-testid="ai-voice-chime-select"
+              value={voiceChimePreset}
+              onChange={(e) => void handleChimePresetChange(e.target.value as VoiceChimePreset)}
+              wrapperClassName="w-[180px]"
             >
-              <option value="">Auto ({t.aiVoiceTtsVoiceLabel})</option>
-              {voices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
-                </option>
-              ))}
+              <option value="soft">{t.aiVoiceChimeSoft}</option>
+              <option value="crystal">{t.aiVoiceChimeCrystal}</option>
+              <option value="studio">{t.aiVoiceChimeStudio}</option>
+              <option value="minimal">{t.aiVoiceChimeMinimal}</option>
+              <option value="none">{t.aiVoiceChimeNone}</option>
             </SelectField>
+            <button
+              type="button"
+              data-testid="ai-voice-chime-preview-btn"
+              disabled={voiceChimePreset === 'none'}
+              onClick={() => playReadyChime(null, voiceChimePreset)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-40"
+              aria-label={t.aiVoiceTtsPreviewButton}
+            >
+              <Play className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* TTS Read-Aloud: Multiple Voices, Styles & Live Preview */}
+        <div className="space-y-3 border-t border-[var(--border)] pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-xs text-[var(--text-primary)] cursor-pointer">
+              <input
+                type="checkbox"
+                data-testid="ai-voice-tts-toggle"
+                checked={voiceTtsEnabled}
+                onChange={(e) => void handleTtsToggle(e.target.checked)}
+                className="h-3.5 w-3.5 rounded accent-[var(--accent)]"
+              />
+              <Volume2 className="h-3.5 w-3.5 text-[var(--accent)]" />
+              <span>{t.aiVoiceTtsToggleLabel}</span>
+            </label>
+
+            <button
+              type="button"
+              data-testid="ai-voice-tts-preview-btn"
+              disabled={!voiceTtsEnabled}
+              onClick={() => void handlePreviewTts()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-40"
+            >
+              {previewingTts ? (
+                <Square className="h-3 w-3 text-rose-500" />
+              ) : (
+                <Play className="h-3 w-3 text-[var(--accent)]" />
+              )}
+              <span>{previewingTts ? t.aiVoiceTtsStopPreviewButton : t.aiVoiceTtsPreviewButton}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="space-y-1.5">
+              <span className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                {t.aiVoiceTtsVoiceLabel}
+              </span>
+              <SelectField
+                data-testid="ai-voice-tts-select"
+                value={voiceTtsVoice}
+                disabled={!voiceTtsEnabled}
+                onChange={(e) => void handleTtsVoiceChange(e.target.value)}
+                wrapperClassName="w-full"
+              >
+                <option value="">Auto ({t.aiVoiceTtsVoiceLabel})</option>
+                {piperVoices.some((pv) => pv.installed) && (
+                  <optgroup label={t.aiVoicePiperGroupLabel}>
+                    {piperVoices
+                      .filter((pv) => pv.installed)
+                      .map((pv) => (
+                        <option key={pv.id} value={`${PIPER_VOICE_PREFIX}${pv.id}`}>
+                          {pv.name} ({pv.language} - {pv.gender === 'female' ? t.aiVoiceGenderFemale : t.aiVoiceGenderMale})
+                        </option>
+                      ))}
+                  </optgroup>
+                )}
+                {voices.length > 0 && (
+                  <optgroup label={t.aiVoiceSystemGroupLabel}>
+                    {voices.map((v) => (
+                      <option key={v.voiceURI} value={v.voiceURI}>
+                        {v.name} ({v.lang})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </SelectField>
+            </label>
+
+            <label className="space-y-1.5">
+              <span className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                {t.aiVoiceTtsStyleLabel}
+              </span>
+              <SelectField
+                data-testid="ai-voice-tts-style-select"
+                value={voiceTtsStyle}
+                disabled={!voiceTtsEnabled}
+                onChange={(e) => void handleTtsStyleChange(e.target.value as VoiceTtsStyle)}
+                wrapperClassName="w-full"
+              >
+                <option value="natural">{t.aiVoiceTtsStyleNatural}</option>
+                <option value="crisp">{t.aiVoiceTtsStyleCrisp}</option>
+                <option value="calm">{t.aiVoiceTtsStyleCalm}</option>
+                <option value="bright">{t.aiVoiceTtsStyleBright}</option>
+                <option value="studio">{t.aiVoiceTtsStyleStudio}</option>
+              </SelectField>
+            </label>
+          </div>
+
+          {/* Offline Piper Neural Voices (Female & Male) */}
+          {piperVoices.length > 0 && (
+            <div
+              data-testid="ai-piper-voices-section"
+              className="rounded-lg border border-[var(--border)] bg-[var(--canvas)] overflow-hidden"
+            >
+              <div className="border-b border-[var(--border)] px-3 py-2">
+                <p className="text-[11px] font-semibold text-[var(--text-primary)]">
+                  {t.aiVoicePiperSectionTitle}
+                </p>
+                <p className="text-[10.5px] text-[var(--text-muted)]">
+                  {t.aiVoicePiperSectionDesc}
+                </p>
+              </div>
+              <div className="divide-y divide-[var(--border)]">
+                {piperVoices.map((pv) => {
+                  const isActive = voiceTtsVoice === `${PIPER_VOICE_PREFIX}${pv.id}`;
+                  const genderLabel =
+                    pv.gender === 'female' ? t.aiVoiceGenderFemale : t.aiVoiceGenderMale;
+                  return (
+                    <div
+                      key={pv.id}
+                      data-testid={`piper-voice-row-${pv.id}`}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs font-semibold text-[var(--text-primary)]">
+                            {pv.name}
+                          </span>
+                          <span className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10px] text-[var(--text-secondary)]">
+                            {pv.language}
+                          </span>
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                              pv.gender === 'female'
+                                ? 'bg-pink-500/15 text-pink-600 dark:text-pink-300'
+                                : 'bg-sky-500/15 text-sky-600 dark:text-sky-300'
+                            }`}
+                          >
+                            {genderLabel}
+                          </span>
+                          <span className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10px] uppercase text-[var(--text-muted)]">
+                            {pv.license}
+                          </span>
+                          <span className="font-mono-tabular text-[10px] text-[var(--text-muted)]">
+                            {formatBytes(pv.expectedBytes)}
+                          </span>
+                          {isActive && pv.installed && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span>{t.aiVoicePiperActiveBadge}</span>
+                            </span>
+                          )}
+                        </div>
+                        {pv.downloading && pv.progress && (
+                          <div className="mt-1 w-full max-w-xs space-y-0.5">
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+                              <div
+                                className="h-full bg-[var(--accent)] transition-all"
+                                style={{ width: `${pv.progress.percent}%` }}
+                              />
+                            </div>
+                            <p className="font-mono-tabular text-[10px] text-[var(--text-muted)]">
+                              {t.aiModelDownloadingLabel} {pv.progress.percent}% ({formatBytes(pv.progress.receivedBytes)} / {formatBytes(pv.progress.totalBytes)})
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {pv.downloading ? (
+                          <button
+                            type="button"
+                            data-testid={`piper-voice-cancel-${pv.id}`}
+                            onClick={() => void handleCancelPiperVoice(pv.id)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                          >
+                            <X className="h-3 w-3" />
+                            <span>{t.aiModelCancelButton}</span>
+                          </button>
+                        ) : pv.installed ? (
+                          <>
+                            <button
+                              type="button"
+                              data-testid={`piper-voice-preview-${pv.id}`}
+                              onClick={() => void handlePreviewTts(`${PIPER_VOICE_PREFIX}${pv.id}`)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                              aria-label={t.aiVoiceTtsPreviewButton}
+                            >
+                              <Play className="h-3 w-3 text-[var(--accent)]" />
+                            </button>
+                            {!isActive && (
+                              <button
+                                type="button"
+                                data-testid={`piper-voice-select-${pv.id}`}
+                                onClick={() => void handleTtsVoiceChange(`${PIPER_VOICE_PREFIX}${pv.id}`)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:opacity-90"
+                              >
+                                <span>{t.aiVoicePiperSelectButton}</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              data-testid={`piper-voice-delete-${pv.id}`}
+                              disabled={busyPiperVoiceId === pv.id}
+                              onClick={() => void handleDeletePiperVoice(pv.id)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-[11px] font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 disabled:opacity-50"
+                              aria-label={t.aiModelDeleteButton}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            data-testid={`piper-voice-download-${pv.id}`}
+                            disabled={busyPiperVoiceId === pv.id}
+                            onClick={() => void handleDownloadPiperVoice(pv.id)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                          >
+                            <Download className="h-3 w-3 text-[var(--accent)]" />
+                            <span>{t.aiModelDownloadButton}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </section>

@@ -27,6 +27,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   testId = 'context-menu',
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y });
 
   useLayoutEffect(() => {
@@ -45,17 +47,17 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   useEffect(() => {
     const handlePointerDown = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
+        onCloseRef.current();
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
     };
-    const handleScrollOrResize = () => onClose();
+    const handleScrollOrResize = () => onCloseRef.current();
 
     window.addEventListener('mousedown', handlePointerDown, true);
     window.addEventListener('keydown', handleKeyDown, true);
@@ -67,7 +69,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       window.removeEventListener('scroll', handleScrollOrResize, true);
       window.removeEventListener('resize', handleScrollOrResize);
     };
-  }, [onClose]);
+  }, []);
 
   const content = (
     <div

@@ -1,4 +1,4 @@
-# 73-Language Localization Architecture (`v1.0.0`)
+# 73-Language Localization Architecture (`v1.1.0`)
 
 Agendamea ships with **73 supported languages** and zero runtime dependency on external translation APIs.
 

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +30,20 @@ run(process.execPath, [tsxCli, 'scripts/generate-installer-locales.mjs']);
 if (!fs.existsSync(path.join(unpackedDir, 'Agendamea.exe')) || process.argv.includes('--rebuild-app')) {
   const ebCli = path.join(rootDir, 'node_modules', 'electron-builder', 'cli.js');
   run(process.execPath, [ebCli, '--win', '--x64', '--dir']);
+}
+
+// Ensure electron-updater metadata exists inside win-unpacked/resources/app-update.yml
+const appUpdateYmlPath = path.join(unpackedDir, 'resources', 'app-update.yml');
+if (!fs.existsSync(appUpdateYmlPath)) {
+  const appUpdateContent = [
+    'owner: emirtdede',
+    'repo: agendamea',
+    'provider: github',
+    'releaseType: release',
+    'updaterCacheDirName: agendamea-updater',
+    '',
+  ].join('\n');
+  fs.writeFileSync(appUpdateYmlPath, appUpdateContent, 'utf8');
 }
 
 // 3. Publish native .NET 10 WPF single-file self-contained setup stub
@@ -97,5 +112,37 @@ try {
 // Clean up temporary payload zip
 fs.rmSync(tempZipPath, { force: true });
 
-const finalSizeMb = (fs.statSync(finalSetupExe).size / (1024 * 1024)).toFixed(2);
+// 6. Emit electron-updater compatible release/latest.yml with exact SHA-512 & byte size
+const finalStat = fs.statSync(finalSetupExe);
+const sha512Hash = crypto.createHash('sha512');
+{
+  const fd = fs.openSync(finalSetupExe, 'r');
+  const buf = Buffer.allocUnsafe(1024 * 1024);
+  try {
+    let bytesRead = 0;
+    while ((bytesRead = fs.readSync(fd, buf, 0, buf.length, null)) > 0) {
+      sha512Hash.update(buf.subarray(0, bytesRead));
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+const sha512Base64 = sha512Hash.digest('base64');
+const setupFileName = path.basename(finalSetupExe);
+const latestYmlPath = path.join(rootDir, 'release', 'latest.yml');
+const latestYml = [
+  `version: ${version}`,
+  'files:',
+  `  - url: ${setupFileName}`,
+  `    sha512: ${sha512Base64}`,
+  `    size: ${finalStat.size}`,
+  `path: ${setupFileName}`,
+  `sha512: ${sha512Base64}`,
+  `releaseDate: '${new Date().toISOString()}'`,
+  '',
+].join('\n');
+fs.writeFileSync(latestYmlPath, latestYml, 'utf8');
+
+const finalSizeMb = (finalStat.size / (1024 * 1024)).toFixed(2);
 console.log(`[modern-setup] Built single-file modern setup: ${finalSetupExe} (${finalSizeMb} MB)`);
+console.log(`[modern-setup] Wrote updater manifest: ${latestYmlPath}`);

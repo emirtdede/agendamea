@@ -22,14 +22,22 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup .NET 10 SDK (Modern WPF Setup)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Install dependencies
         run: npm install
 
       - name: TypeScript type-check
         run: npm run lint
 
-      - name: Run full QA & i18n test suite
+      - name: Run full QA, AI & i18n test suite
         run: npm test
+
+      - name: Run modern WPF Setup engine tests
+        run: npm run test:setup
 
       - name: Build production client & server
         run: npm run build

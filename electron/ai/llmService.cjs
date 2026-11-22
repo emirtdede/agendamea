@@ -9,6 +9,7 @@
  */
 
 const fs = require('node:fs');
+const { DEFAULT_OLLAMA_URL } = require('../../shared/constants.cjs');
 
 const DEFAULT_IDLE_UNLOAD_MS = 180_000;
 const DEFAULT_INFERENCE_TIMEOUT_MS = 20_000;
@@ -125,7 +126,7 @@ class LlmService {
     this.modelPath = options.modelPath || null;
     this.modelId = options.modelId || null;
     this.useExternalOllama = Boolean(options.useExternalOllama);
-    this.externalBaseUrl = options.externalBaseUrl || 'http://127.0.0.1:11434';
+    this.externalBaseUrl = options.externalBaseUrl || DEFAULT_OLLAMA_URL;
     this.externalKind = options.externalKind || 'ollama'; // 'ollama' | 'lmstudio'
     this.externalModel = options.externalModel || '';
     this.importer = options.importer || (() => import('node-llama-cpp'));

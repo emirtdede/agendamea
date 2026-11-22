@@ -109,18 +109,17 @@ export function useNotificationCenter({
 
   const updateNotificationChannel = useCallback(
     (eventType: NotificationEventType, mode: NotificationChannelMode) => {
-      setNotificationChannels((prev) => {
-        const next: NotificationChannelsMap = { ...prev, [eventType]: mode };
-        const matched = detectMatchingNotificationProfile(next);
-        setNotificationProfile(matched);
-        void api
-          .updateSettings({
-            notificationProfile: matched,
-            notificationChannels: next,
-          })
-          .catch(() => {});
-        return next;
-      });
+      const next: NotificationChannelsMap = { ...channelsRef.current, [eventType]: mode };
+      const matched = detectMatchingNotificationProfile(next);
+      channelsRef.current = next;
+      setNotificationChannels(next);
+      setNotificationProfile(matched);
+      void api
+        .updateSettings({
+          notificationProfile: matched,
+          notificationChannels: next,
+        })
+        .catch(() => {});
     },
     [],
   );

@@ -7,9 +7,15 @@ interface UseAppUpdaterOptions {
   tRef: MutableRefObject<UiDictionary>;
   showInfoToast: (message: string, tone?: 'info' | 'error') => void;
   formatUiError: (err: unknown, fallback?: string) => string;
+  dispatchUpdateNotification?: (payload: { title: string; body?: string }) => void;
 }
 
-export function useAppUpdater({ tRef, showInfoToast, formatUiError }: UseAppUpdaterOptions) {
+export function useAppUpdater({
+  tRef,
+  showInfoToast,
+  formatUiError,
+  dispatchUpdateNotification,
+}: UseAppUpdaterOptions) {
   const [autoUpdateCheck, setAutoUpdateCheck] = useState<boolean>(true);
   const [updateState, setUpdateState] = useState<AppUpdateState>({
     status: 'idle',
@@ -36,7 +42,11 @@ export function useAppUpdater({ tRef, showInfoToast, formatUiError }: UseAppUpda
           : prev.result,
         downloadPercent: 100,
       }));
-      showInfoToast(tRef.current.updateReadyToInstallLabel, 'info');
+      if (dispatchUpdateNotification) {
+        dispatchUpdateNotification({ title: tRef.current.updateReadyToInstallLabel });
+      } else {
+        showInfoToast(tRef.current.updateReadyToInstallLabel, 'info');
+      }
     });
     const unsubError = window.agendameaWindow?.onUpdateError?.(() => {
       setUpdateState((prev) =>
@@ -54,7 +64,7 @@ export function useAppUpdater({ tRef, showInfoToast, formatUiError }: UseAppUpda
       if (typeof unsubDownloaded === 'function') unsubDownloaded();
       if (typeof unsubError === 'function') unsubError();
     };
-  }, [showInfoToast, tRef]);
+  }, [dispatchUpdateNotification, showInfoToast, tRef]);
 
   const runUpdateCheck = useCallback(
     async (isManual: boolean) => {
@@ -82,7 +92,14 @@ export function useAppUpdater({ tRef, showInfoToast, formatUiError }: UseAppUpda
             downloadPercent: null,
           });
           if (!isManual) {
-            showInfoToast(`${tRef.current.updateAvailableLabel}: v${res.latestVersion}`, 'info');
+            if (dispatchUpdateNotification) {
+              dispatchUpdateNotification({
+                title: tRef.current.updateAvailableLabel,
+                body: `v${res.latestVersion}`,
+              });
+            } else {
+              showInfoToast(`${tRef.current.updateAvailableLabel}: v${res.latestVersion}`, 'info');
+            }
           }
         } else {
           setUpdateState({
@@ -99,7 +116,7 @@ export function useAppUpdater({ tRef, showInfoToast, formatUiError }: UseAppUpda
         }));
       }
     },
-    [showInfoToast, tRef],
+    [dispatchUpdateNotification, showInfoToast, tRef],
   );
 
   // Automatic background update check on startup & every 6 hours (skipped inside Microsoft Store MSIX)

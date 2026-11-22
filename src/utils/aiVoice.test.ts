@@ -1675,3 +1675,222 @@ test('v1.1.0 UPGRADE: Adaptive Noise-Floor VAD, Custom Shortcuts, Notification C
     assert.equal(/[\u2013\u2014]/.test(text), false, `Em/en-dash found in ${fp}`);
   }
 });
+
+test('UTF-8 & Windows-1254 JSON request decoding prevents Turkish mojibake (U+FFFD)', async () => {
+  const { decodeJsonRequestBuffer } = await import('./jsonBodyDecoder.ts');
+
+  // 1. Standard UTF-8 Turkish payload must decode identically
+  const utf8Sample = JSON.stringify({
+    title: 'Müşteri toplantısı hazırlığı - ĞÜŞİÖÇğüşıöç',
+  });
+  assert.equal(decodeJsonRequestBuffer(Buffer.from(utf8Sample, 'utf8')), utf8Sample);
+
+  // 2. Legacy Windows-1254 bytes (PowerShell 5.1 Invoke-RestMethod / curl.exe without charset=utf-8)
+  // 'Müşteri toplantısı hazırlığı' in Windows-1254:
+  // ü=0xFC, ş=0xFE, ı=0xFD, ğ=0xF0, İş=0xDD,0xFE
+  const win1254Payload = Buffer.from([
+    ...Buffer.from('{"title":"M', 'ascii'),
+    0xfc, // ü
+    0xfe, // ş
+    ...Buffer.from('teri toplant', 'ascii'),
+    0xfd, // ı
+    ...Buffer.from('s', 'ascii'),
+    0xfd, // ı
+    ...Buffer.from(' haz', 'ascii'),
+    0xfd, // ı
+    ...Buffer.from('rl', 'ascii'),
+    0xfd, // ı
+    0xf0, // ğ
+    0xfd, // ı
+    ...Buffer.from('","category":"', 'ascii'),
+    0xdd, // İ
+    0xfe, // ş
+    ...Buffer.from('"}', 'ascii'),
+  ]);
+  const decoded = decodeJsonRequestBuffer(win1254Payload);
+  assert.equal(decoded.includes('\uFFFD'), false, 'Must never produce U+FFFD replacement char');
+  const parsed = JSON.parse(decoded) as { title: string; category: string };
+  assert.equal(parsed.title, 'Müşteri toplantısı hazırlığı');
+  assert.equal(parsed.category, 'İş');
+
+  // 3. Audit regression checks: standardized client error codes localize cleanly & zero dashes in new modules
+  const { localizeErrorMessage, EN_DICTIONARY, TR_DICTIONARY } = await import('../i18n/translations.ts');
+  assert.equal(
+    localizeErrorMessage(new Error('NETWORK_TIMEOUT'), EN_DICTIONARY.operationFailedToast, 'en', EN_DICTIONARY),
+    EN_DICTIONARY.operationFailedToast,
+  );
+  assert.equal(
+    localizeErrorMessage(new Error('NETWORK_UNREACHABLE'), TR_DICTIONARY.loadFailedError, 'tr', TR_DICTIONARY),
+    TR_DICTIONARY.loadFailedError,
+  );
+  const sharedConstantsMod = await import('../../shared/constants.cjs');
+  const sharedConstants = sharedConstantsMod.default ?? sharedConstantsMod;
+  assert.ok(Array.isArray(sharedConstants.SETTING_KEYS) && sharedConstants.SETTING_KEYS.length >= 40);
+  for (const rel of ['src/api/eventStream.ts', 'src/utils/jsonBodyDecoder.ts', 'shared/constants.cjs']) {
+    const content = fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8');
+    assert.equal(/[\u2013\u2014]/.test(content), false, `Em/en-dash found in ${rel}`);
+  }
+});
+
+test('Neural Audio Stack (RNNoise WASM + Silero VAD v5 ONNX) & Multiple Voice/Chime Presets', async () => {
+  // 1. Verify all 6 local offline neural voice assets are synced cleanly (zero CDN)
+  const assetDir = path.resolve(process.cwd(), 'public', 'voice-assets');
+  for (const name of [
+    'rnnoise.wasm',
+    'rnnoise_simd.wasm',
+    'rnnoise-worklet.js',
+    'silero_vad_v5.onnx',
+    'ort-wasm-simd-threaded.wasm',
+    'ort-wasm-simd-threaded.mjs',
+    'piper_phonemize.js',
+    'piper_phonemize.wasm',
+    'piper_phonemize.data',
+  ]) {
+    const fullPath = path.join(assetDir, name);
+    assert.ok(fs.existsSync(fullPath), `Missing offline neural voice asset: ${name}`);
+    assert.ok(fs.statSync(fullPath).size > 1024, `Asset appears empty: ${name}`);
+  }
+
+  // 2. Verify VoiceVadController neural probability mode rejects loud fan/keyboard noise (prob 0.08)
+  //    and cleanly detects + auto-stops real human speech (prob 0.85 -> 0.05)
+  const neuralVad = new VoiceVadController({
+    sampleRate: 16000,
+    autoStopMs: 800,
+    noSpeechTimeoutMs: 5000,
+    adaptiveNoiseFloor: true,
+    sensitivity: 'auto',
+  });
+  const loudNoiseFrame = new Float32Array(1600).fill(0.22); // high RMS keyboard/fan noise
+  for (let i = 0; i < 6; i += 1) {
+    const res = neuralVad.pushFrame(loudNoiseFrame, 0.08);
+    assert.equal(
+      res.hasSpoken,
+      false,
+      'Low Silero speech probability must NOT trigger speech even with high RMS',
+    );
+  }
+  const speechFrame = new Float32Array(1600).fill(0.08);
+  for (let i = 0; i < 4; i += 1) {
+    neuralVad.pushFrame(speechFrame, 0.85);
+  }
+  let autoStopped = false;
+  for (let i = 0; i < 12; i += 1) {
+    const res = neuralVad.pushFrame(loudNoiseFrame, 0.05);
+    if (res.action === 'auto_stop_silence') {
+      autoStopped = true;
+      assert.equal(res.hasSpoken, true);
+      break;
+    }
+  }
+  assert.equal(autoStopped, true, 'Neural VAD must auto-stop cleanly when speech probability drops');
+
+  // 3. Verify 5 TTS style presets apply distinct rate & pitch cleanly
+  const { TTS_STYLE_PRESETS } = await import('../voice/ttsPlayer.ts');
+  assert.equal(Object.keys(TTS_STYLE_PRESETS).length, 5);
+  let capturedRate = 0;
+  let capturedPitch = 0;
+  class FakeUtterance {
+    text: string;
+    voice: unknown = null;
+    lang = '';
+    rate = 1;
+    pitch = 1;
+    constructor(text: string) {
+      this.text = text;
+    }
+  }
+  const fakeSynth = {
+    getVoices: () => [
+      { name: 'Microsoft Emel Online (Natural)', lang: 'tr-TR', voiceURI: 'emel', localService: true },
+      { name: 'Microsoft Ahmet Online (Natural)', lang: 'tr-TR', voiceURI: 'ahmet', localService: true },
+    ],
+    cancel: () => {},
+    speak: (u: { rate: number; pitch: number }) => {
+      capturedRate = u.rate;
+      capturedPitch = u.pitch;
+    },
+  };
+  const speakRes = speakLocalText('Test metni', {
+    language: 'tr',
+    preferredVoice: 'ahmet',
+    style: 'calm',
+    synth: fakeSynth as unknown as SpeechSynthesis,
+    UtteranceCtor: FakeUtterance as unknown as typeof SpeechSynthesisUtterance,
+  });
+  assert.equal(speakRes.spoken, true);
+  assert.equal(speakRes.voiceName, 'Microsoft Ahmet Online (Natural)');
+  assert.equal(capturedRate, TTS_STYLE_PRESETS.calm.rate);
+  assert.equal(capturedPitch, TTS_STYLE_PRESETS.calm.pitch);
+
+  // 4. Verify DB persistence for voiceTtsStyle & voiceChimePreset + zero em/en dashes in neuralAudio.ts
+  const db = new TodoDatabase(':memory:');
+  try {
+    const updated = db.updateSettings({
+      voiceTtsStyle: 'bright',
+      voiceChimePreset: 'crystal',
+    });
+    assert.equal(updated.voiceTtsStyle, 'bright');
+    assert.equal(updated.voiceChimePreset, 'crystal');
+  } finally {
+    db.close();
+  }
+  const neuralSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/voice/neuralAudio.ts'), 'utf8');
+  assert.equal(/[\u2013\u2014]/.test(neuralSrc), false, 'Em/en-dash found in neuralAudio.ts');
+
+  // 5. Verify Piper ONNX Female & Male offline TTS catalog (100% MIT/CC0/Public Domain) + WAV encoder
+  const piperVoicesMod = await import('../../shared/piperVoices.cjs');
+  const piper = piperVoicesMod.default ?? piperVoicesMod;
+  const trFemale = piper.PIPER_VOICE_CATALOG.filter(
+    (v: { baseLang: string; gender: string }) => v.baseLang === 'tr' && v.gender === 'female',
+  );
+  const trMale = piper.PIPER_VOICE_CATALOG.filter(
+    (v: { baseLang: string; gender: string }) => v.baseLang === 'tr' && v.gender === 'male',
+  );
+  const enFemale = piper.PIPER_VOICE_CATALOG.filter(
+    (v: { baseLang: string; gender: string }) => v.baseLang === 'en' && v.gender === 'female',
+  );
+  const enMale = piper.PIPER_VOICE_CATALOG.filter(
+    (v: { baseLang: string; gender: string }) => v.baseLang === 'en' && v.gender === 'male',
+  );
+  assert.ok(trFemale.length >= 1, 'Must include at least one Turkish female Piper voice');
+  assert.ok(trMale.length >= 1, 'Must include at least one Turkish male Piper voice');
+  assert.ok(enFemale.length >= 1, 'Must include at least one English female Piper voice');
+  assert.ok(enMale.length >= 1, 'Must include at least one English male Piper voice');
+  for (const v of piper.PIPER_VOICE_CATALOG) {
+    assert.ok(piper.ALLOWED_PIPER_LICENSES.has(v.license), `Forbidden Piper license: ${v.license}`);
+    assert.match(v.sha256, /^[0-9a-f]{64}$/i);
+  }
+
+  // Test PiperVoiceManager fail-closed SHA-256 rejection + clean delete
+  const tmpVoicesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agendamea-piper-'));
+  try {
+    const fakeBadFetch = async (url: string) => {
+      if (url.endsWith('.json')) {
+        return new Response(JSON.stringify({ audio: { sample_rate: 22050 }, espeak: { voice: 'tr' } }), {
+          status: 200,
+        });
+      }
+      return new Response(new Uint8Array([1, 2, 3, 4]), { status: 200 });
+    };
+    const mgr = new piper.PiperVoiceManager({ voicesDir: tmpVoicesDir, fetchFn: fakeBadFetch });
+    const badRes = await mgr.downloadVoice('piper-tr-ilkiz-female');
+    assert.equal(badRes.ok, false);
+    assert.equal(badRes.code, 'SHA256_MISMATCH');
+    assert.equal(mgr.getVoicePaths('piper-tr-ilkiz-female').installed, false);
+  } finally {
+    fs.rmSync(tmpVoicesDir, { recursive: true, force: true, maxRetries: 4, retryDelay: 50 });
+  }
+
+  // Verify PCM->WAV encoder header
+  const { encodeFloat32PcmToWav } = await import('../voice/piperTtsEngine.ts');
+  const wav = encodeFloat32PcmToWav(new Float32Array([0, 0.5, -0.5, 0]), 22050);
+  const wavBytes = Buffer.from(wav);
+  assert.equal(wavBytes.subarray(0, 4).toString('ascii'), 'RIFF');
+  assert.equal(wavBytes.subarray(8, 12).toString('ascii'), 'WAVE');
+  assert.equal(wavBytes.length, 44 + 8);
+
+  for (const rel of ['shared/piperVoices.cjs', 'src/voice/piperTtsEngine.ts']) {
+    const src = fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8');
+    assert.equal(/[\u2013\u2014]/.test(src), false, `Em/en-dash found in ${rel}`);
+  }
+});

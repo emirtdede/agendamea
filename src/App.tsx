@@ -29,6 +29,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from './api/client';
+import { subscribeServerEvents } from './api/eventStream';
 import { CloseActionModal } from './components/CloseActionModal';
 import { ColorDot } from './components/ColorDot';
 import { ContextMenu } from './components/ContextMenu';
@@ -173,6 +174,8 @@ export default function App() {
   const [customShortcuts, setCustomShortcuts] = useState<CustomShortcutsMap>({
     ...DEFAULT_CUSTOM_SHORTCUTS,
   });
+  const customShortcutsRef = useRef(customShortcuts);
+  customShortcutsRef.current = customShortcuts;
   const [todoContextMenu, setTodoContextMenu] = useState<{
     x: number;
     y: number;
@@ -226,16 +229,6 @@ export default function App() {
   );
 
   const {
-    autoUpdateCheck,
-    setAutoUpdateCheck,
-    updateState,
-    handleManualCheckForUpdates,
-    handleDownloadAndInstallUpdate,
-    handleQuitAndInstallUpdate,
-    handleToggleAutoUpdateCheck,
-  } = useAppUpdater({ tRef, showInfoToast, formatUiError });
-
-  const {
     notificationProfile,
     notificationLeadMinutes,
     notificationChannels,
@@ -246,6 +239,23 @@ export default function App() {
     dispatchNotification,
     sendTestNotification,
   } = useNotificationCenter({ todos, tRef, showInfoToast });
+
+  const dispatchUpdateNotification = useCallback(
+    (payload: { title: string; body?: string }) => {
+      dispatchNotification('appUpdates', payload);
+    },
+    [dispatchNotification],
+  );
+
+  const {
+    autoUpdateCheck,
+    setAutoUpdateCheck,
+    updateState,
+    handleManualCheckForUpdates,
+    handleDownloadAndInstallUpdate,
+    handleQuitAndInstallUpdate,
+    handleToggleAutoUpdateCheck,
+  } = useAppUpdater({ tRef, showInfoToast, formatUiError, dispatchUpdateNotification });
 
   // Listen for Electron close / global quick-add / desktop notification click / Windows Jump List events
   useEffect(() => {
@@ -377,40 +387,34 @@ export default function App() {
         setIsLoading(false);
       }
     }
-  }, [formatUiError, setAutoUpdateCheck, syncFromBootstrapSettings, tRef]);
+  }, [
+    formatUiError,
+    hydrateNotificationSettings,
+    setAutoUpdateCheck,
+    syncFromBootstrapSettings,
+    tRef,
+  ]);
 
   useEffect(() => {
     void loadData(false);
   }, [loadData]);
 
-  // Live refresh whenever external CLI, MCP server, or Incoming Webhook mutates tasks
+  // Live refresh whenever external CLI, MCP server, or Incoming Webhook mutates tasks (shared SSE bus)
   useEffect(() => {
-    if (typeof EventSource === 'undefined') return;
-    let source: EventSource | null = null;
     let refreshTimer: number | null = null;
-    try {
-      source = new EventSource('/api/events');
-      source.onmessage = (evt) => {
-        try {
-          const parsed = JSON.parse(evt.data) as { type?: string };
-          if (parsed.type && parsed.type !== 'changed') {
-            return;
-          }
-        } catch {
-          // Non-JSON keepalive or legacy payload -> treat as refresh
-        }
-        if (refreshTimer !== null) window.clearTimeout(refreshTimer);
-        refreshTimer = window.setTimeout(() => {
-          refreshTimer = null;
-          void loadData(true, true);
-        }, 120);
-      };
-    } catch {
-      // Ignore SSE errors in unsupported environments
-    }
+    const unsub = subscribeServerEvents((parsed) => {
+      if (parsed?.type && parsed.type !== 'changed') {
+        return;
+      }
+      if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        void loadData(true, true);
+      }, 120);
+    });
     return () => {
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
-      source?.close();
+      unsub();
     };
   }, [loadData]);
 
@@ -748,12 +752,11 @@ export default function App() {
 
   const handleChangeCustomShortcut = useCallback(
     (action: ShortcutActionId, nextShortcut: string) => {
-      setCustomShortcuts((prev) => {
-        const next: CustomShortcutsMap = { ...prev, [action]: nextShortcut };
-        void api.updateSettings({ customShortcuts: next }).catch((err) => {
-          showInfoToast(formatUiError(err), 'error');
-        });
-        return next;
+      const next: CustomShortcutsMap = { ...customShortcutsRef.current, [action]: nextShortcut };
+      customShortcutsRef.current = next;
+      setCustomShortcuts(next);
+      void api.updateSettings({ customShortcuts: next }).catch((err) => {
+        showInfoToast(formatUiError(err), 'error');
       });
     },
     [showInfoToast, formatUiError],
@@ -791,7 +794,7 @@ export default function App() {
       }
       await window.agendameaWindow?.performCloseAction?.(action);
     },
-    [],
+    [setCloseBehavior],
   );
 
   const handleChangeLanguage = useCallback(
@@ -954,6 +957,7 @@ export default function App() {
         const created = await api.createTodo(payload);
         setOneDrivePrompt(null);
         setTodos((prev) => [created, ...prev.filter((tItem) => tItem.id !== created.id)]);
+        return created;
       } catch (err) {
         showInfoToast(formatUiError(err), 'error');
         throw err;
@@ -1198,7 +1202,14 @@ export default function App() {
       setActiveView({ type: 'smart', id: 'all' });
       showInfoToast(tRef.current.backupRestoredToast);
     },
-    [clearUndoToast, applyRestoredSettings, setAutoUpdateCheck, showInfoToast, tRef],
+    [
+      clearUndoToast,
+      applyRestoredSettings,
+      hydrateNotificationSettings,
+      setAutoUpdateCheck,
+      showInfoToast,
+      tRef,
+    ],
   );
 
   const handleImportBackup = useCallback(
@@ -1253,7 +1264,7 @@ export default function App() {
       }
       showInfoToast(tRef.current.resetDataDoneToast, 'info');
     },
-    [clearUndoToast, applyRestoredSettings, showInfoToast, tRef],
+    [clearUndoToast, applyRestoredSettings, hydrateNotificationSettings, showInfoToast, tRef],
   );
 
   const handleAddSubtask = useCallback(
@@ -1527,6 +1538,14 @@ export default function App() {
     setDayContextMenu({ x: e.clientX, y: e.clientY, dateStr });
   }, []);
 
+  const handleCloseTodoContextMenu = useCallback(() => {
+    setTodoContextMenu(null);
+  }, []);
+
+  const handleCloseDayContextMenu = useCallback(() => {
+    setDayContextMenu(null);
+  }, []);
+
   const handleToggleTodoImportant = useCallback(
     (id: string, important: boolean) => {
       void handleUpdateTodo(id, { important });
@@ -1659,12 +1678,22 @@ export default function App() {
       }
       void api.updateSettings({ onboardingCompleted: true }).catch(() => {});
       handleApplyRestoredBootstrap(bootstrap);
+      dispatchNotification('cloudSync', {
+        title: tRef.current.onedriveSyncedToast,
+      });
     } catch (err) {
       showInfoToast(formatUiError(err), 'error');
     } finally {
       setIsRestoringOneDrivePrompt(false);
     }
-  }, [isRestoringOneDrivePrompt, handleApplyRestoredBootstrap, showInfoToast, formatUiError]);
+  }, [
+    dispatchNotification,
+    isRestoringOneDrivePrompt,
+    handleApplyRestoredBootstrap,
+    showInfoToast,
+    formatUiError,
+    tRef,
+  ]);
 
   const handleDismissOneDriveBanner = useCallback(() => {
     setOneDrivePrompt(null);
@@ -2444,6 +2473,7 @@ export default function App() {
               todayStr={todayStr}
               onClose={handleCloseDetail}
               onUpdate={handleUpdateTodo}
+              onToggleComplete={handleToggleTodoComplete}
               onDelete={handleDeleteTodo}
               onAddSubtask={handleAddSubtask}
               onToggleSubtask={handleToggleSubtask}
@@ -2458,7 +2488,7 @@ export default function App() {
             testId="todo-context-menu"
             x={todoContextMenu.x}
             y={todoContextMenu.y}
-            onClose={() => setTodoContextMenu(null)}
+            onClose={handleCloseTodoContextMenu}
             items={[
               {
                 id: 'open-details',
@@ -2557,7 +2587,7 @@ export default function App() {
             testId="calendar-day-context-menu"
             x={dayContextMenu.x}
             y={dayContextMenu.y}
-            onClose={() => setDayContextMenu(null)}
+            onClose={handleCloseDayContextMenu}
             items={[
               {
                 id: 'add-task-on-day',
@@ -2573,10 +2603,13 @@ export default function App() {
                     dueTime: null,
                     categoryId,
                     important: false,
-                  }).then(() => {
-                    const newest = todosRef.current[0];
-                    if (newest) setSelectedTodoId(newest.id);
-                  });
+                  })
+                    .then((created) => {
+                      if (created) setSelectedTodoId(created.id);
+                    })
+                    .catch(() => {
+                      // Error toast already handled inside handleAddTodo
+                    });
                 },
               },
             ]}

@@ -34,6 +34,8 @@ export const ShortcutRecorder: React.FC<ShortcutRecorderProps> = ({
   const [recording, setRecording] = useState(false);
   const [hintError, setHintError] = useState<string | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     if (!recording) return;
@@ -58,7 +60,14 @@ export const ShortcutRecorder: React.FC<ShortcutRecorderProps> = ({
 
       setHintError(null);
       setRecording(false);
-      onChange(electronFormat ? toElectronAccelerator(captured) : captured);
+      onChangeRef.current(electronFormat ? toElectronAccelerator(captured) : captured);
+    };
+
+    const onPointerDown = (e: MouseEvent) => {
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) {
+        setRecording(false);
+        setHintError(null);
+      }
     };
 
     const onBlur = () => {
@@ -67,12 +76,14 @@ export const ShortcutRecorder: React.FC<ShortcutRecorderProps> = ({
     };
 
     window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('mousedown', onPointerDown, true);
     window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('mousedown', onPointerDown, true);
       window.removeEventListener('blur', onBlur);
     };
-  }, [electronFormat, modifierHint, onChange, recording, requireModifier]);
+  }, [electronFormat, modifierHint, recording, requireModifier]);
 
   const isCustom =
     formatShortcutDisplay(value || defaultValue) !== formatShortcutDisplay(defaultValue);

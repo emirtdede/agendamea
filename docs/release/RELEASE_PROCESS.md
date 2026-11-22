@@ -1,46 +1,47 @@
-# Release Process & Update Channels (`v1.0.0`)
+# Release Process & Update Channels (`v1.1.0`)
 
 ## 1. Version Parity Checklist
 
 Before cutting a release tag (`vX.Y.Z`), confirm version parity across:
 - `package.json` (`"version"`)
-- `server.ts` (`APP_VERSION` fallback)
-- `electron/main.cjs` (`app.getVersion()` fallback)
+- `shared/version.cjs` (shared runtime version source for `server.ts`, `electron/main.cjs`, `cli/`, `mcp/`)
 - `CHANGELOG.md`
 - `README.md` (`Release-vX.Y.Z` badge and package filenames)
+- `winget/manifests/v/Vellium/Agendamea/<version>/`
 
 ## 2. Automated Verification Gates
 
 Run all local checks before tagging:
 
 ```bash
-npm test       # Unit, i18n zero-leakage & hygiene tests
-npm run lint   # Strict TypeScript type-check (tsc --noEmit)
-npm run build  # Vite production bundle + esbuild server bundle
+npm run lint        # Strict TypeScript type-check (tsc --noEmit)
+npm test            # 54 Node unit, AI, security, i18n zero-leakage & hygiene tests
+npm run test:setup  # 13 .NET 10 WPF modern setup & SFX engine tests
+npm run build       # Sync offline voice assets + Vite production bundle + esbuild server bundle
 ```
 
 GitHub Actions executes the same gates automatically via `.github/workflows/ci.yml` on every push and pull request to `main`.
 
 ## 3. Windows Packaging Targets
 
-`electron-builder.yml` defines three Windows x64 distribution packages:
+Three Windows x64 distribution packages are produced under `release/`:
 
 | Target | Command | Output Artifact (`release/`) |
 | :--- | :--- | :--- |
-| NSIS Setup Installer | `npm run dist:win` | `Agendamea-Setup-1.0.0-win-x64.exe` |
-| Portable Single-File | `npm run dist:win` | `Agendamea-Portable-1.0.0-win-x64.exe` |
-| Microsoft Store APPX | `npm run dist:win:appx` | `Agendamea-Store-1.0.0-win-x64.appx` |
+| Modern Frameless WPF Setup | `npm run dist:win` | `Agendamea-Setup-1.1.0-win-x64.exe` |
+| Portable Single-File | `npm run dist:win` | `Agendamea-Portable-1.1.0-win-x64.exe` |
+| Microsoft Store APPX | `npm run dist:win:appx` | `Agendamea-Store-1.1.0-win-x64.appx` |
 
 ## 4. Publishing a GitHub Release
 
 Push an annotated tag matching `v*`:
 
 ```bash
-git tag -a v1.0.0 -m "Release v1.0.0"
-git push origin v1.0.0
+git tag -a v1.1.0 -m "Release v1.1.0"
+git push origin v1.1.0
 ```
 
-`.github/workflows/release.yml` runs on `windows-latest`, executes tests + lint + build, packages Setup `.exe`, Portable `.exe`, and Store `.appx`, generates `SHA256SUMS.txt`, and publishes all assets to GitHub Releases.
+`.github/workflows/release.yml` runs on `windows-latest`, executes lint + Node tests + .NET Setup tests + build, packages Modern WPF Setup `.exe`, Portable `.exe`, and Store `.appx`, generates `SHA256SUMS.txt`, and publishes all assets to GitHub Releases.
 
 ## 5. Distribution Channel Update Behavior
 

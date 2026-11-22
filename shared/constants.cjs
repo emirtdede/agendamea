@@ -1,0 +1,74 @@
+'use strict';
+
+/**
+ * Single source of truth for shared application constants across Express server,
+ * Electron main process, AI services, and offline SQLite store.
+ */
+
+const GITHUB_REPO_URL = 'https://github.com/emirtdede/agendamea';
+const GITHUB_SPONSOR_URL = 'https://github.com/sponsors/emirtdede';
+const GITHUB_RELEASES_API = 'https://api.github.com/repos/emirtdede/agendamea/releases/latest';
+const GITHUB_RELEASES_HTML = 'https://github.com/emirtdede/agendamea/releases/latest';
+
+const DEFAULT_OLLAMA_URL = 'http://127.0.0.1:11434';
+const DEFAULT_LMSTUDIO_URL = 'http://127.0.0.1:1234';
+
+const SETTING_KEYS = Object.freeze([
+  'themeMode',
+  'themeId',
+  'customThemeColor',
+  'appIconId',
+  'customIconColor',
+  'zoomPercent',
+  'highContrast',
+  'reducedMotion',
+  'closeBehavior',
+  'launchAtStartup',
+  'globalQuickAddShortcut',
+  'globalQuickAddShortcutKey',
+  'customShortcuts',
+  'notificationProfile',
+  'notificationLeadMinutes',
+  'notificationChannels',
+  'dragLocked',
+  'sidebarCollapsed',
+  'language',
+  'autoUpdateCheck',
+  'themeCustomized',
+  'onboardingCompleted',
+  'onedriveConnected',
+  'onedriveAutoSync',
+  'onedriveAccountEmail',
+  'onedriveLastSyncedAt',
+  'onedriveCustomPath',
+  'webhookEnabled',
+  'webhookUrl',
+  'webhookSecret',
+  'webhookEvents',
+  'aiEnabled',
+  'aiTier',
+  'aiLlmModelId',
+  'aiSttModelId',
+  'aiEmbedModelId',
+  'aiUseExternalOllama',
+  'aiOllamaModel',
+  'voiceShortcut',
+  'voiceAutoStopMs',
+  'voiceTtsEnabled',
+  'voiceTtsVoice',
+  'voiceTtsStyle',
+  'voiceChimePreset',
+  'voiceMicDeviceId',
+  'voiceNoiseSuppression',
+  'voiceSensitivity',
+]);
+
+module.exports = {
+  GITHUB_REPO_URL,
+  GITHUB_SPONSOR_URL,
+  GITHUB_RELEASES_API,
+  GITHUB_RELEASES_HTML,
+  DEFAULT_OLLAMA_URL,
+  DEFAULT_LMSTUDIO_URL,
+  SETTING_KEYS,
+};

@@ -26,7 +26,7 @@ interface QuickAddBarProps {
     dueTime?: string | null;
     categoryId: string | null;
     important: boolean;
-  }) => Promise<void>;
+  }) => Promise<unknown>;
 }
 
 const PRIORITY_CYCLE: Priority[] = ['normal', 'high', 'low'];

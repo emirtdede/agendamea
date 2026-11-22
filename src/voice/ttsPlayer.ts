@@ -5,8 +5,30 @@
  * - Graceful silent fallback with ms-settings:speech link if language voice pack is absent
  */
 
+import type { VoiceTtsStyle } from '../types';
+import { speakWithPiperVoice, stopPiperSpeech } from './piperTtsEngine';
+
 export const MAX_SPOKEN_CHARS = 400;
 export const WINDOWS_SPEECH_SETTINGS_URI = 'ms-settings:speech';
+export const PIPER_VOICE_PREFIX = 'piper:';
+
+export function isPiperVoiceId(voiceId?: string | null): boolean {
+  return typeof voiceId === 'string' && voiceId.startsWith(PIPER_VOICE_PREFIX);
+}
+
+export function stripPiperVoicePrefix(voiceId: string): string {
+  return voiceId.startsWith(PIPER_VOICE_PREFIX)
+    ? voiceId.slice(PIPER_VOICE_PREFIX.length)
+    : voiceId;
+}
+
+export const TTS_STYLE_PRESETS: Record<VoiceTtsStyle, { rate: number; pitch: number }> = {
+  natural: { rate: 1.02, pitch: 1.0 },
+  crisp: { rate: 1.18, pitch: 1.04 },
+  calm: { rate: 0.92, pitch: 0.88 },
+  bright: { rate: 1.08, pitch: 1.14 },
+  studio: { rate: 0.86, pitch: 0.96 },
+};
 
 export interface TtsSpeakResult {
   spoken: boolean;
@@ -75,6 +97,7 @@ export function rankTtsVoices(
 }
 
 export function stopSpeaking(synth?: SpeechSynthesis | null): void {
+  stopPiperSpeech();
   const api = synth ?? (typeof window !== 'undefined' ? window.speechSynthesis : null);
   try {
     api?.cancel();
@@ -83,10 +106,19 @@ export function stopSpeaking(synth?: SpeechSynthesis | null): void {
   }
 }
 
-export function listAvailableTtsVoices(synth?: SpeechSynthesis | null): SpeechSynthesisVoice[] {
+export function listAvailableTtsVoices(
+  synth?: SpeechSynthesis | null,
+  preferredLang?: string,
+): SpeechSynthesisVoice[] {
   const api = synth ?? (typeof window !== 'undefined' ? window.speechSynthesis : null);
   try {
-    return api ? api.getVoices() : [];
+    const all = api ? api.getVoices() : [];
+    if (!preferredLang || all.length <= 1) return all;
+    const baseLang = String(preferredLang).toLowerCase().split('-')[0];
+    const prioritized = rankTtsVoices(all, baseLang);
+    const seen = new Set(prioritized.map((v) => v.voiceURI));
+    const others = all.filter((v) => !seen.has(v.voiceURI));
+    return [...prioritized, ...others];
   } catch {
     return [];
   }
@@ -97,6 +129,7 @@ export function speakLocalText(
   options?: {
     language?: string;
     preferredVoice?: string;
+    style?: VoiceTtsStyle;
     maxChars?: number;
     synth?: SpeechSynthesis | null;
     UtteranceCtor?: typeof SpeechSynthesisUtterance;
@@ -163,9 +196,11 @@ export function speakLocalText(
   try {
     api.cancel();
     const utterance = new Utterance(spokenText);
+    const preset = TTS_STYLE_PRESETS[options?.style ?? 'natural'] ?? TTS_STYLE_PRESETS.natural;
     utterance.voice = chosen;
     utterance.lang = chosen.lang || options?.language || 'tr-TR';
-    utterance.rate = 1.04;
+    utterance.rate = preset.rate;
+    utterance.pitch = preset.pitch;
     if (options?.onEnd) {
       utterance.onend = options.onEnd;
       utterance.onerror = options.onEnd;
@@ -190,4 +225,61 @@ export function speakLocalText(
       settingsUri: WINDOWS_SPEECH_SETTINGS_URI,
     };
   }
+}
+
+/**
+ * Unified async TTS entry point:
+ * - If preferredVoice starts with "piper:", synthesizes speech locally via offline Piper VITS ONNX.
+ * - Falls back seamlessly to Windows OneCore / OS SpeechSynthesis if Piper voice is unavailable.
+ */
+export async function speakLocalTextAsync(
+  text: string,
+  options?: {
+    language?: string;
+    preferredVoice?: string;
+    style?: VoiceTtsStyle;
+    maxChars?: number;
+    synth?: SpeechSynthesis | null;
+    UtteranceCtor?: typeof SpeechSynthesisUtterance;
+    onEnd?: () => void;
+  },
+): Promise<TtsSpeakResult> {
+  const { spokenText, fullText, truncated } = truncateForSpeech(
+    text,
+    options?.maxChars ?? MAX_SPOKEN_CHARS,
+  );
+  if (!spokenText) {
+    return {
+      spoken: false,
+      spokenText: '',
+      fullText,
+      truncated: false,
+      reason: 'EMPTY_TEXT',
+      settingsUri: WINDOWS_SPEECH_SETTINGS_URI,
+    };
+  }
+
+  if (isPiperVoiceId(options?.preferredVoice)) {
+    const piperId = stripPiperVoicePrefix(options!.preferredVoice!);
+    const ok = await speakWithPiperVoice(piperId, spokenText, {
+      style: options?.style,
+      onEnd: options?.onEnd,
+    });
+    if (ok) {
+      return {
+        spoken: true,
+        spokenText,
+        fullText,
+        truncated,
+        voiceName: piperId,
+        reason: 'OK',
+        settingsUri: WINDOWS_SPEECH_SETTINGS_URI,
+      };
+    }
+  }
+
+  return speakLocalText(text, {
+    ...options,
+    preferredVoice: isPiperVoiceId(options?.preferredVoice) ? '' : options?.preferredVoice,
+  });
 }

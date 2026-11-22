@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-windows-release:
-    name: Build Windows NSIS Installer & Publish Release
+    name: Build Windows Modern Setup, Portable & Store Release
     runs-on: windows-latest
 
     steps:
@@ -23,24 +23,32 @@ jobs:
         with:
           node-version: 22
 
+      - name: Setup .NET 10 SDK (Modern WPF Setup)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Install dependencies
         run: npm install
-
-      - name: Run unit tests
-        run: npm test
 
       - name: TypeScript type-check
         run: npm run lint
 
-      - name: Build Windows x64 Setup, Portable & Store Packages
-        run: npm run build && npx electron-builder --win nsis portable appx --x64 --publish never
+      - name: Run unit, AI & i18n tests
+        run: npm test
+
+      - name: Run modern WPF Setup tests
+        run: npm run test:setup
+
+      - name: Build Windows x64 Modern Setup, Portable & Store Packages
+        run: npm run dist:win && npm run dist:win:appx
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Generate SHA256 Checksums
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path release -File | Where-Object { $_.Extension -in '.exe', '.appx', '.msix', '.blockmap', '.yml' }
+          $files = Get-ChildItem -Path release -File | Where-Object { $_.Extension -in '.exe', '.appx', '.msix', '.yml' -and $_.Name -ne 'builder-debug.yml' }
           $lines = foreach ($f in $files) {
             $hash = (Get-FileHash -Path $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($f.Name)"
@@ -55,6 +63,5 @@ jobs:
             release/Agendamea-Setup-*.exe
             release/Agendamea-Portable-*.exe
             release/Agendamea-Store-*.appx
-            release/*.blockmap
             release/latest.yml
             release/SHA256SUMS.txt

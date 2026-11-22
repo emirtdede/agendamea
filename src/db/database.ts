@@ -34,6 +34,7 @@ import {
   sanitizeTags,
 } from '../utils/todoLogic.ts';
 import aiCatalog from '../../shared/aiCatalog.cjs';
+import sharedConstants from '../../shared/constants.cjs';
 import sqliteCore from '../../shared/sqliteCore.cjs';
 
 export class ValidationError extends Error {
@@ -272,50 +273,7 @@ export class TodoDatabase {
   }
 
   getSettings(): AppSettings {
-    const keys = [
-      'themeMode',
-      'themeId',
-      'customThemeColor',
-      'appIconId',
-      'customIconColor',
-      'zoomPercent',
-      'highContrast',
-      'reducedMotion',
-      'closeBehavior',
-      'launchAtStartup',
-      'globalQuickAddShortcut',
-      'dragLocked',
-      'sidebarCollapsed',
-      'themeCustomized',
-      'language',
-      'autoUpdateCheck',
-      'onedriveAutoSync',
-      'onedriveCustomPath',
-      'onboardingCompleted',
-      'webhookEnabled',
-      'webhookUrl',
-      'webhookSecret',
-      'webhookEvents',
-      'aiEnabled',
-      'aiTier',
-      'aiLlmModelId',
-      'aiSttModelId',
-      'aiEmbedModelId',
-      'aiUseExternalOllama',
-      'aiOllamaModel',
-      'voiceShortcut',
-      'voiceAutoStopMs',
-      'voiceTtsEnabled',
-      'voiceTtsVoice',
-      'voiceMicDeviceId',
-      'voiceNoiseSuppression',
-      'voiceSensitivity',
-      'globalQuickAddShortcutKey',
-      'customShortcuts',
-      'notificationProfile',
-      'notificationLeadMinutes',
-      'notificationChannels',
-    ];
+    const keys = sharedConstants.SETTING_KEYS;
     const placeholders = keys.map(() => '?').join(', ');
     const rows = this.db
       .prepare(`SELECT key, value FROM settings WHERE key IN (${placeholders})`)
@@ -457,6 +415,26 @@ export class TodoDatabase {
     }
     const rawVoiceTtsVoice = map.get('voiceTtsVoice');
     if (rawVoiceTtsVoice) settings.voiceTtsVoice = rawVoiceTtsVoice;
+    const rawVoiceTtsStyle = map.get('voiceTtsStyle');
+    if (
+      rawVoiceTtsStyle === 'natural' ||
+      rawVoiceTtsStyle === 'crisp' ||
+      rawVoiceTtsStyle === 'calm' ||
+      rawVoiceTtsStyle === 'bright' ||
+      rawVoiceTtsStyle === 'studio'
+    ) {
+      settings.voiceTtsStyle = rawVoiceTtsStyle;
+    }
+    const rawVoiceChimePreset = map.get('voiceChimePreset');
+    if (
+      rawVoiceChimePreset === 'soft' ||
+      rawVoiceChimePreset === 'crystal' ||
+      rawVoiceChimePreset === 'studio' ||
+      rawVoiceChimePreset === 'minimal' ||
+      rawVoiceChimePreset === 'none'
+    ) {
+      settings.voiceChimePreset = rawVoiceChimePreset;
+    }
     const rawVoiceMicDeviceId = map.get('voiceMicDeviceId');
     if (rawVoiceMicDeviceId) settings.voiceMicDeviceId = rawVoiceMicDeviceId;
     const rawVoiceNoiseSuppression = map.get('voiceNoiseSuppression');
@@ -673,6 +651,24 @@ export class TodoDatabase {
     }
     if (typeof patch.voiceTtsVoice === 'string') {
       stmt.run('voiceTtsVoice', patch.voiceTtsVoice.trim().slice(0, 160));
+    }
+    if (
+      patch.voiceTtsStyle === 'natural' ||
+      patch.voiceTtsStyle === 'crisp' ||
+      patch.voiceTtsStyle === 'calm' ||
+      patch.voiceTtsStyle === 'bright' ||
+      patch.voiceTtsStyle === 'studio'
+    ) {
+      stmt.run('voiceTtsStyle', patch.voiceTtsStyle);
+    }
+    if (
+      patch.voiceChimePreset === 'soft' ||
+      patch.voiceChimePreset === 'crystal' ||
+      patch.voiceChimePreset === 'studio' ||
+      patch.voiceChimePreset === 'minimal' ||
+      patch.voiceChimePreset === 'none'
+    ) {
+      stmt.run('voiceChimePreset', patch.voiceChimePreset);
     }
     if (typeof patch.voiceMicDeviceId === 'string') {
       stmt.run('voiceMicDeviceId', patch.voiceMicDeviceId.trim().slice(0, 160));

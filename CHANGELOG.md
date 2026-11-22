@@ -5,11 +5,15 @@ All notable changes to **Agendamea** are documented in this file.
 ## [1.1.0] - 2026-11-22
 
 ### Added
-- **On-Device Local AI, Hybrid RAG & Taskbar Voice Dictation:**
+- **On-Device Local AI, Hybrid RAG & Neural Voice Dictation:**
   - Hardware auto-profiling (64-bit VRAM detection, RAM, CPU cores, free disk) with 3 local model tiers (Light / Medium / Strong - 100% Apache 2.0 / MIT: Whisper.cpp, Qwen3, Multilingual-E5) plus zero-download **External Local Engine (Ollama / LM Studio)** model picker and automatic runtime server detection.
-  - Upgraded voice dictation pipeline with selectable microphone device + live test level meter, Web Audio highpass/lowpass noise suppression filter, continuous EMA adaptive noise-floor VAD with sensitivity presets (`Auto`, `Low`, `Medium`, `High`), and automatic no-speech timeout so room noise never keeps dictation stuck.
-  - Redesigned taskbar voice overlay pill with clean centered 7-bar audio equalizer, live elapsed timer, noise-gate indicator, confirmation lock for destructive actions, multi-match disambiguation, Windows OneCore TTS read-aloud, and keyboard command fallback.
+  - Upgraded 100% offline neural audio pipeline: **Mozilla RNNoise WASM** deep-learning noise suppression (`48 kHz` AudioWorklet), **Silero VAD v5 ONNX** neural speech detector with continuous EMA adaptive noise-floor fallback (`Auto`, `Low`, `Medium`, `High`), selectable microphone device + live level meter, 5 selectable ready chimes (`Soft`, `Crystal`, `Studio`, `Minimal`, `None`), and automatic no-speech timeout.
+  - Local offline **Piper VITS ONNX Neural TTS** engine with 5 verified SHA-256 voices (Turkish Female/Male: İlkiz, Fahrettin, Fettah; English Female/Male: Kristin, Joe), 5 speaking style presets (`Natural`, `Crisp`, `Calm`, `Bright`, `Studio`), seamless Windows OneCore fallback, and zero CDN requests.
+  - Redesigned taskbar voice overlay pill with clean centered 7-bar audio equalizer, live elapsed timer, confirmation lock for destructive actions, multi-match disambiguation, and keyboard command fallback.
   - Chunked hybrid FTS5 + vector RAG search (`ag rag`, `ag ask`, `ag ai status`) and 22-tool MCP server (`agendamea_semantic_search`, `agendamea_ai_status`).
+- **Encoding, Security & Performance Hardening:**
+  - Strict UTF-8 JSON request body decoder with transparent Windows-1254 / ISO-8859-9 fallback (`src/utils/jsonBodyDecoder.ts`), preventing Turkish mojibake (`U+FFFD`) from legacy Windows PowerShell 5.1 / `curl.exe` / ANSI webhook callers, plus UTF-8 `chcp 65001` CLI shims in `Agendamea.Setup`.
+  - Production CSP updated with `'wasm-unsafe-eval'`, `media-src 'self' blob:`, and `connect-src 'self' data: blob:`, explicit `application/wasm` MIME delivery, on-demand disk streaming for large voice WASM/ONNX assets (eliminating ~49 MB startup RAM preload), and shared singleton SSE event bus (`src/api/eventStream.ts`).
 - **Notification Center, Due/Upcoming Task Reminders & Profiles:**
   - Dedicated **Settings > Notifications** tab with one-click preset profiles (**Balanced**, **All Enabled**, **Focus Mode** [silences all channels], **In-App Only**, plus automatic **Custom**), configurable upcoming lead time (`5 / 10 / 15 / 30 / 60 min`), and per-event 4-way channel controls (**Both**, **In-App**, **Desktop**, **Off**) across 6 event categories.
   - Live background due/upcoming task reminder engine dispatching in-app toasts and native Windows desktop notifications with click-to-focus task support.

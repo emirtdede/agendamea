@@ -62,7 +62,7 @@ public sealed class CliOptions
             {
                 opts.DeleteUserData = true;
             }
-            else if (upper is "--LAUNCH" or "/LAUNCH")
+            else if (upper is "--LAUNCH" or "/LAUNCH" or "--FORCE-RUN")
             {
                 opts.LaunchAfterInstall = true;
             }
@@ -86,7 +86,7 @@ public sealed class CliOptions
             {
                 opts.SkipWindowsIntegration = true;
             }
-            else if (upper.StartsWith("/DIR=") || upper.StartsWith("--DIR="))
+            else if (upper.StartsWith("/DIR=") || upper.StartsWith("--DIR=") || upper.StartsWith("/D="))
             {
                 var eq = raw.IndexOf('=');
                 var val = raw[(eq + 1)..].Trim().Trim('"');

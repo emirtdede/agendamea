@@ -81,14 +81,14 @@ For effortless cross-device backup without vendor lock-in or server costs, Agend
 - **Eisenhower Matrix**: Automatic 4-quadrant classification (`Q1 Urgent & Important`, `Q2 Important`, `Q3 Urgent`, `Q4 Later`) with drag-and-drop reprioritization across quadrants.
 - **Rich Task Details**: Optional start/due date ranges (`YYYY-MM-DD`), optional due times (`HH:mm`), post-creation `#tag` management (batch entry, deduplication, 12-tag limit, instant chip filtering), inline subtasks, and auto-saving notes with `keepalive` unmount flush.
 
-### <img src="assets/icons/terminal.svg" width="20" height="20" align="absmiddle" alt="" /> Built-in 20-Tool MCP Server, Short Terminal CLI (`ag`) & Headless Daemon
-- **20-Tool Built-in MCP Server (`mcp/server.cjs` / `ag mcp`)**: JSON-RPC 2.0 over stdio for **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf**, and **VS Code** - works with zero external Node.js installation via bundled `Agendamea.exe` (`ELECTRON_RUN_AS_NODE=1`) in both **Live API** and **Cold-Start Offline SQLite** modes.
-- **Short Quote-Free Terminal CLI (`ag` / `agenda` / `agendamea`)**: 1-click PATH installation (`Terminale Kur` in Settings or `ag install` headlessly), numbered 1-2-3 lists, natural token parsing (`@today`, `@tomorrow`, `@YYYY-MM-DD..YYYY-MM-DD`, `14:30`, `!`, `*`, `^`, `#tag`, `/Category`, `--note`, `--sub`), batch operations (`ag ok 1 2 3`, `ag rm 1 2`), stdin piping (`ag import -`, `ag +`), terminal views (`ag cal`, `ag kanban`, `ag matris`), and raw `-j` / `--json` output.
+### <img src="assets/icons/terminal.svg" width="20" height="20" align="absmiddle" alt="" /> Built-in 22-Tool MCP Server, Short Terminal CLI (`ag`) & Headless Daemon
+- **22-Tool Built-in MCP Server (`mcp/server.cjs` / `ag mcp`)**: JSON-RPC 2.0 over stdio for **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf**, and **VS Code** - works with zero external Node.js installation via bundled `Agendamea.exe` (`ELECTRON_RUN_AS_NODE=1`) in both **Live API** and **Cold-Start Offline SQLite** modes (including `agendamea_semantic_search` and `agendamea_ai_status`).
+- **Short Quote-Free Terminal CLI (`ag` / `agenda` / `agendamea`)**: 1-click PATH installation (`Terminale Kur` in Settings or `ag install` headlessly), numbered 1-2-3 lists, natural token parsing (`@today`, `@tomorrow`, `@YYYY-MM-DD..YYYY-MM-DD`, `14:30`, `!`, `*`, `^`, `#tag`, `/Category`, `--note`, `--sub`), batch operations (`ag ok 1 2 3`, `ag rm 1 2`), stdin piping (`ag import -`, `ag +`), terminal views (`ag cal`, `ag kanban`, `ag matris`), local AI/RAG (`ag ai`, `ag rag`, `ag ask`), and raw `-j` / `--json` output.
 - **Headless Background Daemon (`ag serve start|stop|status`)**: Run the local `127.0.0.1` REST API, SSE stream, and incoming webhook listener in the background without opening the Electron GUI window.
 - **Bi-Directional Webhooks (Multi-URL, Retry, HMAC-SHA256 & Logs)**: Automatic Discord (`content`), Slack (`text`), and generic JSON notifications across all task/subtask/category/trash/reset events with 2-attempt retry, event filtering (`webhookEvents`), persistent SQLite `webhook_logs` (`ag hook logs`), and a full-featured incoming trigger (`POST /api/webhook/incoming`) supporting both `X-Agendamea-Secret` and `X-Agendamea-Signature` HMAC verification.
 
 ### <img src="assets/icons/database.svg" width="20" height="20" align="absmiddle" alt="" /> Self-Healing SQLite Engine, Advanced Trash & Clean Start
-- **WAL-Mode SQLite (`better-sqlite3`)**: Runs with `journal_mode = WAL`, `synchronous = NORMAL`, `foreign_keys = ON`, `busy_timeout = 5000`, and versioned migrations (`PRAGMA user_version = 3`).
+- **WAL-Mode SQLite (`better-sqlite3`)**: Runs with `journal_mode = WAL`, `synchronous = NORMAL`, `foreign_keys = ON`, `busy_timeout = 5000`, and versioned migrations (`PRAGMA user_version = 4`, FTS5 + Hybrid RAG chunk index).
 - **Corruption Self-Healing**: If a local database file is damaged by power loss, Agendamea preserves the broken file as `.corrupt-<timestamp>.bak` and initializes a clean database automatically.
 - **Searchable Trash Bin & 12-Second Undo**: Soft-deleted tasks and categories support instant search, type filters (`All`, `Tasks`, `Categories`), sorting (`Newest`, `Oldest`, `A-Z`, `Z-A`), and deletion date-range filtering, paired with a **12-second hover-pausing Undo toast**.
 - **Atomic Backup, Restore & Clean Start Reset**: One-click JSON export (`/api/export`), 5 MB validated atomic import (`/api/import`), and a 2-step **Reset All Data (Clean Start)** action with optional settings reset (`/api/reset`).
@@ -125,19 +125,20 @@ For effortless cross-device backup without vendor lock-in or server costs, Agend
 </div>
 
 ### Desktop & Local Backend
-- **Electron 45.4 & electron-builder 26.18** - Frameless Windows desktop shell, system tray, Jump List, global `Ctrl+Alt+N` hotkey, dynamic `.ico` generator, NSIS installer, Portable build, and Microsoft Store `.appx`/MSIX packaging
-- **Express 4.21 & Node.js 22+** - Loopback REST API (`127.0.0.1`), SSE live change stream (`/api/events`), bi-directional HMAC webhooks, multi-cloud folder sync, and in-memory gzip static delivery
-- **better-sqlite3 13.2** - High-throughput synchronous SQLite WAL engine with `user_version` migrations, `webhook_logs`, and `.corrupt-*.bak` self-healing
+- **Electron 45.4, .NET 10 WPF & electron-builder 26.18** - Frameless Windows desktop shell, taskbar voice overlay, system tray, Jump List, customizable global hotkeys, dynamic `.ico` generator, modern `640x420` monochrome WPF Setup & Uninstaller, Portable build, and Microsoft Store `.appx`/MSIX packaging
+- **Express 4.21 & Node.js 22+** - Loopback REST API (`127.0.0.1`), UTF-8/Windows-1254 safe JSON decoder, singleton SSE live stream (`/api/events`), bi-directional HMAC webhooks, multi-cloud folder sync, and memory-cached UI static delivery + on-demand `application/wasm` voice assets
+- **better-sqlite3 13.2** - High-throughput synchronous SQLite WAL engine (`user_version = 4`) with FTS5 + Hybrid RAG chunk index, `webhook_logs`, and `.corrupt-*.bak` self-healing
 
-### Headless Automation, CLI & MCP
+### Local AI, Neural Audio, CLI & MCP
+- **100% Offline Neural Voice & AI** - Mozilla RNNoise WASM (`48 kHz`), Silero VAD v5 ONNX, Piper VITS ONNX Neural TTS (5 verified voices + 5 styles + 5 chimes), Whisper.cpp + Qwen3 + Multilingual-E5, plus zero-download Ollama / LM Studio integration
 - **`shared/localStore.cjs`** - Unified Live-API + Cold-Start Offline SQLite engine with automatic schema init, cloud auto-detection, OS preference bridge, and headless daemon management
 - **`cli/agendamea.cjs` (`ag` / `agenda` / `agendamea`)** - Zero-dependency natural-language terminal CLI with Windows interactive stdout wrapper (`run-cli.ps1`)
-- **`mcp/server.cjs` (`ag mcp`)** - Built-in JSON-RPC 2.0 stdio MCP server exposing 20 complete headless tools
+- **`mcp/server.cjs` (`ag mcp`)** - Built-in JSON-RPC 2.0 stdio MCP server exposing 22 complete headless tools
 
 ### Frontend, Build & Release
 - **React 19, TypeScript 7, Tailwind CSS v4 & Vite 8** - Modular component architecture with Workbox PWA support and 73-language compact locale builder
-- **Node.js `node:test` via `tsx`** - 31 comprehensive unit, security, i18n zero-leakage, webhook, CLI, MCP, and performance test suites
-- **GitHub Actions & `electron-updater`** - Automated CI (`ci.yml`) and tagged Windows release pipeline (`release.yml`) with `latest.yml`, `.blockmap`, `SHA256SUMS.txt`, and `winget` manifests
+- **Node.js `node:test` + .NET Setup Tests** - 54 Node unit/AI/security/i18n/CLI/MCP/webhook tests + 13 .NET 10 WPF Setup & SFX engine tests
+- **GitHub Actions & `electron-updater`** - Automated CI (`ci.yml`) and tagged Windows release pipeline (`release.yml`) with `SHA256SUMS.txt` and `winget` manifests
 
 ---
 
@@ -146,42 +147,50 @@ For effortless cross-device backup without vendor lock-in or server costs, Agend
 ```tree
 Agendamea/
 ├── .github/workflows/
-│   ├── ci.yml                       # Automated tests, TypeScript lint & production build gate
-│   └── release.yml                  # Tagged Windows x64 Setup, Portable, Store .appx, latest.yml & SHA256SUMS
+│   ├── ci.yml                       # Automated Node + .NET setup tests, TypeScript lint & build gate
+│   └── release.yml                  # Tagged Windows x64 Modern Setup, Portable, Store .appx & SHA256SUMS
 ├── assets/
 │   ├── vellium-banner.svg           # Monochrome Vellium header banner
 │   └── icons/                       # Monochrome 20x20 documentation SVG icons
 ├── cli/
-│   └── agendamea.cjs                # Short quote-free CLI (ag / agenda / agendamea) + daemon & views
+│   └── agendamea.cjs                # Short quote-free CLI (ag / agenda / agendamea) + AI/RAG, daemon & views
 ├── mcp/
-│   └── server.cjs                   # Built-in JSON-RPC 2.0 stdio MCP server (20 headless tools)
+│   └── server.cjs                   # Built-in JSON-RPC 2.0 stdio MCP server (22 headless tools)
 ├── shared/
 │   ├── localStore.cjs               # Unified Live API + Cold-Start Offline WAL SQLite engine
+│   ├── aiCatalog.cjs                # Verified Apache 2.0 / MIT local AI catalog & Ollama/LM Studio probe
+│   ├── piperVoices.cjs              # Verified MIT / CC0 Piper VITS ONNX Neural TTS catalog & downloader
 │   ├── cliInstaller.cjs             # Shared Windows PATH shim installer (ag.cmd + run-cli.ps1)
 │   └── releaseUtils.cjs             # Shared SemVer comparator & GitHub release parser
+├── installer/
+│   ├── Agendamea.Setup/             # Native .NET 10 WPF 640x420 monochrome frameless Setup & Uninstaller
+│   └── Agendamea.Setup.Tests/       # 13 automated .NET Setup, SFX, Zip-Slip & 73-locale parity tests
 ├── docs/                            # Indexed architecture, i18n, release & Microsoft Store documentation
 ├── electron/
-│   ├── main.cjs                     # Electron main process, tray, Jump List, IPC, CLI shims & delta updater
+│   ├── main.cjs                     # Electron main process, tray, Jump List, IPC, CLI shims & updater
+│   ├── voiceOverlay.cjs             # Taskbar voice dictation overlay window controller
+│   ├── ai/                          # Local Whisper STT, Qwen3/Ollama LLM, embeddings & secure orchestrator
 │   ├── preload.cjs                  # Context-isolated renderer IPC bridge
 │   └── iconGenerator.cjs            # Pure-Node multi-resolution Windows .ico & .lnk updater
-├── electron-resources/              # Multi-language NSIS installer.nsh, BMPs, icons & APPX tiles
-├── public/                          # PWA manifest icons, Windows tiles & Agendamea SVG/PNG marks
-├── scripts/                         # esbuild server bundler, icon & NSIS bitmap generators
-├── winget/manifests/                # WinGet 1.6.0 manifests (Vellium.Agendamea 1.0.0)
+├── electron-resources/              # Windows icons & Microsoft Store APPX tiles
+├── public/                          # PWA manifest icons, Windows tiles, worklets & offline voice assets
+├── scripts/                         # esbuild server bundler, voice asset sync & modern WPF setup builder
+├── winget/manifests/                # WinGet 1.6.0 manifests (Vellium.Agendamea 1.1.0)
 ├── src/
-│   ├── api/client.ts                # Typed REST API client
-│   ├── components/                  # Workspace views, Detail panel, WelcomeModal, Settings tabs & Docs
-│   ├── db/database.ts               # TodoDatabase (SQLite WAL, migrations, CRUD, reset, webhook_logs)
-│   ├── hooks/                       # useOnlineStatus, useToast, useTodayDate, useDelayedFocus
+│   ├── api/                         # Typed REST client & shared singleton SSE eventStream bus
+│   ├── voice/                       # RNNoise WASM, Silero VAD v5, Piper ONNX TTS & AudioWorklet capture
+│   ├── components/                  # Workspace views, Detail panel, ContextMenu, WelcomeModal & Settings tabs
+│   ├── db/database.ts               # TodoDatabase (SQLite WAL v4, FTS5/RAG, CRUD, reset, webhook_logs)
+│   ├── hooks/                       # useNotificationCenter, useAppUpdater, useOnlineStatus & helpers
 │   ├── i18n/                        # 73-language catalog, compact builder, RTL & 5 legal documents
-│   ├── utils/                       # themes.ts, todoLogic.ts, todoLogic.test.ts (31 suites)
+│   ├── utils/                       # themes, shortcuts, notifications, jsonBodyDecoder & 54 test suites
 │   ├── App.tsx                      # Root state, SSE external sync listener, shortcuts & layout
 │   └── types.ts                     # Shared domain models
-├── server.ts                        # Express loopback API, SSE stream, bi-directional webhooks & cloud sync
-├── electron-builder.yml             # Windows NSIS, Portable & Microsoft Store APPX packaging config
+├── server.ts                        # Express loopback API, SSE stream, AI/TTS routes, webhooks & cloud sync
+├── electron-builder.yml             # Windows Portable & Microsoft Store APPX packaging config
 ├── CHANGELOG.md                     # Version history
 ├── LICENSE                          # MIT License (Vellium Teknoloji Anonim Sirketi)
-└── package.json                     # Scripts, bin (agendamea) & v1.0.0 metadata
+└── package.json                     # Scripts, bin (agendamea) & v1.1.0 metadata
 ```
 
 ---
@@ -211,12 +220,12 @@ flowchart TD
 
     subgraph HEADLESS["Headless Clients (Live API -> Offline SQLite Fallback)"]
         CLI["Terminal CLI (ag / agenda / agendamea)"]
-        MCP["Built-in MCP Server (20 Tools · JSON-RPC 2.0 stdio)"]
+        MCP["Built-in MCP Server (22 Tools · JSON-RPC 2.0 stdio)"]
         EXT["n8n / Zapier / Discord / Slack / Scripts"]
     end
 
     subgraph STORAGE["Local & User-Owned Storage"]
-        DB[("agendamea.db (SQLite WAL · v3 + webhook_logs)")]
+        DB[("agendamea.db (SQLite WAL · v4 FTS5/RAG + webhook_logs)")]
         CLOUD["OneDrive / Google Drive / iCloud / Dropbox Folder"]
     end
 
@@ -242,7 +251,7 @@ flowchart TD
 
 | Path / Boundary | Protection | Contents |
 | :--- | :--- | :--- |
-| `%APPDATA%\Agendamea\agendamea.db` | SQLite WAL, `foreign_keys = ON`, `.corrupt-*.bak` recovery | `categories`, `todos`, `subtasks`, `settings`, and `webhook_logs` tables (`user_version = 3`) |
+| `%APPDATA%\Agendamea\agendamea.db` | SQLite WAL, `foreign_keys = ON`, `.corrupt-*.bak` recovery | `categories`, `todos`, `subtasks`, `rag_chunks`, `settings`, and `webhook_logs` tables (`user_version = 4`) |
 | `%APPDATA%\Agendamea\runtime-port.json` | Loopback port discovery & headless PID metadata | Active local API port for live CLI/MCP routing |
 | `%APPDATA%\Agendamea\dynamic-icons\` | Generated multi-resolution `.ico` & tray `.png` | Active system-wide custom/themed Agendamea icons |
 | `%LOCALAPPDATA%\Agendamea\bin\` | User-scoped PATH shims (no UAC required) | `ag.cmd`, `agenda.cmd`, `agendamea.cmd`, and `run-cli.ps1` |
@@ -285,7 +294,7 @@ ag export backup.json
 ag update
 ```
 
-### Model Context Protocol (MCP) Server (`ag mcp` - 20 Built-in Tools)
+### Model Context Protocol (MCP) Server (`ag mcp` - 22 Built-in Tools)
 
 Add Agendamea to **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf**, or **VS Code** (no global Node.js required):
 
@@ -301,9 +310,9 @@ Add Agendamea to **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf**, 
 ```
 
 <details>
-<summary>View all 20 built-in MCP tools</summary>
+<summary>View all 22 built-in MCP tools</summary>
 
-`agendamea_status` · `agendamea_list_tasks` · `agendamea_get_task` · `agendamea_add_task` · `agendamea_update_task` · `agendamea_complete_task` · `agendamea_pin_task` · `agendamea_delete_task` · `agendamea_clear_completed` · `agendamea_manage_subtask` · `agendamea_list_categories` · `agendamea_manage_category` · `agendamea_list_trash` · `agendamea_manage_trash` · `agendamea_eisenhower_matrix` · `agendamea_views` · `agendamea_get_settings` · `agendamea_update_settings` · `agendamea_backup_and_sync` · `agendamea_webhook_and_server`
+`agendamea_status` · `agendamea_list_tasks` · `agendamea_get_task` · `agendamea_add_task` · `agendamea_update_task` · `agendamea_complete_task` · `agendamea_pin_task` · `agendamea_delete_task` · `agendamea_clear_completed` · `agendamea_manage_subtask` · `agendamea_list_categories` · `agendamea_manage_category` · `agendamea_list_trash` · `agendamea_manage_trash` · `agendamea_eisenhower_matrix` · `agendamea_views` · `agendamea_get_settings` · `agendamea_update_settings` · `agendamea_backup_and_sync` · `agendamea_webhook_and_server` · `agendamea_semantic_search` · `agendamea_ai_status`
 
 </details>
 
@@ -342,15 +351,16 @@ npm run electron:dev
 ### Tests & Quality Gates
 
 ```bash
-npm test          # 31 unit, SQLite, security, 73-language, CLI, MCP & webhook E2E suites
-npm run lint      # Strict TypeScript type-check (tsc --noEmit)
-npm run build     # Production Vite frontend + esbuild server bundle
+npm run lint        # Strict TypeScript type-check (tsc --noEmit)
+npm test            # 54 unit, AI/voice, SQLite, security, 73-language, CLI, MCP & webhook tests
+npm run test:setup  # 13 .NET 10 WPF modern setup, SFX & Zip-Slip security tests
+npm run build       # Sync offline voice assets + Vite frontend + esbuild server bundle
 ```
 
 ### Build Windows Installers
 
 ```bash
-# Windows x64 NSIS Setup + Portable builds (release/)
+# Windows x64 Modern Frameless WPF Setup + Portable builds (release/)
 npm run dist:win
 
 # Microsoft Store APPX/MSIX package (release/)
@@ -430,14 +440,14 @@ Sunucu maliyeti olmadan cihazlar arası yedekleme için **OneDrive**, **Google D
 - **Eisenhower Matrisi**: 4 kadranlı (`I Acil ve Önemli`, `II Önemli`, `III Acil`, `IV Sonra`) otomatik sınıflandırma ve sürükle-bırak önceliklendirme.
 - **Zengin Görev Detayları**: Başlangıç/bitiş tarih aralığı, saat planlama, çoklu `#etiket` yönetimi, sıralı alt görevler ve kapanışta `keepalive` güvenceli otomatik not kaydı.
 
-### <img src="assets/icons/terminal.svg" width="20" height="20" align="absmiddle" alt="" /> Yerleşik 20 Araçlı MCP Sunucusu, Kısa Terminal CLI (`ag`) ve Arayüzsüz Servis
-- **20 Araçlı Yerleşik MCP Sunucusu (`mcp/server.cjs` / `ag mcp`)**: **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf** ve **VS Code** için harici Node.js gerektirmeyen stdio JSON-RPC 2.0 sunucusu (hem **Canlı API** hem **Soğuk Başlangıç Çevrimdışı SQLite** desteği).
-- **Kısa ve Tırnaksız Terminal CLI (`ag` / `agenda` / `agendamea`)**: Ayarlar'dan tek tıkla veya `ag install` ile sıfır-GUI PATH kurulumu; 1-2-3 numaralama, doğal söz dizimi (`@bugun`, `@yarin`, `@YYYY-AA-GG..YYYY-AA-GG`, `14:30`, `!`, `*`, `^`, `#etiket`, `/Kategori`, `--note`, `--sub`), toplu işlemler (`ag ok 1 2 3`, `ag rm 1 2`), `stdin` boru hattı (`ag import -`), terminal görünümleri (`ag cal`, `ag kanban`, `ag matris`) ve `-j` JSON çıktısı.
+### <img src="assets/icons/terminal.svg" width="20" height="20" align="absmiddle" alt="" /> Yerleşik 22 Araçlı MCP Sunucusu, Kısa Terminal CLI (`ag`) ve Arayüzsüz Servis
+- **22 Araçlı Yerleşik MCP Sunucusu (`mcp/server.cjs` / `ag mcp`)**: **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf** ve **VS Code** için harici Node.js gerektirmeyen stdio JSON-RPC 2.0 sunucusu (hem **Canlı API** hem **Soğuk Başlangıç Çevrimdışı SQLite** desteği, yerel hibrit RAG ve AI durum araçları dahil).
+- **Kısa ve Tırnaksız Terminal CLI (`ag` / `agenda` / `agendamea`)**: Ayarlar'dan tek tıkla veya `ag install` ile sıfır-GUI PATH kurulumu; 1-2-3 numaralama, doğal söz dizimi (`@bugun`, `@yarin`, `@YYYY-AA-GG..YYYY-AA-GG`, `14:30`, `!`, `*`, `^`, `#etiket`, `/Kategori`, `--note`, `--sub`), toplu işlemler (`ag ok 1 2 3`, `ag rm 1 2`), `stdin` boru hattı (`ag import -`), terminal görünümleri (`ag cal`, `ag kanban`, `ag matris`), yerel AI/RAG (`ag ai`, `ag rag`, `ag ask`) ve `-j` JSON çıktısı.
 - **Arayüzsüz Arka Plan Servisi (`ag serve start|stop|status`)**: Electron penceresi açmadan `127.0.0.1` yerel REST API ve gelen webhook dinleyicisini arka planda çalıştırır.
 - **Çift Yönlü Webhook Otomasyonu**: Discord, Slack, n8n, Zapier, Make ve özel sunucular için çoklu URL desteği, otomatik retry, olay filtresi (`webhookEvents`), SQLite teslimat günlüğü (`ag hook logs`) ve `X-Agendamea-Secret` / `X-Agendamea-Signature` HMAC doğrulamalı tam kapsamlı gelen webhook (`POST /api/webhook/incoming`).
 
 ### <img src="assets/icons/database.svg" width="20" height="20" align="absmiddle" alt="" /> Kendini Onaran SQLite Motoru, Gelişmiş Çöp Kutusu ve Temiz Başlangıç
-- **WAL Modlu SQLite (`better-sqlite3`)**: `journal_mode = WAL`, `foreign_keys = ON`, sürüm takipli göçler (`user_version = 3`) ve bozulma durumunda `.corrupt-*.bak` koruyarak otomatik kurtarma.
+- **WAL Modlu SQLite (`better-sqlite3`)**: `journal_mode = WAL`, `foreign_keys = ON`, sürüm takipli göçler (`user_version = 4`, FTS5 + Hibrit RAG) ve bozulma durumunda `.corrupt-*.bak` koruyarak otomatik kurtarma.
 - **Aramalı Çöp Kutusu ve 12 Saniyelik Geri Al**: Anlık arama, tür filtresi, sıralama ve silinme tarih aralığı seçimi + fareyle duraklayan 12 saniyelik Geri Al bildirimi.
 - **Atomik Yedekleme ve Temiz Başlangıç (Verileri Sıfırla)**: 5 MB doğrulamalı JSON yedekleme/geri yükleme ve isteğe bağlı ayar sıfırlamalı 2 adımlı **Verileri Sıfırla** aracı.
 
@@ -468,15 +478,16 @@ git clone https://github.com/emirtdede/agendamea.git
 cd agendamea
 npm install
 
-# Testler ve Tip Kontrolü (31 test paketi)
-npm test
+# Testler ve Tip Kontrolü (54 Node + 13 .NET kurulum testi)
 npm run lint
+npm test
+npm run test:setup
 
 # Geliştirici Modu
 npm run dev
 npm run electron:dev
 
-# Windows Kurulum, Taşınabilir ve Store Paket Derleme (v1.0.0)
+# Windows Modern Kurulum, Taşınabilir ve Store Paket Derleme (v1.1.0)
 npm run dist:win
 npm run dist:win:appx
 ```

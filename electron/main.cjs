@@ -23,6 +23,7 @@ const {
   updateWindowsShortcuts,
 } = require('./iconGenerator.cjs');
 const { compareSemver, parseGitHubRelease } = require('../shared/releaseUtils.cjs');
+const { GITHUB_RELEASES_API, GITHUB_RELEASES_HTML } = require('../shared/constants.cjs');
 const cliInstaller = require('../shared/cliInstaller.cjs');
 const { VoiceOverlayManager } = require('./voiceOverlay.cjs');
 const PKG_VERSION = (() => {
@@ -1226,9 +1227,6 @@ ipcMain.handle('icon:apply', (event, payload) => {
     };
   }
 });
-
-const GITHUB_RELEASES_API = 'https://api.github.com/repos/emirtdede/agendamea/releases/latest';
-const GITHUB_RELEASES_HTML = 'https://github.com/emirtdede/agendamea/releases/latest';
 
 let nativeAutoUpdater = null;
 let nativeCheckHasUpdate = false;

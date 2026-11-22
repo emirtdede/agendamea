@@ -16,3 +16,4 @@ Thumbs.db
 .env*
 installer/**/bin/
 installer/**/obj/
+public/voice-assets/
