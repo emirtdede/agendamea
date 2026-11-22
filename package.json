@@ -38,7 +38,7 @@
     "test:setup": "npx tsx scripts/generate-installer-locales.mjs && dotnet run --project installer/Agendamea.Setup.Tests/Agendamea.Setup.Tests.csproj -c Release",
     "icons:generate": "node scripts/generate-icons.mjs",
     "icons:installer": "node scripts/generate-installer-assets.mjs",
-    "test": "tsx --test src/utils/todoLogic.test.ts src/utils/aiVoice.test.ts",
+    "test": "node scripts/sync-voice-assets.mjs && tsx --test src/utils/todoLogic.test.ts src/utils/aiVoice.test.ts",
     "clean": "node -e \"import('node:fs').then(fs=>{fs.rmSync('dist',{recursive:true,force:true});fs.rmSync('dist-server',{recursive:true,force:true});fs.rmSync('release',{recursive:true,force:true});fs.rmSync('server.js',{force:true});})\"",
     "lint": "tsc --noEmit"
   },

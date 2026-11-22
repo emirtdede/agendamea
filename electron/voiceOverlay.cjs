@@ -8,8 +8,14 @@
  * - Loads strictly over http://127.0.0.1:<port>/overlay.html (Chromium Secure Context for AudioWorklet)
  */
 
-const { BrowserWindow, screen } = require('electron');
 const path = require('node:path');
+
+function loadElectron() {
+  if (!process.versions || !process.versions.electron) {
+    throw new Error('VoiceOverlayManager requires the Electron runtime.');
+  }
+  return require('electron');
+}
 
 const OVERLAY_WIDTH = 440;
 const OVERLAY_HEIGHT = 176;
@@ -59,6 +65,7 @@ class VoiceOverlayManager {
   }
 
   _getTargetBounds() {
+    const { screen } = loadElectron();
     const cursorPoint = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursorPoint) || screen.getPrimaryDisplay();
     return computeOverlayBounds(display.workArea, OVERLAY_WIDTH, OVERLAY_HEIGHT, TASKBAR_MARGIN_PX);
@@ -81,6 +88,7 @@ class VoiceOverlayManager {
     if (this.window && !this.window.isDestroyed()) {
       return this.window;
     }
+    const { BrowserWindow } = loadElectron();
     const bounds = this._getTargetBounds();
     const win = new BrowserWindow({
       x: bounds.x,
