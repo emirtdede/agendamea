@@ -1733,6 +1733,33 @@ test('UTF-8 & Windows-1254 JSON request decoding prevents Turkish mojibake (U+FF
     const content = fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8');
     assert.equal(/[\u2013\u2014]/.test(content), false, `Em/en-dash found in ${rel}`);
   }
+
+  // 4. Explicit international charset header decoding (e.g. Cyrillic Windows-1251)
+  const win1251Payload = Buffer.concat([
+    Buffer.from('{"title":"', 'ascii'),
+    Buffer.from([0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2]), // 'Привет'
+    Buffer.from('"}', 'ascii'),
+  ]);
+  const parsedRu = JSON.parse(
+    decodeJsonRequestBuffer(win1251Payload, 'application/json; charset=windows-1251'),
+  ) as { title: string };
+  assert.equal(parsedRu.title, 'Привет');
+
+  // 5. All 73 languages have zero emoji leakage (no bell/star glyphs) and WelcomeModal enforces lang="en" on ISO codes
+  const { SUPPORTED_LANGUAGES } = await import('../i18n/languages.ts');
+  const { getDictionary } = await import('../i18n/localesWorld.ts');
+  for (const lm of SUPPORTED_LANGUAGES) {
+    const d = getDictionary(lm.code);
+    for (const [k, v] of Object.entries(d)) {
+      assert.equal(
+        /[\u2600-\u27BF]|\uD83D|\uD83C|\uD83E/.test(v),
+        false,
+        `Emoji leakage in ${lm.code}.${k}: ${v}`,
+      );
+    }
+  }
+  const welcomeSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/components/WelcomeModal.tsx'), 'utf8');
+  assert.ok(welcomeSrc.includes('lang="en"'), 'WelcomeModal ISO code badges must set lang="en" to avoid TR/AZ dotted-I');
 });
 
 test('Neural Audio Stack (RNNoise WASM + Silero VAD v5 ONNX) & Multiple Voice/Chime Presets', async () => {

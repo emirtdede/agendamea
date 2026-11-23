@@ -49,13 +49,13 @@ export const LegalSettingsTab = React.memo(function LegalSettingsTab({
             type="button"
             data-testid={`legal-doc-btn-${id}`}
             onClick={() => onOpenLegalDoc(id)}
-            className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+            className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-start text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
           >
             <span className="flex items-center gap-2.5 min-w-0">
               <Icon className="h-4 w-4 text-[var(--accent)] shrink-0" />
               <span className="truncate">{title}</span>
             </span>
-            <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
+            <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
           </button>
         ))}
       </div>

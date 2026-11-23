@@ -269,7 +269,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
       {/* Top frameless drag clearance (stops before top-right WindowControls) */}
       <div
         aria-hidden="true"
-        className="app-drag-region absolute left-0 right-36 top-0 z-10 h-9 select-none"
+        className="app-drag-region absolute start-0 end-36 top-0 z-10 h-9 select-none"
       />
 
       {/* Top Bar */}
@@ -676,7 +676,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
                   {t.startDateLabel}
                 </label>
                 <div className="relative flex items-center">
-                  <Calendar className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+                  <Calendar className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
                   <input
                     id="detail-start-date"
                     type="date"
@@ -684,7 +684,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
                     onChange={(e) =>
                       void onUpdate(todo.id, { startDate: e.target.value || null })
                     }
-                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
                   />
                 </div>
               </div>
@@ -697,7 +697,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
                   {t.dueDateLabel}
                 </label>
                 <div className="relative flex items-center">
-                  <Calendar className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+                  <Calendar className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
                   <input
                     id="detail-due-date"
                     type="date"
@@ -705,7 +705,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
                     onChange={(e) =>
                       void onUpdate(todo.id, { dueDate: e.target.value || null })
                     }
-                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
                   />
                 </div>
               </div>
@@ -721,7 +721,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
               </label>
               <div className="relative flex items-center gap-1.5">
                 <div className="relative flex flex-1 items-center">
-                  <Clock className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+                  <Clock className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
                   <input
                     id="detail-due-time"
                     type="time"
@@ -734,7 +734,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
                       }
                       void onUpdate(todo.id, patch);
                     }}
-                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
                   />
                 </div>
                 {todo.dueTime && (

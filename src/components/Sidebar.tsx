@@ -346,7 +346,7 @@ export const Sidebar = React.memo(function Sidebar({
           <div className="relative flex items-center">
             <Search
               aria-hidden="true"
-              className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]"
+              className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]"
             />
             <input
               ref={searchInputRef}
@@ -361,14 +361,14 @@ export const Sidebar = React.memo(function Sidebar({
               }}
               aria-label={t.searchPlaceholder}
               placeholder={t.searchPlaceholder}
-              className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-7 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+              className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-7 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => onSearchChange('')}
                 aria-label={t.clearSearch}
-                className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="absolute end-1.5 flex h-5 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

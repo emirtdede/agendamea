@@ -2653,7 +2653,7 @@ export default function App() {
 
         <OfflineIndicator />
 
-        <div className="app-no-drag fixed top-2 right-2.5 z-[60]">
+        <div className="app-no-drag fixed top-2 end-2.5 z-[60]">
           <WindowControls onNotify={handleWindowNotify} />
         </div>
       </div>

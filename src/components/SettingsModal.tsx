@@ -420,7 +420,7 @@ export function SettingsModal({
                     data-testid={`settings-tab-${id}`}
                     aria-selected={isSelected}
                     onClick={() => handleSelectTab(id)}
-                    className={`group flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-[7px] text-left text-[13px] font-medium transition-colors ${
+                    className={`group flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-[7px] text-start text-[13px] font-medium transition-colors ${
                       isSelected
                         ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
                         : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -463,7 +463,7 @@ export function SettingsModal({
                   type="button"
                   data-testid="settings-sidebar-welcome-guide"
                   onClick={onOpenWelcomeGuide}
-                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-start text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   <Sparkles className="h-4 w-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors" />
                   <span className="truncate">{t.welcomeReplayButton}</span>
@@ -490,7 +490,7 @@ export function SettingsModal({
 
       {/* Compact / Responsive Top Bar + Horizontal Pill Tabs (< 1024px) */}
       <div className="lg:hidden shrink-0 border-b border-[var(--border)] bg-[var(--surface)] select-none">
-        <div className="app-drag-region flex items-center justify-between gap-2 pl-4 pr-32 pt-3 pb-2">
+        <div className="app-drag-region flex items-center justify-between gap-2 ps-4 pe-32 pt-3 pb-2">
           <div className="app-no-drag flex items-center gap-2 min-w-0">
             {onOpenMobileSidebar && (
               <button
@@ -574,7 +574,7 @@ export function SettingsModal({
 
       {/* Right Scrollable Settings Content Pane */}
       <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--canvas)]">
-        <header className="hidden lg:flex app-drag-region h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)]/75 pl-8 pr-36 select-none">
+        <header className="hidden lg:flex app-drag-region h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)]/75 ps-8 pe-36 select-none">
           <div className="flex items-center gap-2.5 min-w-0">
             <CurrentTabIcon className="h-4 w-4 text-[var(--accent)] shrink-0" />
             <h1 className="font-display text-[15px] font-bold tracking-tight text-[var(--text-primary)] whitespace-nowrap shrink-0">

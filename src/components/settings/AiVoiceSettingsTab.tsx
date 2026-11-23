@@ -719,7 +719,7 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab() {
                 type="button"
                 data-testid={`ai-tier-${card.id}`}
                 onClick={() => void handleSelectTier(card.id)}
-                className={`flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-left transition-all ${
+                className={`flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-start transition-all ${
                   isSelected
                     ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
                     : 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]'
@@ -767,7 +767,7 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab() {
                   : 'external-ollama',
               )
             }
-            className="flex w-full items-center justify-between gap-3 p-3.5 text-left"
+            className="flex w-full items-center justify-between gap-3 p-3.5 text-start"
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">

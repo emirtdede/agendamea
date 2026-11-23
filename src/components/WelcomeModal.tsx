@@ -287,14 +287,14 @@ export function WelcomeModal({
               {/* Search Input (Cols 1-2) + Selected Language Display (Col 3, pixel-aligned with tile grid below) */}
               <div className="mt-4 grid grid-cols-3 items-center gap-2 pr-2 shrink-0">
                 <div className="relative col-span-2 flex items-center">
-                  <Search className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-[var(--text-muted)]" />
+                  <Search className="pointer-events-none absolute start-3 h-3.5 w-3.5 text-[var(--text-muted)]" />
                   <input
                     type="text"
                     value={langSearch}
                     onChange={(e) => setLangSearch(e.target.value)}
                     placeholder={t.languageSearchPlaceholder}
                     aria-label={t.languageSearchPlaceholder}
-                    className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-9 pr-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+                    className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-9 pe-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
                   />
                 </div>
 
@@ -308,7 +308,11 @@ export function WelcomeModal({
                     <span className="truncate text-xs font-semibold text-[var(--text-primary)]">
                       {meta.nativeName}
                     </span>
-                    <span className="rounded bg-[var(--surface)] px-1.5 py-0.5 font-mono-tabular text-[9px] font-semibold uppercase text-[var(--text-muted)] shrink-0">
+                    <span
+                      lang="en"
+                      dir="ltr"
+                      className="rounded bg-[var(--surface)] px-1.5 py-0.5 font-mono-tabular text-[9px] font-semibold uppercase text-[var(--text-muted)] shrink-0"
+                    >
                       {meta.code}
                     </span>
                   </span>
@@ -321,7 +325,7 @@ export function WelcomeModal({
                 role="listbox"
                 aria-label={t.languageSectionTitle}
                 data-testid="welcome-language-listbox"
-                className="mt-3 grid h-[228px] grid-cols-3 content-start gap-2 overflow-y-auto pr-0.5"
+                className="mt-3 grid h-[228px] grid-cols-3 content-start gap-2 overflow-y-auto pe-0.5"
               >
                 {filteredLanguages.map((item) => {
                   const selected = item.code === lang;
@@ -332,7 +336,7 @@ export function WelcomeModal({
                       role="option"
                       aria-selected={selected}
                       onClick={() => onChangeLanguage(item.code as LanguageCode)}
-                      className={`flex h-10 items-center justify-between gap-2 rounded-lg border px-3 text-left transition-colors ${
+                      className={`flex h-10 items-center justify-between gap-2 rounded-lg border px-3 text-start transition-colors ${
                         selected
                           ? 'border-[var(--text-primary)] bg-[var(--surface-hover)] text-[var(--text-primary)]'
                           : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]'
@@ -342,7 +346,11 @@ export function WelcomeModal({
                         <span className="truncate text-xs font-medium text-[var(--text-primary)]">
                           {item.nativeName}
                         </span>
-                        <span className="rounded bg-[var(--surface)] px-1.5 py-0.5 font-mono-tabular text-[9px] font-semibold uppercase text-[var(--text-muted)] shrink-0">
+                        <span
+                          lang="en"
+                          dir="ltr"
+                          className="rounded bg-[var(--surface)] px-1.5 py-0.5 font-mono-tabular text-[9px] font-semibold uppercase text-[var(--text-muted)] shrink-0"
+                        >
                           {item.code}
                         </span>
                       </span>

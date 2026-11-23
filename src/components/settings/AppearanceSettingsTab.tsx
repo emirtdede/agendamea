@@ -173,7 +173,7 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
               </>
             ) : (
               <>
-                <span>{activeThemeHex}</span>
+                <span dir="ltr">{activeThemeHex}</span>
                 <Copy className="h-3 w-3 opacity-65" />
               </>
             )}
@@ -191,7 +191,7 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
                   type="button"
                   onClick={() => onChangeTheme(theme.id)}
                   aria-pressed={isSelected}
-                  className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
+                  className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
                     isSelected
                       ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
                       : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -218,7 +218,7 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
               data-testid="custom-theme-button"
               onClick={() => onChangeTheme('custom')}
               aria-pressed={themeId === 'custom'}
-              className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
+              className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
                 themeId === 'custom'
                   ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
                   : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -293,7 +293,7 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
               </>
             ) : (
               <>
-                <span>{activeIconHex}</span>
+                <span dir="ltr">{activeIconHex}</span>
                 <Copy className="h-3 w-3 opacity-65" />
               </>
             )}
@@ -306,7 +306,7 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
             data-testid="app-icon-toggle-btn"
             onClick={() => setIsAppIconOpen((prev) => !prev)}
             aria-expanded={isAppIconOpen}
-            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-hover)]/60 transition-colors"
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-start hover:bg-[var(--surface-hover)]/60 transition-colors"
           >
             <div className="flex items-center gap-3 min-w-0">
               <BrandMark
@@ -356,7 +356,7 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
                       data-testid={`app-icon-${opt.id}`}
                       aria-pressed={selected}
                       onClick={() => onChangeAppIcon(opt.id)}
-                      className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
+                      className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
                         selected
                           ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
                           : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -395,7 +395,7 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
                       data-testid={`app-icon-${item.id}`}
                       aria-pressed={selected}
                       onClick={() => onChangeAppIcon(item.id)}
-                      className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
+                      className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
                         selected
                           ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
                           : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -420,7 +420,7 @@ export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
                   data-testid="app-icon-custom"
                   aria-pressed={appIconId === 'custom'}
                   onClick={() => onChangeAppIcon('custom')}
-                  className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-[13px] font-medium transition-colors ${
+                  className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
                     appIconId === 'custom'
                       ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
                       : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'

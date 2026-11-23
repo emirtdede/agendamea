@@ -334,6 +334,8 @@ export function ColorSpectrumPicker({
                 setHexDraft(normalized);
               }
             }}
+            lang="en"
+            dir="ltr"
             className="h-7 w-[92px] shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-center font-mono-tabular text-xs font-semibold uppercase text-[var(--text-primary)] focus:border-[var(--accent)]"
           />
         </div>

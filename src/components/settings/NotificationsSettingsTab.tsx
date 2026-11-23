@@ -176,7 +176,7 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
                 data-testid={`notification-profile-${id}`}
                 aria-pressed={active}
                 onClick={() => onApplyProfile(id)}
-                className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                className={`flex items-start gap-3 rounded-xl border p-3.5 text-start transition-all ${
                   active
                     ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
                     : 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]'

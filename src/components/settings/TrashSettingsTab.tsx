@@ -178,7 +178,7 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
           >
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative flex flex-1 min-w-[200px] items-center">
-                <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+                <Search className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
                 <input
                   type="text"
                   data-testid="trash-search-input"
@@ -186,14 +186,14 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                   onChange={(e) => setTrashSearchQuery(e.target.value)}
                   placeholder={t.trashSearchPlaceholder}
                   aria-label={t.trashSearchPlaceholder}
-                  className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] pl-8 pr-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
+                  className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
                 />
                 {trashSearchQuery && (
                   <button
                     type="button"
                     onClick={() => setTrashSearchQuery('')}
                     aria-label={t.clearSearch}
-                    className="absolute right-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                    className="absolute end-2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>

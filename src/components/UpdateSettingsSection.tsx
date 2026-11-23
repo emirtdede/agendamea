@@ -81,14 +81,14 @@ export const LanguageSelectorSection = React.memo(function LanguageSelectorSecti
         {isLangListOpen && (
           <div className="animate-tab-enter border-t border-[var(--border)] p-3.5 space-y-2.5 bg-[var(--surface-subtle)]/50">
             <div className="relative flex items-center">
-              <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <Search className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
               <input
                 type="text"
                 value={langQuery}
                 onChange={(e) => setLangQuery(e.target.value)}
                 placeholder={t.languageSearchPlaceholder}
                 aria-label={t.languageSearchPlaceholder}
-                className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] pl-8 pr-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
+                className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] ps-8 pe-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
               />
             </div>
 

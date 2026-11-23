@@ -500,7 +500,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
                     data-testid={`cloud-provider-${provider.id}`}
                     disabled={isOneDriveBusy}
                     onClick={() => void handleSelectCloudProvider(provider)}
-                    className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-45 ${
+                    className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start transition-colors disabled:opacity-45 ${
                       isActive
                         ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
                         : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'

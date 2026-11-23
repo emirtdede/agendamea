@@ -2,8 +2,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-body: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', 'Nirmala UI', 'Leelawadee UI', 'Myanmar Text', 'Ebrima', 'Malgun Gothic', 'Yu Gothic UI', 'Microsoft YaHei UI', 'Microsoft JhengHei UI', sans-serif;
+  --font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', 'Nirmala UI', 'Leelawadee UI', 'Myanmar Text', 'Ebrima', 'Malgun Gothic', 'Yu Gothic UI', 'Microsoft YaHei UI', 'Microsoft JhengHei UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
   /* Default Light Theme (Obsidian) tokens before JS hydration */
@@ -60,6 +60,37 @@
 
   .dark body {
     letter-spacing: 0.008em;
+  }
+
+  /* Complex-shaping & cursive scripts (Arabic, Persian, Urdu, Indic, Thai, Lao, Khmer, Burmese)
+     must never receive artificial letter-spacing, which cracks cursive letter joins and ligatures. */
+  html[dir='rtl'] body,
+  html[dir='rtl'] h1,
+  html[dir='rtl'] h2,
+  html[dir='rtl'] h3,
+  html[dir='rtl'] h4,
+  html:is(
+      :lang(ar),
+      :lang(fa),
+      :lang(ur),
+      :lang(hi),
+      :lang(mr),
+      :lang(ne),
+      :lang(bn),
+      :lang(pa),
+      :lang(gu),
+      :lang(ta),
+      :lang(te),
+      :lang(kn),
+      :lang(ml),
+      :lang(si),
+      :lang(th),
+      :lang(lo),
+      :lang(km),
+      :lang(my)
+    )
+    body {
+    letter-spacing: 0 !important;
   }
 
   #root {

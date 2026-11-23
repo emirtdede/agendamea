@@ -141,7 +141,10 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
                 <span className="font-display text-sm font-bold text-[var(--text-primary)]">
                   Agendamea
                 </span>
-                <span className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-1.5 py-0.5 font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                <span
+                  dir="ltr"
+                  className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-1.5 py-0.5 font-mono-tabular text-[11px] text-[var(--text-muted)]"
+                >
                   v{APP_VERSION}
                 </span>
               </div>

@@ -687,7 +687,10 @@ async function startServer() {
   );
   app.use((req, res, next) => {
     if (Buffer.isBuffer(req.body)) {
-      const rawText = decodeJsonRequestBuffer(req.body);
+      const rawText = decodeJsonRequestBuffer(
+        req.body,
+        typeof req.headers['content-type'] === 'string' ? req.headers['content-type'] : undefined,
+      );
       (req as express.Request & { rawBody?: string }).rawBody = rawText;
       if (!rawText.trim()) {
         req.body = {};
