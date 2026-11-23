@@ -1224,7 +1224,10 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
                           >
                             {genderLabel}
                           </span>
-                          <span className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10px] uppercase text-[var(--text-muted)]">
+                          <span
+                            lang="en"
+                            className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10px] uppercase text-[var(--text-muted)]"
+                          >
                             {pv.license}
                           </span>
                           <span className="font-mono-tabular text-[10px] text-[var(--text-muted)]">
@@ -1389,7 +1392,10 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-semibold text-[var(--text-primary)]">{m.label}</span>{' '}
-                    <span className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10px] uppercase text-[var(--text-muted)]">
+                    <span
+                      lang="en"
+                      className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10px] uppercase text-[var(--text-muted)]"
+                    >
                       {m.role} · {m.license}
                     </span>{' '}
                     <span className="font-mono-tabular text-[10.5px] text-[var(--text-muted)]">
