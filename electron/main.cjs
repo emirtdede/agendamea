@@ -973,6 +973,36 @@ ipcMain.handle('shortcut:set-global-quick-add-key', (_event, shortcutKey) => {
   return { ok: registered, globalQuickAddShortcutKey: activeGlobalQuickAddKey };
 });
 
+const activeNotifications = new Set();
+
+function ensureStartMenuShortcutAumid() {
+  if (process.platform !== 'win32' || process.windowsStore || !app.isPackaged) return;
+  try {
+    const appData = process.env.APPDATA;
+    if (!appData) return;
+    const startLnk = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Agendamea.lnk');
+    if (!fs.existsSync(startLnk)) return;
+    const existing = shell.readShortcutLink(startLnk);
+    if (
+      existing &&
+      typeof existing.appUserModelId === 'string' &&
+      existing.appUserModelId.toLowerCase() === APP_USER_MODEL_ID
+    ) {
+      return;
+    }
+    shell.writeShortcutLink(startLnk, 'update', {
+      target: existing?.target || process.execPath,
+      cwd: existing?.cwd || path.dirname(process.execPath),
+      description: existing?.description || 'Agendamea',
+      icon: existing?.icon || process.execPath,
+      iconIndex: existing?.iconIndex ?? 0,
+      appUserModelId: APP_USER_MODEL_ID,
+    });
+  } catch {
+    // Best-effort AUMID repair for Windows native toast reliability
+  }
+}
+
 ipcMain.handle('notification:show', (_event, payload) => {
   try {
     if (!Notification || typeof Notification.isSupported !== 'function' || !Notification.isSupported()) {
@@ -992,12 +1022,27 @@ ipcMain.handle('notification:show', (_event, payload) => {
       icon: icoPath && fs.existsSync(icoPath) ? icoPath : undefined,
       silent: Boolean(payload?.silent),
     });
+    // Retain notification reference until closed/clicked/failed so V8 GC never drops click listeners on Windows
+    activeNotifications.add(notif);
+    let released = false;
+    const releaseNotif = () => {
+      if (released) return;
+      released = true;
+      activeNotifications.delete(notif);
+      clearTimeout(cleanupTimer);
+    };
+    const cleanupTimer = setTimeout(releaseNotif, 60_000);
+    cleanupTimer.unref?.();
+
     notif.on('click', () => {
+      releaseNotif();
       showAndFocusMainWindow();
       if (todoId && mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('app:focus-todo', todoId);
       }
     });
+    notif.on('close', releaseNotif);
+    notif.on('failed', releaseNotif);
     notif.show();
     return { ok: true, supported: true };
   } catch {
@@ -1668,6 +1713,7 @@ app
     syncVoiceDictationShortcut(activeVoiceShortcut);
     rebuildWindowsJumpList();
     syncExistingCliShimsOnStartup();
+    ensureStartMenuShortcutAumid();
 
     // WBS-5.2: Handshake with an already-running `ag serve` headless daemon in the same userData dir
     // so Electron and CLI share a single loopback server + single GPU/embedding worker (zero SQLITE_BUSY!).

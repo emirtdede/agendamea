@@ -53,7 +53,13 @@ function formatBytes(bytes: number | null | undefined): string {
   return `${Math.round(n / (1024 * 1024))} MB`;
 }
 
-export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab() {
+interface AiVoiceSettingsTabProps {
+  onNotifyVoice?: (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => void;
+}
+
+export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
+  onNotifyVoice,
+}: AiVoiceSettingsTabProps) {
   const { t, lang } = useI18n();
   const [status, setStatus] = useState<AiStatusPayload | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -390,6 +396,10 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab() {
         const modeLabel = res?.mode || 'fts5';
         const recomputed = typeof res?.recomputed === 'number' ? res.recomputed : 0;
         setReindexNotice(`${t.aiRagReindexButton}: OK (${modeLabel}, ${recomputed})`);
+        onNotifyVoice?.({
+          title: t.aiRagReindexButton,
+          body: `${modeLabel} (${recomputed})`,
+        });
       }
     } catch {
       if (isMountedRef.current) setActionError(t.operationFailedToast);

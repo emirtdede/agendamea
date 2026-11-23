@@ -20,6 +20,36 @@ import {
   shouldDeliverNotification,
 } from '../utils/notifications';
 
+const SENT_REMINDERS_STORAGE_KEY = 'agendamea-sent-reminders-v1';
+const MAX_PERSISTED_REMINDER_KEYS = 300;
+
+function loadPersistedSentReminderKeys(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SENT_REMINDERS_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return new Set(
+        parsed
+          .filter((item): item is string => typeof item === 'string' && item.length > 0)
+          .slice(-MAX_PERSISTED_REMINDER_KEYS),
+      );
+    }
+  } catch {
+    // Ignore storage read failures
+  }
+  return new Set();
+}
+
+function persistSentReminderKeys(keys: Set<string>): void {
+  try {
+    const trimmed = Array.from(keys).slice(-MAX_PERSISTED_REMINDER_KEYS);
+    localStorage.setItem(SENT_REMINDERS_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // Ignore storage write failures
+  }
+}
+
 export interface NotificationDispatchPayload {
   title: string;
   body?: string;
@@ -51,7 +81,7 @@ export function useNotificationCenter({
   leadMinutesRef.current = notificationLeadMinutes;
   const todosRef = useRef(todos);
   todosRef.current = todos;
-  const sentKeysRef = useRef<Set<string>>(new Set());
+  const sentKeysRef = useRef<Set<string>>(loadPersistedSentReminderKeys());
 
   const hydrateNotificationSettings = useCallback((settings: AppSettings) => {
     const channels = sanitizeNotificationChannels(settings.notificationChannels);
@@ -132,17 +162,21 @@ export function useNotificationCenter({
 
   const sendTestNotification = useCallback(() => {
     const dict = tRef.current;
-    // Test honors active profile if possible, otherwise still previews both if silenced
+    // Honor active channel selection; if all channels are silenced (Focus Mode), preview both so user can verify delivery
     const anyDesktop = Object.values(channelsRef.current).some(
       (m) => m === 'both' || m === 'desktop',
     );
     const anyInApp = Object.values(channelsRef.current).some(
       (m) => m === 'both' || m === 'inApp',
     );
-    if (anyInApp || !anyDesktop) {
+    const allSilenced = !anyDesktop && !anyInApp;
+    const sendInApp = anyInApp || allSilenced;
+    const sendDesktop = anyDesktop || allSilenced;
+
+    if (sendInApp) {
       showInfoToast(`${dict.notificationsTestTitle}: ${dict.notificationsTestBody}`, 'info');
     }
-    if (anyDesktop) {
+    if (sendDesktop) {
       if (window.agendameaWindow?.showDesktopNotification) {
         void window.agendameaWindow
           .showDesktopNotification({
@@ -181,9 +215,11 @@ export function useNotificationCenter({
       const hits = evaluateTaskReminders(todosRef.current, now, leadMinutesRef.current);
       if (hits.length === 0) return;
       const dict = tRef.current;
+      let addedAny = false;
       for (const hit of hits) {
         if (sentKeysRef.current.has(hit.reminderKey)) continue;
         sentKeysRef.current.add(hit.reminderKey);
+        addedAny = true;
         const title =
           hit.kind === 'upcoming'
             ? dict.notificationTaskUpcomingTitle
@@ -197,10 +233,13 @@ export function useNotificationCenter({
           todoId: hit.todo.id,
         });
       }
-      // Keep dedup set bounded across multi-day sessions
-      if (sentKeysRef.current.size > 400) {
+      // Keep dedup set bounded and persisted across restarts
+      if (sentKeysRef.current.size > MAX_PERSISTED_REMINDER_KEYS) {
         const entries = Array.from(sentKeysRef.current).slice(-200);
         sentKeysRef.current = new Set(entries);
+      }
+      if (addedAny) {
+        persistSentReminderKeys(sentKeysRef.current);
       }
     };
 

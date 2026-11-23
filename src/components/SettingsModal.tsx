@@ -90,6 +90,8 @@ interface SettingsModalProps {
   ) => void;
   onChangeNotificationLeadMinutes?: (minutes: number) => void;
   onSendTestNotification?: () => void;
+  onNotifyVoice?: (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => void;
+  onNotifyCloudSync?: (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => void;
   dragLocked: boolean;
   onChangeMode: (mode: ThemeMode) => void;
   onChangeTheme: (id: ThemeId) => void;
@@ -189,6 +191,8 @@ export function SettingsModal({
   onChangeNotificationChannel,
   onChangeNotificationLeadMinutes,
   onSendTestNotification,
+  onNotifyVoice,
+  onNotifyCloudSync,
   dragLocked,
   onChangeMode,
   onChangeTheme,
@@ -671,7 +675,7 @@ export function SettingsModal({
                 onSendTest={() => onSendTestNotification?.()}
               />
             ) : activeTab === 'ai' ? (
-              <AiVoiceSettingsTab />
+              <AiVoiceSettingsTab onNotifyVoice={onNotifyVoice} />
             ) : activeTab === 'data' ? (
               <DataBackupSettingsTab
                 totalTodoCount={totalTodoCount}
@@ -686,6 +690,7 @@ export function SettingsModal({
                 onImportBackup={onImportBackup}
                 onApplyRestoredBootstrap={onApplyRestoredBootstrap}
                 onResetAllData={onResetAllData}
+                onNotifyCloudSync={onNotifyCloudSync}
                 formatTimestamp={formatTimestamp}
               />
             ) : activeTab === 'trash' ? (

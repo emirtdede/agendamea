@@ -247,6 +247,20 @@ export default function App() {
     [dispatchNotification],
   );
 
+  const dispatchVoiceNotification = useCallback(
+    (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => {
+      dispatchNotification('voiceAssistant', payload);
+    },
+    [dispatchNotification],
+  );
+
+  const dispatchCloudSyncNotification = useCallback(
+    (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => {
+      dispatchNotification('cloudSync', payload);
+    },
+    [dispatchNotification],
+  );
+
   const {
     autoUpdateCheck,
     setAutoUpdateCheck,
@@ -403,6 +417,26 @@ export default function App() {
   useEffect(() => {
     let refreshTimer: number | null = null;
     const unsub = subscribeServerEvents((parsed) => {
+      if (parsed?.type === 'ai.download.progress' && parsed.done && parsed.ok !== false) {
+        const modelLabel = typeof parsed.modelId === 'string' ? parsed.modelId : '';
+        dispatchVoiceNotification({
+          title: tRef.current.notificationsEventVoice,
+          body: modelLabel
+            ? `${modelLabel} (${tRef.current.aiModelInstalledBadge})`
+            : tRef.current.aiModelInstalledBadge,
+        });
+        return;
+      }
+      if (parsed?.type === 'tts.download.progress' && parsed.done && parsed.ok !== false) {
+        const voiceLabel = typeof parsed.voiceId === 'string' ? parsed.voiceId : '';
+        dispatchVoiceNotification({
+          title: tRef.current.notificationsEventVoice,
+          body: voiceLabel
+            ? `${voiceLabel} (${tRef.current.aiModelInstalledBadge})`
+            : tRef.current.aiModelInstalledBadge,
+        });
+        return;
+      }
       if (parsed?.type && parsed.type !== 'changed') {
         return;
       }
@@ -416,7 +450,7 @@ export default function App() {
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       unsub();
     };
-  }, [loadData]);
+  }, [dispatchVoiceNotification, loadData]);
 
   // Handle Windows Jump List / PWA shortcut launch query params (?view=... & ?action=new)
   useEffect(() => {
@@ -1790,6 +1824,8 @@ export default function App() {
               onChangeNotificationChannel={updateNotificationChannel}
               onChangeNotificationLeadMinutes={updateNotificationLeadMinutes}
               onSendTestNotification={sendTestNotification}
+              onNotifyVoice={dispatchVoiceNotification}
+              onNotifyCloudSync={dispatchCloudSyncNotification}
               dragLocked={dragLocked}
               onChangeMode={handleModeChange}
               onChangeTheme={handleThemeChange}

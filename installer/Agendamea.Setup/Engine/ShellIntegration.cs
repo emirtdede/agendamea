@@ -15,6 +15,19 @@ public static class ShellIntegration
     public const string UninstallRegPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Agendamea";
     public const string RunRegPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     public const string RunValueName = "Agendamea";
+    public const string AppUserModelId = "dev.vellium.agendamea";
+
+    private static readonly PropertyKey PkeyAppUserModelId = new()
+    {
+        fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"),
+        pid = 5,
+    };
+
+    private const ushort VtLpwstr = 31;
+    private const uint StgmRead = 0x00000000;
+
+    [DllImport("ole32.dll")]
+    private static extern int PropVariantClear(ref PropVariant pvar);
 
     private const uint SHCNE_ASSOCCHANGED = 0x08000000;
     private const uint SHCNF_IDLIST = 0x0000;
@@ -68,7 +81,8 @@ public static class ShellIntegration
         string targetExePath,
         string workingDir,
         string description,
-        string? iconPath = null)
+        string? iconPath = null,
+        string? appUserModelId = AppUserModelId)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(shortcutPath))!);
         var link = (IShellLinkW)new ShellLinkCoClass();
@@ -79,8 +93,62 @@ public static class ShellIntegration
             link.SetDescription(description);
             link.SetIconLocation(iconPath ?? targetExePath, 0);
 
+            if (!string.IsNullOrWhiteSpace(appUserModelId) && link is IPropertyStore propStore)
+            {
+                var pv = new PropVariant
+                {
+                    vt = VtLpwstr,
+                    pointerValue = Marshal.StringToCoTaskMemUni(appUserModelId),
+                };
+                try
+                {
+                    var key = PkeyAppUserModelId;
+                    propStore.SetValue(ref key, ref pv);
+                    propStore.Commit();
+                }
+                finally
+                {
+                    PropVariantClear(ref pv);
+                }
+            }
+
             var persistFile = (IPersistFile)link;
             persistFile.Save(shortcutPath, false);
+        }
+        finally
+        {
+            if (Marshal.IsComObject(link))
+            {
+                Marshal.ReleaseComObject(link);
+            }
+        }
+    }
+
+    public static string? ReadShortcutAppUserModelId(string shortcutPath)
+    {
+        if (!File.Exists(shortcutPath)) return null;
+        var link = (IShellLinkW)new ShellLinkCoClass();
+        try
+        {
+            var persistFile = (IPersistFile)link;
+            persistFile.Load(shortcutPath, (int)StgmRead);
+            if (link is IPropertyStore propStore)
+            {
+                var key = PkeyAppUserModelId;
+                propStore.GetValue(ref key, out var pv);
+                try
+                {
+                    if (pv.vt == VtLpwstr && pv.pointerValue != IntPtr.Zero)
+                    {
+                        return Marshal.PtrToStringUni(pv.pointerValue);
+                    }
+                }
+                finally
+                {
+                    PropVariantClear(ref pv);
+                }
+            }
+            return null;
         }
         finally
         {
@@ -264,5 +332,31 @@ public static class ShellIntegration
         void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, int dwReserved);
         void Resolve(IntPtr hwnd, int fFlags);
         void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    private struct PropertyKey
+    {
+        public Guid fmtid;
+        public uint pid;
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 24)]
+    private struct PropVariant
+    {
+        [FieldOffset(0)] public ushort vt;
+        [FieldOffset(8)] public IntPtr pointerValue;
+    }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
+    private interface IPropertyStore
+    {
+        int GetCount(out uint cProps);
+        int GetAt(uint iProp, out PropertyKey pkey);
+        int GetValue(ref PropertyKey key, out PropVariant pv);
+        int SetValue(ref PropertyKey key, ref PropVariant pv);
+        int Commit();
     }
 }

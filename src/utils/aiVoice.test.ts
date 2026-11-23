@@ -1924,3 +1924,35 @@ test('Neural Audio Stack (RNNoise WASM + Silero VAD v5 ONNX) & Multiple Voice/Ch
     assert.equal(/[\u2013\u2014]/.test(src), false, `Em/en-dash found in ${rel}`);
   }
 });
+
+test('Notification pipeline hardening: AUMID shortcut, Electron GC retention, all 6 events wired, FIFO toast queue & persistent dedup', () => {
+  const mainCjs = fs.readFileSync(path.resolve(process.cwd(), 'electron/main.cjs'), 'utf8');
+  assert.ok(mainCjs.includes('activeNotifications.add(notif)'), 'main.cjs must retain Electron Notification refs against V8 GC');
+  assert.ok(mainCjs.includes('ensureStartMenuShortcutAumid'), 'main.cjs must ensure Start Menu shortcut carries AppUserModelID');
+
+  const shellCs = fs.readFileSync(
+    path.resolve(process.cwd(), 'installer/Agendamea.Setup/Engine/ShellIntegration.cs'),
+    'utf8',
+  );
+  assert.ok(shellCs.includes('dev.vellium.agendamea'), 'ShellIntegration.cs must embed AppUserModelID');
+  assert.ok(shellCs.includes('IPropertyStore'), 'ShellIntegration.cs must set System.AppUserModel.ID via COM IPropertyStore');
+
+  const appTsx = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  assert.ok(appTsx.includes("dispatchNotification('voiceAssistant'"), 'App.tsx must wire voiceAssistant notification channel');
+  assert.ok(appTsx.includes("dispatchNotification('cloudSync'"), 'App.tsx must wire cloudSync notification channel');
+  assert.ok(appTsx.includes("dispatchNotification('taskCompleted'"), 'App.tsx must wire taskCompleted notification channel');
+  assert.ok(appTsx.includes("dispatchNotification('appUpdates'"), 'App.tsx must wire appUpdates notification channel');
+
+  const overlayTsx = fs.readFileSync(path.resolve(process.cwd(), 'src/overlay/VoiceOverlayApp.tsx'), 'utf8');
+  assert.ok(overlayTsx.includes("'voiceAssistant'"), 'VoiceOverlayApp must respect voiceAssistant desktop notification channel');
+
+  const backupTab = fs.readFileSync(path.resolve(process.cwd(), 'src/components/settings/DataBackupSettingsTab.tsx'), 'utf8');
+  assert.ok(backupTab.includes('onNotifyCloudSync'), 'DataBackupSettingsTab must dispatch cloudSync notifications');
+
+  const toastHook = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useToast.ts'), 'utf8');
+  assert.ok(toastHook.includes('infoQueueRef'), 'useToast must queue simultaneous in-app notifications FIFO');
+
+  const notifHook = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useNotificationCenter.ts'), 'utf8');
+  assert.ok(notifHook.includes('agendamea-sent-reminders-v1'), 'useNotificationCenter must persist sent reminder keys across restarts');
+  assert.ok(notifHook.includes('allSilenced'), 'sendTestNotification must preview both channels even when Focus Mode is active');
+});

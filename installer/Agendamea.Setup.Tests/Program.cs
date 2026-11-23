@@ -107,6 +107,13 @@ try
     }
     Check(zipSlipRejected, "SfxPayloadReader rejects Zip-Slip path traversal entries");
 
+    // Verify Windows shortcut writes System.AppUserModel.ID for native Toast Notifications
+    var testLnkPath = Path.Combine(tmpRoot, "Agendamea-AumidTest.lnk");
+    ShellIntegration.CreateShortcut(testLnkPath, installedAppExe, installDir, "Agendamea");
+    var readAumid = ShellIntegration.ReadShortcutAppUserModelId(testLnkPath);
+    Check(readAumid == ShellIntegration.AppUserModelId,
+        $"Shortcut embeds System.AppUserModel.ID ({ShellIntegration.AppUserModelId})");
+
     // Headless uninstall cleans up installed directory cleanly
     var uninstallOpts = new CliOptions
     {

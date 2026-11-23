@@ -36,6 +36,7 @@ export interface DataBackupSettingsTabProps {
   onImportBackup: (payload: unknown) => Promise<void>;
   onApplyRestoredBootstrap?: (restored: BootstrapPayload) => void;
   onResetAllData?: (resetSettings: boolean) => Promise<void>;
+  onNotifyCloudSync?: (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => void;
   formatTimestamp: (iso: string | null) => string;
 }
 
@@ -52,6 +53,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   onImportBackup,
   onApplyRestoredBootstrap,
   onResetAllData,
+  onNotifyCloudSync,
   formatTimestamp,
 }: DataBackupSettingsTabProps) {
   const { lang, t } = useI18n();
@@ -122,6 +124,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         : await api.connectOneDrive({ autoSync: true });
       if (isMountedRef.current) onOneDriveStatusChange(next);
       await applyRestoredIfPresent(next.restoredBootstrap);
+      onNotifyCloudSync?.({ title: t.onedriveSyncedToast });
     } catch (err) {
       if (isMountedRef.current) {
         setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
@@ -144,6 +147,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
       });
       if (isMountedRef.current) onOneDriveStatusChange(next);
       await applyRestoredIfPresent(next.restoredBootstrap);
+      onNotifyCloudSync?.({ title: t.onedriveSyncedToast });
     } catch (err) {
       if (isMountedRef.current) {
         setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
@@ -168,6 +172,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
       });
       if (isMountedRef.current) onOneDriveStatusChange(next);
       await applyRestoredIfPresent(next.restoredBootstrap);
+      onNotifyCloudSync?.({ title: t.onedriveSyncedToast });
     } catch (err) {
       if (isMountedRef.current) {
         setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
@@ -185,6 +190,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
       const { status, bootstrap } = await api.syncOneDrivePull();
       if (isMountedRef.current) onOneDriveStatusChange(status);
       await applyRestoredIfPresent(bootstrap);
+      onNotifyCloudSync?.({ title: t.onedriveSyncedToast });
     } catch (err) {
       if (isMountedRef.current) {
         setImportError(localizeErrorMessage(err, t.importRestoreFailedError, lang, t));

@@ -11,12 +11,16 @@ export interface InfoToastState {
   tone: 'info' | 'error';
 }
 
+const MAX_QUEUED_INFO_TOASTS = 6;
+
 export function useToast() {
   const [undoToast, setUndoToast] = useState<UndoToastState | null>(null);
   const [infoToast, setInfoToast] = useState<InfoToastState | null>(null);
 
   const undoTimerRef = useRef<number | null>(null);
   const infoTimerRef = useRef<number | null>(null);
+  const activeInfoRef = useRef<InfoToastState | null>(null);
+  const infoQueueRef = useRef<InfoToastState[]>([]);
 
   const clearUndoToast = useCallback(() => {
     if (undoTimerRef.current !== null) {
@@ -26,13 +30,26 @@ export function useToast() {
     setUndoToast(null);
   }, []);
 
-  const clearInfoToast = useCallback(() => {
+  const displayNextInfoToast = useCallback((next: InfoToastState | null) => {
     if (infoTimerRef.current !== null) {
       window.clearTimeout(infoTimerRef.current);
       infoTimerRef.current = null;
     }
-    setInfoToast(null);
+    activeInfoRef.current = next;
+    setInfoToast(next);
+    if (!next) return;
+
+    infoTimerRef.current = window.setTimeout(() => {
+      infoTimerRef.current = null;
+      const queued = infoQueueRef.current.shift() ?? null;
+      displayNextInfoToast(queued);
+    }, next.tone === 'error' ? 4500 : 3500);
   }, []);
+
+  const clearInfoToast = useCallback(() => {
+    const queued = infoQueueRef.current.shift() ?? null;
+    displayNextInfoToast(queued);
+  }, [displayNextInfoToast]);
 
   const showUndoToast = useCallback(
     (kind: 'todo' | 'category', id: string, label: string) => {
@@ -67,16 +84,25 @@ export function useToast() {
 
   const showInfoToast = useCallback(
     (message: string, tone: 'info' | 'error' = 'info') => {
-      if (infoTimerRef.current !== null) {
-        window.clearTimeout(infoTimerRef.current);
+      const next: InfoToastState = { message, tone };
+      const current = activeInfoRef.current;
+
+      // Errors always surface immediately; identical active toast just refreshes its timer
+      if (!current || tone === 'error' || current.message === message) {
+        displayNextInfoToast(next);
+        return;
       }
-      setInfoToast({ message, tone });
-      infoTimerRef.current = window.setTimeout(() => {
-        infoTimerRef.current = null;
-        setInfoToast(null);
-      }, tone === 'error' ? 4500 : 3500);
+
+      // Queue simultaneous info notifications (e.g. multiple due task reminders) FIFO without losing any
+      const alreadyQueued = infoQueueRef.current.some((item) => item.message === message);
+      if (!alreadyQueued) {
+        if (infoQueueRef.current.length >= MAX_QUEUED_INFO_TOASTS) {
+          infoQueueRef.current.shift();
+        }
+        infoQueueRef.current.push(next);
+      }
     },
-    [],
+    [displayNextInfoToast],
   );
 
   useEffect(() => {
@@ -87,6 +113,8 @@ export function useToast() {
       if (infoTimerRef.current !== null) {
         window.clearTimeout(infoTimerRef.current);
       }
+      infoQueueRef.current = [];
+      activeInfoRef.current = null;
     };
   }, []);
 

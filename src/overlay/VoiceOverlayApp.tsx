@@ -17,11 +17,17 @@ import type { LanguageCode } from '../i18n/languages';
 import { getDictionary } from '../i18n/localesWorld';
 import { localizeErrorMessage } from '../i18n/translations';
 import type {
+  NotificationChannelsMap,
   VoiceAskResponse,
   VoiceChimePreset,
   VoiceSensitivityMode,
   VoiceTtsStyle,
 } from '../types';
+import {
+  DEFAULT_NOTIFICATION_CHANNELS,
+  sanitizeNotificationChannels,
+  shouldDeliverNotification,
+} from '../utils/notifications';
 import { VoiceAudioCapture, VoiceVadController } from '../voice/audioCapture';
 import { speakLocalTextAsync, stopSpeaking } from '../voice/ttsPlayer';
 
@@ -83,6 +89,9 @@ export function VoiceOverlayApp() {
   const hoveredRef = useRef<boolean>(false);
   const keyboardModeRef = useRef<boolean>(false);
   keyboardModeRef.current = isKeyboardMode;
+  const notificationChannelsRef = useRef<NotificationChannelsMap>({
+    ...DEFAULT_NOTIFICATION_CHANNELS,
+  });
   const inputRef = useRef<HTMLInputElement>(null);
 
   const t = useMemo(() => getDictionary(language), [language]);
@@ -196,6 +205,11 @@ export function VoiceOverlayApp() {
       if (settings.voiceSensitivity) {
         setSensitivity(settings.voiceSensitivity);
       }
+      if (settings.notificationChannels) {
+        notificationChannelsRef.current = sanitizeNotificationChannels(
+          settings.notificationChannels,
+        );
+      }
       return settings;
     } catch {
       return null;
@@ -223,6 +237,22 @@ export function VoiceOverlayApp() {
       }
 
       setPhase('result');
+      if (res.status === 'executed' && res.mutated) {
+        const delivery = shouldDeliverNotification(
+          notificationChannelsRef.current,
+          'voiceAssistant',
+        );
+        if (delivery.desktop && window.agendameaWindow?.showDesktopNotification) {
+          const activeDict = getDictionary(language);
+          void window.agendameaWindow
+            .showDesktopNotification({
+              title: activeDict.notificationsEventVoice,
+              body: res.displayText || res.spokenText || res.todo?.title || '',
+              todoId: res.todo?.id,
+            })
+            .catch(() => {});
+        }
+      }
       if (ttsEnabled && res.spokenText) {
         setIsSpeaking(true);
         clearAutoHide();
