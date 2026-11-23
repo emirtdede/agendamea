@@ -31,11 +31,14 @@ export type SettingsTabId =
   | 'appearance'
   | 'accessibility'
   | 'general'
+  | 'shortcuts'
   | 'notifications'
   | 'ai'
   | 'data'
   | 'trash'
   | 'docs'
+  | 'webhooks'
+  | 'legal'
   | 'about';
 
 export type VoiceSensitivityMode = 'auto' | 'low' | 'medium' | 'high';

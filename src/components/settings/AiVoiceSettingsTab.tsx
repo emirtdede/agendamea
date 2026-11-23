@@ -22,7 +22,6 @@ import { useI18n } from '../../i18n/I18nContext';
 import type {
   AiStatusPayload,
   AiTierId,
-  CloseBehavior,
   PiperVoiceStatus,
   VoiceChimePreset,
   VoiceSensitivityMode,
@@ -42,15 +41,6 @@ import {
   stopSpeaking,
 } from '../../voice/ttsPlayer';
 import { SelectField } from '../SelectField';
-import { ShortcutRecorder } from '../ShortcutRecorder';
-
-interface AiVoiceSettingsTabProps {
-  closeBehavior: CloseBehavior;
-  launchAtStartup: boolean;
-  onChangeCloseBehavior: (behavior: CloseBehavior) => void;
-  onToggleLaunchAtStartup?: (enabled: boolean) => void;
-  onVoiceShortcutChange?: (shortcut: string) => void;
-}
 
 const VAD_OPTIONS = [1000, 1500, 2200, 3000] as const;
 
@@ -63,13 +53,7 @@ function formatBytes(bytes: number | null | undefined): string {
   return `${Math.round(n / (1024 * 1024))} MB`;
 }
 
-export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
-  closeBehavior,
-  launchAtStartup,
-  onChangeCloseBehavior,
-  onToggleLaunchAtStartup,
-  onVoiceShortcutChange,
-}: AiVoiceSettingsTabProps) {
+export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab() {
   const { t, lang } = useI18n();
   const [status, setStatus] = useState<AiStatusPayload | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -77,7 +61,6 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   const [reindexing, setReindexing] = useState<boolean>(false);
   const [selectedTier, setSelectedTier] = useState<AiTierId>('tier-light');
   const [externalModel, setExternalModel] = useState<string>('');
-  const [voiceShortcut, setVoiceShortcut] = useState<string>('CommandOrControl+Alt+Space');
   const [voiceAutoStopMs, setVoiceAutoStopMs] = useState<number>(1500);
   const [voiceTtsEnabled, setVoiceTtsEnabled] = useState<boolean>(true);
   const [voiceTtsVoice, setVoiceTtsVoice] = useState<string>('');
@@ -136,7 +119,6 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
         hydratedSettingsRef.current = true;
         setSelectedTier(data.settings.aiTier || data.recommendation.primaryOptionId);
         setExternalModel(data.settings.aiOllamaModel || '');
-        setVoiceShortcut(data.settings.voiceShortcut || 'CommandOrControl+Alt+Space');
         setVoiceAutoStopMs(data.settings.voiceAutoStopMs ?? 1500);
         setVoiceTtsEnabled(data.settings.voiceTtsEnabled !== false);
         setVoiceTtsVoice(data.settings.voiceTtsVoice || '');
@@ -416,24 +398,6 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
     }
   };
 
-  const handleShortcutChange = async (next: string) => {
-    setActionError(null);
-    setVoiceShortcut(next);
-    if (onVoiceShortcutChange) {
-      onVoiceShortcutChange(next);
-      return;
-    }
-    try {
-      const reg = await window.agendameaWindow?.setVoiceShortcut?.(next);
-      if (reg && reg.ok === false && isMountedRef.current) {
-        setActionError(t.operationFailedToast);
-      }
-      await api.updateSettings({ voiceShortcut: next });
-    } catch {
-      if (isMountedRef.current) setActionError(t.operationFailedToast);
-    }
-  };
-
   const handleAutoStopChange = async (ms: number) => {
     setActionError(null);
     setVoiceAutoStopMs(ms);
@@ -613,11 +577,6 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
     } finally {
       if (isMountedRef.current) setBusyPiperVoiceId(null);
     }
-  };
-
-  const handleEnableTrayBackground = () => {
-    onChangeCloseBehavior('tray');
-    onToggleLaunchAtStartup?.(true);
   };
 
   const tierCards = useMemo(
@@ -1007,27 +966,8 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
           </button>
         </div>
 
-        {/* Shortcut Recorder + VAD Timeout + Sensitivity */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <span className="block text-[11px] font-medium text-[var(--text-secondary)]">
-              {t.aiVoiceShortcutLabel}
-            </span>
-            <div className="flex items-start">
-              <ShortcutRecorder
-                testId="ai-voice-shortcut-recorder"
-                value={voiceShortcut}
-                defaultValue="CommandOrControl+Alt+Space"
-                requireModifier
-                electronFormat
-                recordPrompt={t.shortcutRecordPrompt}
-                resetLabel={t.shortcutResetDefaults}
-                modifierHint={t.shortcutRequireModifierHint}
-                onChange={(next) => void handleShortcutChange(next)}
-              />
-            </div>
-          </div>
-
+        {/* VAD Timeout + Voice Sensitivity */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="space-y-1.5">
             <span className="block text-[11px] font-medium text-[var(--text-secondary)]">
               {t.aiVoiceAutoStopLabel}
@@ -1319,31 +1259,6 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
           )}
         </div>
       </section>
-
-      {/* Background Tray + Startup One-Click Helper */}
-      {(closeBehavior !== 'tray' || !launchAtStartup) && (
-        <section
-          data-testid="ai-tray-background-guide"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 p-4"
-        >
-          <div className="min-w-0 flex-1">
-            <h4 className="text-xs font-semibold text-[var(--text-primary)]">
-              {t.aiVoiceTrayGuideTitle}
-            </h4>
-            <p className="mt-0.5 text-[11px] text-[var(--text-secondary)]">
-              {t.aiVoiceTrayGuideDesc}
-            </p>
-          </div>
-          <button
-            type="button"
-            data-testid="ai-enable-tray-btn"
-            onClick={handleEnableTrayBackground}
-            className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-[var(--accent-fg)] transition-opacity hover:opacity-90 whitespace-nowrap"
-          >
-            {t.aiVoiceEnableTrayButton}
-          </button>
-        </section>
-      )}
 
       {/* Local Models List with 1:1 Skeleton while loading */}
       <section aria-label={t.aiModelsSectionTitle} className="space-y-2.5">

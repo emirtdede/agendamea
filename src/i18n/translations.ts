@@ -305,7 +305,10 @@ export interface UiDictionary {
   settingsTabAppearance: string;
   settingsTabGeneral: string;
   settingsTabDocs: string;
+  settingsTabWebhooks: string;
+  settingsTabLegal: string;
   settingsTabAbout: string;
+  shortcutsSubtitle: string;
   welcomeLanguageDesc: string;
   welcomeBenefitOffline: string;
   welcomeBenefitInstant: string;
@@ -827,8 +830,11 @@ export const TR_DICTIONARY: UiDictionary = {
   settingsNavGroupSystem: 'Sistem ve Hakkında',
   settingsTabAppearance: 'Görünüm ve Tema',
   settingsTabGeneral: 'Genel ve Dil',
-  settingsTabDocs: 'Dokümantasyon',
-  settingsTabAbout: 'Güncelleme ve Yasal',
+  settingsTabDocs: 'CLI ve MCP',
+  settingsTabWebhooks: 'Webhook',
+  settingsTabLegal: 'Yasal Belgeler',
+  settingsTabAbout: 'Güncelleme ve Hakkında',
+  shortcutsSubtitle: 'Global ve uygulama içi tüm klavye kısayollarını tek ekrandan özelleştirin.',
   welcomeLanguageDesc: 'Uygulamayı kullanmak istediğiniz dili seçin.',
   welcomeBenefitOffline: 'İnternetsiz çalışır',
   welcomeBenefitInstant: 'Anlık otomatik kayıt',
@@ -850,7 +856,7 @@ export const TR_DICTIONARY: UiDictionary = {
   trashDateFrom: 'Başlangıç',
   trashDateTo: 'Bitiş',
   trashNoMatchesTitle: 'Filtreyle eşleşen silinmiş öğe bulunamadı',
-  docsSubtitle: 'Kısa terminal komutları (CLI), yapay zeka MCP sunucusu, webhook ve klavye kısayolları.',
+  docsSubtitle: 'Terminal komutları (ag) ve yapay zeka MCP sunucusu yapılandırması.',
   docsCliTitle: 'Terminal ve CLI Komutları (ag)',
   docsCliDesc: 'Uygulama açıkken veya kapalıyken (çevrimdışı SQLite) terminalden kısa komutlarla görev yönetin.',
   docsMcpTitle: 'MCP Sunucusu (Yapay Zeka Entegrasyonu)',
@@ -1358,8 +1364,11 @@ export const EN_DICTIONARY: UiDictionary = {
   settingsNavGroupSystem: 'System & About',
   settingsTabAppearance: 'Appearance & Theme',
   settingsTabGeneral: 'General & Language',
-  settingsTabDocs: 'Documentation',
-  settingsTabAbout: 'Updates & Legal',
+  settingsTabDocs: 'CLI & MCP',
+  settingsTabWebhooks: 'Webhooks',
+  settingsTabLegal: 'Legal Documents',
+  settingsTabAbout: 'Updates & About',
+  shortcutsSubtitle: 'Customize all global and in-app keyboard shortcuts in one place.',
   welcomeLanguageDesc: 'Choose the language you would like to use in Agendamea.',
   welcomeBenefitOffline: 'Works offline',
   welcomeBenefitInstant: 'Instant auto-save',
@@ -1381,7 +1390,7 @@ export const EN_DICTIONARY: UiDictionary = {
   trashDateFrom: 'From',
   trashDateTo: 'To',
   trashNoMatchesTitle: 'No deleted items match the current filter',
-  docsSubtitle: 'Short terminal commands (CLI), AI MCP server, webhooks, and keyboard shortcuts.',
+  docsSubtitle: 'Terminal commands (ag) and AI assistant MCP server configuration.',
   docsCliTitle: 'Terminal & CLI Commands (ag)',
   docsCliDesc: 'Manage tasks from your terminal with short commands whether Agendamea is open or closed (offline SQLite).',
   docsMcpTitle: 'MCP Server (AI Assistant Integration)',

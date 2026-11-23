@@ -2,16 +2,19 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Bell,
-  BookOpen,
   Cloud,
+  Info,
+  Keyboard,
   Menu,
   Mic,
   Palette,
+  Scale,
   Settings,
-  Shield,
   SlidersHorizontal,
   Sparkles,
+  Terminal,
   Trash2,
+  Webhook,
   ZoomIn,
 } from 'lucide-react';
 import { api } from '../api/client';
@@ -34,7 +37,6 @@ import type {
 } from '../types';
 import {
   DEFAULT_CUSTOM_SHORTCUTS,
-  formatShortcutDisplay,
   type CustomShortcutsMap,
   type ShortcutActionId,
 } from '../utils/shortcuts';
@@ -50,8 +52,11 @@ import {
   type PendingImportState,
 } from './settings/DataBackupSettingsTab';
 import { GeneralSettingsTab } from './settings/GeneralSettingsTab';
+import { LegalSettingsTab } from './settings/LegalSettingsTab';
 import { NotificationsSettingsTab } from './settings/NotificationsSettingsTab';
+import { ShortcutsSettingsTab } from './settings/ShortcutsSettingsTab';
 import { TrashSettingsTab } from './settings/TrashSettingsTab';
+import { WebhooksSettingsTab } from './settings/WebhooksSettingsTab';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -292,33 +297,6 @@ export function SettingsModal({
     [meta.intlLocale],
   );
 
-  const shortcuts = useMemo(
-    () => [
-      { keys: formatShortcutDisplay(customShortcuts.newTask || 'N'), label: t.shortcutNewTask },
-      { keys: formatShortcutDisplay(globalQuickAddShortcutKey), label: t.shortcutGlobalQuickAdd },
-      { keys: formatShortcutDisplay(voiceShortcut), label: t.shortcutGlobalVoice },
-      { keys: `${formatShortcutDisplay(customShortcuts.search || '/')} · Ctrl+K`, label: t.shortcutSearch },
-      {
-        keys: `${formatShortcutDisplay(customShortcuts.reorderUp || 'Alt+ArrowUp')} / ${formatShortcutDisplay(customShortcuts.reorderDown || 'Alt+ArrowDown')}`,
-        label: t.shortcutReorder,
-      },
-      { keys: formatShortcutDisplay(customShortcuts.openSettings || 'Ctrl+,'), label: t.shortcutOpenSettings },
-      { keys: 'Esc', label: t.shortcutEscape },
-    ],
-    [
-      customShortcuts,
-      globalQuickAddShortcutKey,
-      t.shortcutNewTask,
-      t.shortcutGlobalQuickAdd,
-      t.shortcutGlobalVoice,
-      t.shortcutSearch,
-      t.shortcutReorder,
-      t.shortcutOpenSettings,
-      t.shortcutEscape,
-      voiceShortcut,
-    ],
-  );
-
   const navGroups = useMemo<
     Array<{
       groupTitle: string;
@@ -343,6 +321,7 @@ export function SettingsModal({
         groupTitle: t.settingsNavGroupWorkspace,
         items: [
           { id: 'general', label: t.settingsTabGeneral, Icon: SlidersHorizontal },
+          { id: 'shortcuts', label: t.keyboardShortcutsTitle, Icon: Keyboard },
           { id: 'notifications', label: t.settingsTabNotifications, Icon: Bell },
           { id: 'ai', label: t.settingsTabAi, Icon: Mic },
           { id: 'data', label: t.dataAndBackupTitle, Icon: Cloud },
@@ -357,11 +336,13 @@ export function SettingsModal({
       {
         groupTitle: t.settingsNavGroupSystem,
         items: [
-          { id: 'docs', label: t.settingsTabDocs, Icon: BookOpen },
+          { id: 'docs', label: t.settingsTabDocs, Icon: Terminal },
+          { id: 'webhooks', label: t.settingsTabWebhooks, Icon: Webhook },
+          { id: 'legal', label: t.settingsTabLegal, Icon: Scale },
           {
             id: 'about',
             label: t.settingsTabAbout,
-            Icon: Shield,
+            Icon: Info,
             hasDot: updateState.status === 'available' || updateState.status === 'downloaded',
           },
         ],
@@ -373,12 +354,15 @@ export function SettingsModal({
       t.accessibilitySectionTitle,
       t.settingsNavGroupWorkspace,
       t.settingsTabGeneral,
+      t.keyboardShortcutsTitle,
       t.settingsTabNotifications,
       t.settingsTabAi,
       t.dataAndBackupTitle,
       t.tabTrash,
       t.settingsNavGroupSystem,
       t.settingsTabDocs,
+      t.settingsTabWebhooks,
+      t.settingsTabLegal,
       t.settingsTabAbout,
       trashCount,
       updateState.status,
@@ -398,7 +382,7 @@ export function SettingsModal({
       {/* Left Split Navigation Rail (Desktop >= 1024px) */}
       <aside
         aria-label={t.settings}
-        className="hidden lg:flex w-[224px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] select-none"
+        className="hidden lg:flex w-[244px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] select-none"
       >
         <div className="app-drag-region flex h-14 shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-4">
           <div
@@ -419,10 +403,10 @@ export function SettingsModal({
           role="tablist"
           aria-orientation="vertical"
           aria-label={t.settings}
-          className="flex-1 overflow-y-auto px-3 py-4 space-y-5"
+          className="flex-1 overflow-y-auto px-3 py-3 space-y-3.5"
         >
           {navGroups.map((group, groupIdx) => (
-            <div key={group.groupTitle} className="space-y-1">
+            <div key={group.groupTitle} className="space-y-0.5">
               <p className="px-2.5 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">
                 {group.groupTitle}
               </p>
@@ -436,7 +420,7 @@ export function SettingsModal({
                     data-testid={`settings-tab-${id}`}
                     aria-selected={isSelected}
                     onClick={() => handleSelectTab(id)}
-                    className={`group flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors ${
+                    className={`group flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-[7px] text-left text-[13px] font-medium transition-colors ${
                       isSelected
                         ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
                         : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -479,7 +463,7 @@ export function SettingsModal({
                   type="button"
                   data-testid="settings-sidebar-welcome-guide"
                   onClick={onOpenWelcomeGuide}
-                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   <Sparkles className="h-4 w-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors" />
                   <span className="truncate">{t.welcomeReplayButton}</span>
@@ -602,11 +586,17 @@ export function SettingsModal({
                 ? legalDocs[activeLegalDoc].subtitle
                 : activeTab === 'docs'
                   ? t.docsSubtitle
-                  : activeTab === 'ai'
-                    ? t.aiSectionSubtitle
-                    : activeTab === 'notifications'
-                      ? t.notificationsSubtitle
-                      : t.settingsSubtitle}
+                  : activeTab === 'webhooks'
+                    ? t.docsWebhookDesc
+                    : activeTab === 'shortcuts'
+                      ? t.shortcutsSubtitle
+                      : activeTab === 'legal'
+                        ? t.legalSectionSubtitle
+                        : activeTab === 'ai'
+                          ? t.aiSectionSubtitle
+                          : activeTab === 'notifications'
+                            ? t.notificationsSubtitle
+                            : t.settingsSubtitle}
             </span>
           </div>
         </header>
@@ -653,19 +643,22 @@ export function SettingsModal({
               <GeneralSettingsTab
                 closeBehavior={closeBehavior}
                 launchAtStartup={launchAtStartup}
+                dragLocked={dragLocked}
+                onChangeCloseBehavior={onChangeCloseBehavior}
+                onToggleLaunchAtStartup={onToggleLaunchAtStartup}
+                onToggleDragLock={onToggleDragLock}
+              />
+            ) : activeTab === 'shortcuts' ? (
+              <ShortcutsSettingsTab
                 globalQuickAddShortcut={globalQuickAddShortcut}
                 globalQuickAddShortcutKey={globalQuickAddShortcutKey}
                 voiceShortcut={voiceShortcut}
                 customShortcuts={customShortcuts}
-                dragLocked={dragLocked}
-                onChangeCloseBehavior={onChangeCloseBehavior}
-                onToggleLaunchAtStartup={onToggleLaunchAtStartup}
                 onToggleGlobalQuickAddShortcut={onToggleGlobalQuickAddShortcut}
                 onChangeGlobalQuickAddShortcutKey={onChangeGlobalQuickAddShortcutKey}
                 onVoiceShortcutChange={onVoiceShortcutChange}
                 onChangeCustomShortcut={onChangeCustomShortcut}
                 onResetAllShortcuts={onResetAllShortcuts}
-                onToggleDragLock={onToggleDragLock}
               />
             ) : activeTab === 'notifications' && notificationChannels ? (
               <NotificationsSettingsTab
@@ -678,13 +671,7 @@ export function SettingsModal({
                 onSendTest={() => onSendTestNotification?.()}
               />
             ) : activeTab === 'ai' ? (
-              <AiVoiceSettingsTab
-                closeBehavior={closeBehavior}
-                launchAtStartup={launchAtStartup}
-                onChangeCloseBehavior={onChangeCloseBehavior}
-                onToggleLaunchAtStartup={onToggleLaunchAtStartup}
-                onVoiceShortcutChange={onVoiceShortcutChange}
-              />
+              <AiVoiceSettingsTab />
             ) : activeTab === 'data' ? (
               <DataBackupSettingsTab
                 totalTodoCount={totalTodoCount}
@@ -713,8 +700,9 @@ export function SettingsModal({
                 formatTimestamp={formatTimestamp}
               />
             ) : activeTab === 'docs' ? (
-              <DocsSettingsSection
-                shortcuts={shortcuts}
+              <DocsSettingsSection />
+            ) : activeTab === 'webhooks' ? (
+              <WebhooksSettingsTab
                 webhookEnabled={webhookEnabled}
                 webhookUrl={webhookUrl}
                 webhookSecret={webhookSecret}
@@ -725,6 +713,8 @@ export function SettingsModal({
                   })
                 }
               />
+            ) : activeTab === 'legal' ? (
+              <LegalSettingsTab onOpenLegalDoc={setActiveLegalDoc} />
             ) : (
               <AboutLegalSettingsTab
                 themeMode={themeMode}
@@ -748,8 +738,6 @@ export function SettingsModal({
                 onCheckForUpdates={onCheckForUpdates}
                 onDownloadAndInstall={onDownloadAndInstall}
                 onQuitAndInstallUpdate={onQuitAndInstallUpdate}
-                onOpenLegalDoc={setActiveLegalDoc}
-                onOpenWelcomeGuide={onOpenWelcomeGuide}
               />
             )}
           </div>
