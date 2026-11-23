@@ -125,20 +125,34 @@ export function useNotificationCenter({
     [showInfoToast],
   );
 
-  const applyNotificationProfile = useCallback((profile: Exclude<NotificationProfileId, 'custom'>) => {
-    const preset = { ...NOTIFICATION_PROFILE_PRESETS[profile] };
-    setNotificationProfile(profile);
-    setNotificationChannels(preset);
-    void api
-      .updateSettings({
-        notificationProfile: profile,
-        notificationChannels: preset,
-      })
-      .catch(() => {});
+  const requestBrowserNotificationPermissionIfNeeded = useCallback((wantsDesktop: boolean) => {
+    if (!wantsDesktop) return;
+    if (window.agendameaWindow?.showDesktopNotification) return;
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      void Notification.requestPermission().catch(() => {});
+    }
   }, []);
+
+  const applyNotificationProfile = useCallback(
+    (profile: Exclude<NotificationProfileId, 'custom'>) => {
+      const preset = { ...NOTIFICATION_PROFILE_PRESETS[profile] };
+      const wantsDesktop = Object.values(preset).some((m) => m === 'both' || m === 'desktop');
+      requestBrowserNotificationPermissionIfNeeded(wantsDesktop);
+      setNotificationProfile(profile);
+      setNotificationChannels(preset);
+      void api
+        .updateSettings({
+          notificationProfile: profile,
+          notificationChannels: preset,
+        })
+        .catch(() => {});
+    },
+    [requestBrowserNotificationPermissionIfNeeded],
+  );
 
   const updateNotificationChannel = useCallback(
     (eventType: NotificationEventType, mode: NotificationChannelMode) => {
+      requestBrowserNotificationPermissionIfNeeded(mode === 'both' || mode === 'desktop');
       const next: NotificationChannelsMap = { ...channelsRef.current, [eventType]: mode };
       const matched = detectMatchingNotificationProfile(next);
       channelsRef.current = next;
@@ -151,7 +165,7 @@ export function useNotificationCenter({
         })
         .catch(() => {});
     },
-    [],
+    [requestBrowserNotificationPermissionIfNeeded],
   );
 
   const updateNotificationLeadMinutes = useCallback((minutes: number) => {

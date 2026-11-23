@@ -417,7 +417,7 @@ export default function App() {
   useEffect(() => {
     let refreshTimer: number | null = null;
     const unsub = subscribeServerEvents((parsed) => {
-      if (parsed?.type === 'ai.download.progress' && parsed.done && parsed.ok !== false) {
+      if (parsed?.type === 'ai.download.progress' && parsed.done === true && parsed.ok === true) {
         const modelLabel = typeof parsed.modelId === 'string' ? parsed.modelId : '';
         dispatchVoiceNotification({
           title: tRef.current.notificationsEventVoice,
@@ -427,7 +427,7 @@ export default function App() {
         });
         return;
       }
-      if (parsed?.type === 'tts.download.progress' && parsed.done && parsed.ok !== false) {
+      if (parsed?.type === 'tts.download.progress' && parsed.done === true && parsed.ok === true) {
         const voiceLabel = typeof parsed.voiceId === 'string' ? parsed.voiceId : '';
         dispatchVoiceNotification({
           title: tRef.current.notificationsEventVoice,

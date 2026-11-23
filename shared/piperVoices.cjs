@@ -238,6 +238,7 @@ class PiperVoiceManager {
 
     const run = (async () => {
       let writeStream = null;
+      let doneEmitted = false;
       try {
         // 1. Download small JSON config first
         const cfgRes = await this.fetchFn(spec.configUrl, { signal: ctrl.signal });
@@ -323,8 +324,10 @@ class PiperVoiceManager {
           totalBytes,
           percent: 100,
           done: true,
+          ok: true,
         };
         this.downloadProgress.delete(spec.id);
+        doneEmitted = true;
         this.onProgressEvent?.(donePayload);
         return { ok: true, voiceId: spec.id, sha256: actualSha };
       } catch (err) {
@@ -347,7 +350,9 @@ class PiperVoiceManager {
         this.activeControllers.delete(voiceId);
         this.activePromises.delete(voiceId);
         this.downloadProgress.delete(voiceId);
-        this.onProgressEvent?.({ voiceId: spec.id, done: true });
+        if (!doneEmitted) {
+          this.onProgressEvent?.({ voiceId: spec.id, done: true, ok: false });
+        }
       }
     })();
 

@@ -354,6 +354,7 @@ class ModelManager {
       externalSignal.addEventListener('abort', onExternalAbort, { once: true });
     }
     this.activeControllers.set(spec.id, controller);
+    let downloadOk = false;
 
     try {
       let startAt = fs.existsSync(partPath) ? fs.statSync(partPath).size : 0;
@@ -364,7 +365,9 @@ class ModelManager {
 
       // If .part already matches exact target bytes, jump directly to SHA-256 verification!
       if (startAt === spec.bytes && startAt > 0) {
-        return await this._finalizeVerifiedPart(spec, partPath, fullPath, manifestPath, true);
+        const finalRes = await this._finalizeVerifiedPart(spec, partPath, fullPath, manifestPath, true);
+        downloadOk = Boolean(finalRes?.ok);
+        return finalRes;
       }
 
       const headers = {};
@@ -395,7 +398,9 @@ class ModelManager {
       if (res.status === 416) {
         const rangeInfo = parseContentRangeTotal(res, startAt);
         if (startAt === spec.bytes && rangeInfo.total === spec.bytes) {
-          return await this._finalizeVerifiedPart(spec, partPath, fullPath, manifestPath, true);
+          const finalRes = await this._finalizeVerifiedPart(spec, partPath, fullPath, manifestPath, true);
+          downloadOk = Boolean(finalRes?.ok);
+          return finalRes;
         }
         fs.rmSync(partPath, { force: true, maxRetries: 4, retryDelay: 40 });
         startAt = 0;
@@ -517,7 +522,9 @@ class ModelManager {
         return { ok: false, code: 'DISK_WRITE_ERROR', error: 'Disk write failed during model download.' };
       }
 
-      return await this._finalizeVerifiedPart(spec, partPath, fullPath, manifestPath, resumed);
+      const finalRes = await this._finalizeVerifiedPart(spec, partPath, fullPath, manifestPath, resumed);
+      downloadOk = Boolean(finalRes?.ok);
+      return finalRes;
     } finally {
       if (externalSignal) {
         externalSignal.removeEventListener('abort', onExternalAbort);
@@ -533,7 +540,7 @@ class ModelManager {
         }
       }
       if (this.onProgressEvent) {
-        this.onProgressEvent({ modelId: spec.id, done: true });
+        this.onProgressEvent({ modelId: spec.id, done: true, ok: downloadOk });
       }
     }
   }

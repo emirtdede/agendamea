@@ -750,6 +750,7 @@ async function createWindow(appUrl) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: false,
     },
   });
 
@@ -1015,11 +1016,17 @@ ipcMain.handle('notification:show', (_event, payload) => {
       ? payload.body.trim().slice(0, 260)
       : '';
     const todoId = typeof payload?.todoId === 'string' ? payload.todoId : null;
-    const { icoPath } = resolveStartupIcons(resolveRuntimeRoot());
+    const { icoPath, trayPath } = resolveStartupIcons(resolveRuntimeRoot());
+    const notifIconPath =
+      trayPath && trayPath.toLowerCase().endsWith('.png') && fs.existsSync(trayPath)
+        ? trayPath
+        : icoPath && fs.existsSync(icoPath)
+          ? icoPath
+          : undefined;
     const notif = new Notification({
       title,
       body,
-      icon: icoPath && fs.existsSync(icoPath) ? icoPath : undefined,
+      icon: notifIconPath,
       silent: Boolean(payload?.silent),
     });
     // Retain notification reference until closed/clicked/failed so V8 GC never drops click listeners on Windows

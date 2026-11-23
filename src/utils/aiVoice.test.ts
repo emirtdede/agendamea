@@ -1925,10 +1925,12 @@ test('Neural Audio Stack (RNNoise WASM + Silero VAD v5 ONNX) & Multiple Voice/Ch
   }
 });
 
-test('Notification pipeline hardening: AUMID shortcut, Electron GC retention, all 6 events wired, FIFO toast queue & persistent dedup', () => {
+test('Notification pipeline hardening: AUMID shortcut, Electron GC retention, backgroundThrottling, strict download ok, all 6 events wired, FIFO toast queue, stacked toasts & persistent dedup', async () => {
   const mainCjs = fs.readFileSync(path.resolve(process.cwd(), 'electron/main.cjs'), 'utf8');
   assert.ok(mainCjs.includes('activeNotifications.add(notif)'), 'main.cjs must retain Electron Notification refs against V8 GC');
   assert.ok(mainCjs.includes('ensureStartMenuShortcutAumid'), 'main.cjs must ensure Start Menu shortcut carries AppUserModelID');
+  assert.ok(mainCjs.includes('backgroundThrottling: false'), 'mainWindow must disable backgroundThrottling so tray reminders never stall');
+  assert.ok(mainCjs.includes("trayPath.toLowerCase().endsWith('.png')"), 'main.cjs must prefer PNG icon for crisp Windows toast notifications');
 
   const shellCs = fs.readFileSync(
     path.resolve(process.cwd(), 'installer/Agendamea.Setup/Engine/ShellIntegration.cs'),
@@ -1942,6 +1944,7 @@ test('Notification pipeline hardening: AUMID shortcut, Electron GC retention, al
   assert.ok(appTsx.includes("dispatchNotification('cloudSync'"), 'App.tsx must wire cloudSync notification channel');
   assert.ok(appTsx.includes("dispatchNotification('taskCompleted'"), 'App.tsx must wire taskCompleted notification channel');
   assert.ok(appTsx.includes("dispatchNotification('appUpdates'"), 'App.tsx must wire appUpdates notification channel');
+  assert.ok(appTsx.includes('parsed.done === true && parsed.ok === true'), 'App.tsx must only notify download success when ok === true');
 
   const overlayTsx = fs.readFileSync(path.resolve(process.cwd(), 'src/overlay/VoiceOverlayApp.tsx'), 'utf8');
   assert.ok(overlayTsx.includes("'voiceAssistant'"), 'VoiceOverlayApp must respect voiceAssistant desktop notification channel');
@@ -1952,7 +1955,38 @@ test('Notification pipeline hardening: AUMID shortcut, Electron GC retention, al
   const toastHook = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useToast.ts'), 'utf8');
   assert.ok(toastHook.includes('infoQueueRef'), 'useToast must queue simultaneous in-app notifications FIFO');
 
+  const toastUi = fs.readFileSync(path.resolve(process.cwd(), 'src/components/ToastContainer.tsx'), 'utf8');
+  assert.ok(toastUi.includes('flex-col items-center gap-2'), 'ToastContainer must stack infoToast and undoToast simultaneously');
+
+  const notifTab = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/settings/NotificationsSettingsTab.tsx'),
+    'utf8',
+  );
+  assert.ok(notifTab.includes("unit: 'minute'"), 'NotificationsSettingsTab must format minute units via Intl.NumberFormat across all 73 locales');
+
   const notifHook = fs.readFileSync(path.resolve(process.cwd(), 'src/hooks/useNotificationCenter.ts'), 'utf8');
   assert.ok(notifHook.includes('agendamea-sent-reminders-v1'), 'useNotificationCenter must persist sent reminder keys across restarts');
   assert.ok(notifHook.includes('allSilenced'), 'sendTestNotification must preview both channels even when Focus Mode is active');
+  assert.ok(notifHook.includes('requestBrowserNotificationPermissionIfNeeded'), 'Web/PWA must request browser Notification permission when enabling desktop channel');
+
+  // Live behavioral check: failed Piper voice download emits exactly ONE terminal event with ok: false (never falsely ok: true!)
+  const { createRequire } = await import('node:module');
+  const localReq = createRequire(import.meta.url);
+  const piperMod = localReq(path.resolve(process.cwd(), 'shared/piperVoices.cjs'));
+  const tmpVoiceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agendamea-piper-notif-'));
+  try {
+    const events: Array<Record<string, unknown>> = [];
+    const mgr = new piperMod.PiperVoiceManager({
+      voicesDir: tmpVoiceDir,
+      onProgressEvent: (ev: Record<string, unknown>) => events.push(ev),
+      fetchFn: async () => new Response('fail', { status: 500 }),
+    });
+    const res = await mgr.downloadVoice('piper-tr-ilkiz-female');
+    assert.equal(res.ok, false);
+    const doneEvents = events.filter((e) => e.done === true);
+    assert.equal(doneEvents.length, 1, 'Piper download must emit exactly 1 terminal done event');
+    assert.equal(doneEvents[0].ok, false, 'Failed Piper download must emit ok: false');
+  } finally {
+    fs.rmSync(tmpVoiceDir, { recursive: true, force: true, maxRetries: 4, retryDelay: 50 });
+  }
 });

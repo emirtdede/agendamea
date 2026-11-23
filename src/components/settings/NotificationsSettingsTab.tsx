@@ -43,7 +43,22 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
   onChangeLeadMinutes,
   onSendTest,
 }: NotificationsSettingsTabProps) {
-  const { t, lang } = useI18n();
+  const { t, meta } = useI18n();
+
+  const formatMinutesLabel = React.useCallback(
+    (mins: number) => {
+      try {
+        return new Intl.NumberFormat(meta.intlLocale, {
+          style: 'unit',
+          unit: 'minute',
+          unitDisplay: 'short',
+        }).format(mins);
+      } catch {
+        return `${mins} min`;
+      }
+    },
+    [meta.intlLocale],
+  );
 
   const profiles = [
     {
@@ -222,7 +237,7 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
         >
           {LEAD_MINUTE_OPTIONS.map((mins) => (
             <option key={mins} value={mins}>
-              {lang === 'tr' ? `${mins} dk` : `${mins} min`}
+              {formatMinutesLabel(mins)}
             </option>
           ))}
         </SelectField>

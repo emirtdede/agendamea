@@ -24,81 +24,68 @@ export const ToastContainer = React.memo(function ToastContainer({
 }: ToastContainerProps) {
   const { t } = useI18n();
 
-  if (infoToast && infoToast.tone === 'error') {
-    return (
-      <div
-        role="alert"
-        aria-live="assertive"
-        className="animate-toast-up fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-red-500/40 bg-[var(--surface)] px-4 py-2.5 text-xs text-red-600 dark:text-red-400 shadow-lg"
-      >
-        <span>{infoToast.message}</span>
-        <button
-          type="button"
-          onClick={onClearInfo}
-          aria-label={t.closeMenu}
-          className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    );
+  if (!undoToast && !infoToast) {
+    return null;
   }
 
-  if (undoToast) {
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        data-testid="undo-toast"
-        onMouseEnter={onPauseUndo}
-        onMouseLeave={onResumeUndo}
-        onFocus={onPauseUndo}
-        onBlur={onResumeUndo}
-        className="animate-toast-up fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-sm shadow-lg"
-      >
-        <span className="text-[var(--text-primary)] whitespace-nowrap">
-          {undoToast.label}
-        </span>
-        <button
-          type="button"
-          data-testid="undo-toast-button"
-          onClick={onUndo}
-          className="inline-flex items-center gap-1.5 font-medium text-[var(--accent)] hover:underline whitespace-nowrap"
+  return (
+    <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2">
+      {infoToast && (
+        <div
+          role={infoToast.tone === 'error' ? 'alert' : 'status'}
+          aria-live={infoToast.tone === 'error' ? 'assertive' : 'polite'}
+          data-testid={infoToast.tone === 'error' ? 'error-toast' : 'info-toast'}
+          className={`pointer-events-auto animate-toast-up flex items-center gap-3 rounded-xl border bg-[var(--surface)] px-4 py-2.5 text-xs shadow-lg ${
+            infoToast.tone === 'error'
+              ? 'border-red-500/40 text-red-600 dark:text-red-400'
+              : 'border-[var(--border-strong)] text-[var(--text-primary)]'
+          }`}
         >
-          <RotateCcw className="h-3.5 w-3.5" />
-          <span>{t.undoButton}</span>
-        </button>
-        <button
-          type="button"
-          onClick={onClearUndo}
-          aria-label={t.closeMenu}
-          className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    );
-  }
+          <span>{infoToast.message}</span>
+          <button
+            type="button"
+            onClick={onClearInfo}
+            aria-label={t.closeMenu}
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
-  if (infoToast) {
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        className="animate-toast-up fixed bottom-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-xs text-[var(--text-primary)] shadow-lg"
-      >
-        <span>{infoToast.message}</span>
-        <button
-          type="button"
-          onClick={onClearInfo}
-          aria-label={t.closeMenu}
-          className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+      {undoToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="undo-toast"
+          onMouseEnter={onPauseUndo}
+          onMouseLeave={onResumeUndo}
+          onFocus={onPauseUndo}
+          onBlur={onResumeUndo}
+          className="pointer-events-auto animate-toast-up flex items-center gap-4 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-sm shadow-lg"
         >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    );
-  }
-
-  return null;
+          <span className="text-[var(--text-primary)] whitespace-nowrap">
+            {undoToast.label}
+          </span>
+          <button
+            type="button"
+            data-testid="undo-toast-button"
+            onClick={onUndo}
+            className="inline-flex items-center gap-1.5 font-medium text-[var(--accent)] hover:underline whitespace-nowrap"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            <span>{t.undoButton}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClearUndo}
+            aria-label={t.closeMenu}
+            className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
 });
