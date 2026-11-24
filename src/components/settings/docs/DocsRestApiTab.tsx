@@ -132,9 +132,9 @@ export const DocsRestApiTab = React.memo(function DocsRestApiTab({
           {filtered.map((ep) => (
             <div
               key={`${ep.method}-${ep.path}`}
-              className="flex flex-col gap-1 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-1.5 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
             >
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <span
                   className={`inline-flex w-14 shrink-0 justify-center rounded px-1.5 py-0.5 font-mono-tabular text-[10px] font-bold ${
                     ep.method === 'GET'
@@ -148,11 +148,11 @@ export const DocsRestApiTab = React.memo(function DocsRestApiTab({
                 >
                   {ep.method}
                 </span>
-                <code className="font-mono-tabular text-[11.5px] font-medium text-[var(--text-primary)] break-all">
+                <code className="font-mono-tabular text-[11.5px] font-medium text-[var(--text-primary)] whitespace-nowrap">
                   {ep.path}
                 </code>
               </div>
-              <span className="text-[11px] text-[var(--text-muted)]">{ep.desc}</span>
+              <span className="text-[11px] text-[var(--text-muted)] sm:text-end">{ep.desc}</span>
             </div>
           ))}
         </div>

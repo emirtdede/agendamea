@@ -174,6 +174,10 @@ public partial class MainWindow : Window
     {
         if (_isOptionsOpen == open) return;
         _isOptionsOpen = open;
+        if (!open)
+        {
+            LanguageComboBox.IsDropDownOpen = false;
+        }
 
         if (_reducedMotion)
         {

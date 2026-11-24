@@ -56,7 +56,11 @@ export const ModelCatalogSection = React.memo(function ModelCatalogSection({
   }, [status]);
 
   return (
-    <section aria-label={t.aiModelsSectionTitle} className="space-y-2.5">
+    <section
+      aria-label={t.aiModelsSectionTitle}
+      data-setting-id="ai-models"
+      className="space-y-2.5"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <HardDrive className="h-4 w-4 text-[var(--accent)]" />

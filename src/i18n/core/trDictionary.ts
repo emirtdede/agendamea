@@ -151,7 +151,7 @@ export const TR_DICTIONARY: UiDictionary = {
   legalOpenSourceTitle: 'Açık Kaynak ve Üçüncü Taraf Lisansları',
   legalAccessibilityTitle: 'Erişilebilirlik ve Destek Beyanı',
   legalLastUpdated:
-    'Son güncelleme: 22 Kasım 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
+    'Son güncelleme: 24 Kasım 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
 
   offlineBannerText: 'Çevrimdışı çalışıyor - verileriniz cihazınızda güvende',
   undoButton: 'Geri Al',
@@ -454,7 +454,7 @@ export const TR_DICTIONARY: UiDictionary = {
   overlaySendButton: 'Gönder',
   overlaySpeechPackHint: 'Windows ses paketi ayarlarını aç (ms-settings:speech)',
   overlayTryAgainLabel: 'Tekrar Dinle',
-  overlayTrayMenuDictate: 'Sesli Dikte (Ctrl+Alt+Space)',
+  overlayTrayMenuDictate: 'Sesli Dikte (Ctrl+Alt+D)',
   aiVoiceMicLabel: 'Mikrofon',
   aiVoiceMicDefaultOption: 'Sistem Varsayılanı',
   aiVoiceMicRefreshButton: 'Yenile',
@@ -946,4 +946,48 @@ export const TR_DICTIONARY: UiDictionary = {
   sttErrorModelMissing: 'Ses tanıma modeli henüz indirilmedi.',
   sttErrorUnavailable: 'Ses tanıma motoru şu anda kullanılamıyor.',
   sttErrorFailed: 'Ses deşifre edilemedi. Lütfen tekrar deneyin.',
+  settingsTabAutomation: 'Otomasyon ve Geliştirici',
+  accessibilitySectionSubtitle:
+    'Arayüzü ölçeklendirin, kontrastı artırın, hareketi azaltın ve klavye odağını güçlendirin.',
+  shortcutsGlobalSectionTitle: 'Sistem Geneli Kısayollar',
+  aiSubTabVoice: 'Ses ve Dikte',
+  aiSubTabEngine: 'AI Motoru ve Modeller',
+  dataDangerZoneTitle: 'Tehlikeli Bölge',
+  generalLanguageChangeButton: 'Değiştir',
+  welcomeOptionalBadge: 'İsteğe Bağlı',
+  welcomeFocusTitle: 'Odak Modu ve Akıllı Hatırlatmalar',
+  welcomeFocusDesc:
+    'Odak profilleri, sessiz saatler ve zamanında hatırlatmalarla dikkatiniz dağılmadan gününüzü yönetin.',
+  welcomeFocusRemindersTitle: 'Ön Hatırlatmalar ve Günlük Özet',
+  welcomeFocusRemindersDesc:
+    'Saatli görevler gelmeden önce haber alın ve günün özetini tek bir sabah bildiriminde görün.',
+  welcomeFocusQuietTitle: 'Odak Modu ve Sessiz Saatler',
+  welcomeFocusQuietDesc: 'Derin çalışma veya dinlenme saatlerinde bildirimleri tek tıkla susturun.',
+  welcomeFocusComfortTitle: 'Rahat Okuma ve Sistem Tepsisi',
+  welcomeFocusComfortDesc:
+    'Ölçeği, yazı tipini ve liste yoğunluğunu ayarlayın; uygulamayı sistem tepsisinde hazır tutun.',
+  welcomeAiTitle: 'Sesli Dikte ve Cihaz İçi Yapay Zeka',
+  welcomeAiDesc:
+    'Konuşarak görev ekleyin, notlarınızı dinleyin veya akıllı arama yapın. Yalnızca siz açarsanız bilgisayarınızda çalışır.',
+  welcomeAiVoiceTitle: 'Eller Serbest Sesli Dikte',
+  welcomeAiVoiceDesc:
+    'Herhangi bir ekrandan kısayola basıp konuşarak görev ekleyin; sesiniz cihazınızdan çıkmaz.',
+  welcomeAiReadAloudTitle: 'Notları Sesli Dinleme ve Akıllı Arama',
+  welcomeAiReadAloudDesc:
+    'Uzun notları sistem veya doğal seslerle dinleyin, görevlerinizi anlamıyla kolayca bulun.',
+  welcomeAiZeroDownloadTitle: 'İndirme Zorunluluğu Yok',
+  welcomeAiZeroDownloadDesc:
+    'Yerel modeller siz seçmedikçe yer kaplamaz; isterseniz mevcut Ollama veya LM Studio kurulumunuzu bağlayın.',
+  welcomePowerTitle: 'İsteğe Bağlı Otomasyon ve Güçlü Araçlar',
+  welcomePowerDesc:
+    'Agendamea uygulamasını sade kullanın ya da dilediğinizde sevdiğiniz araçlarla bağlantıları açın.',
+  welcomePowerAssistantsTitle: 'AI Asistanlarınızla Bağlayın',
+  welcomePowerAssistantsDesc:
+    'Claude, Cursor veya VS Code gibi asistanları tek tıkla bağlayıp görevlerinizi birlikte planlayın.',
+  welcomePowerAutomationTitle: 'Otomatik Bildirimler ve Terminal',
+  welcomePowerAutomationDesc:
+    'Görev güncellemelerini Discord, Slack veya otomasyon araçlarına aktarın ya da terminalden yönetin.',
+  welcomePowerExportTitle: 'Şifreli Yedekler ve Esnek Dışa Aktarma',
+  welcomePowerExportDesc:
+    'Yedeklerinizi parola ile koruyun veya dilediğinizde Takvim, CSV, Markdown ve JSON olarak dışa aktarın.',
 };

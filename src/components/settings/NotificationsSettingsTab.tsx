@@ -4,12 +4,12 @@ import {
   Clock,
   ExternalLink,
   Moon,
-  RotateCcw,
   Send,
   ShieldCheck,
   Sparkles,
   Sun,
   Volume2,
+  VolumeX,
 } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
@@ -21,6 +21,8 @@ import type {
 } from '../../types';
 import { NOTIFICATION_EVENT_KEYS, NOTIFICATION_LEAD_OPTIONS } from '../../utils/notifications';
 import { SelectField } from '../SelectField';
+import { ToggleSwitch } from '../ToggleSwitch';
+import { SettingsTabHeader } from './SettingsTabHeader';
 
 function readBrowserPermission(
   isElectronDesktop: boolean,
@@ -156,7 +158,7 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
       id: 'silent_inapp',
       title: t.notificationsProfileSilent,
       desc: t.notificationsProfileSilentDesc,
-      icon: Bell,
+      icon: VolumeX,
     },
   ];
 
@@ -189,32 +191,22 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
 
   return (
     <div className="space-y-6" data-testid="settings-notifications-section">
-      {/* Header + Test + Reset */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs leading-relaxed text-[var(--text-muted)]">
-          {t.notificationsSubtitle}
-        </p>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+      <SettingsTabHeader
+        subtitle={t.notificationsSubtitle}
+        onReset={onResetNotifications}
+        resetTestId="notifications-reset-btn"
+        actions={
           <button
             type="button"
             data-testid="notifications-test-btn"
             onClick={onSendTest}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] whitespace-nowrap"
           >
             <Send className="h-3.5 w-3.5 text-[var(--accent)]" />
             <span>{t.notificationsTestButton}</span>
           </button>
-          <button
-            type="button"
-            data-testid="notifications-reset-btn"
-            onClick={onResetNotifications}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            <span>{t.resetTabDefaultsButton}</span>
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* OS / Browser Notification Permission Banner */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
@@ -315,25 +307,12 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
                 <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.notifQuietHoursDesc}</p>
               </div>
             </div>
-            <button
-              type="button"
-              role="switch"
-              data-testid="notif-quiet-hours-toggle"
-              aria-checked={quietHoursEnabled}
-              aria-label={t.notifQuietHoursTitle}
-              onClick={() => onToggleQuietHours(!quietHoursEnabled)}
-              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                quietHoursEnabled ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-              }`}
-            >
-              <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                  quietHoursEnabled
-                    ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                    : 'translate-x-0.5 rtl:-translate-x-0.5'
-                }`}
-              />
-            </button>
+            <ToggleSwitch
+              checked={quietHoursEnabled}
+              onChange={onToggleQuietHours}
+              label={t.notifQuietHoursTitle}
+              testId="notif-quiet-hours-toggle"
+            />
           </div>
 
           {quietHoursEnabled && (
@@ -371,25 +350,12 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
               <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.notifSoundDesc}</p>
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            data-testid="notif-sound-toggle"
-            aria-checked={notificationSoundEnabled}
-            aria-label={t.notifSoundTitle}
-            onClick={() => onToggleNotificationSound(!notificationSoundEnabled)}
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-              notificationSoundEnabled ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-            }`}
-          >
-            <span
-              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                notificationSoundEnabled
-                  ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                  : 'translate-x-0.5 rtl:-translate-x-0.5'
-              }`}
-            />
-          </button>
+          <ToggleSwitch
+            checked={notificationSoundEnabled}
+            onChange={onToggleNotificationSound}
+            label={t.notifSoundTitle}
+            testId="notif-sound-toggle"
+          />
         </div>
 
         {/* Daily Digest */}
@@ -404,25 +370,12 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
                 <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.notifDailyDigestDesc}</p>
               </div>
             </div>
-            <button
-              type="button"
-              role="switch"
-              data-testid="notif-daily-digest-toggle"
-              aria-checked={dailyDigestEnabled}
-              aria-label={t.notifDailyDigestLabel}
-              onClick={() => onToggleDailyDigest(!dailyDigestEnabled)}
-              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                dailyDigestEnabled ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-              }`}
-            >
-              <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                  dailyDigestEnabled
-                    ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                    : 'translate-x-0.5 rtl:-translate-x-0.5'
-                }`}
-              />
-            </button>
+            <ToggleSwitch
+              checked={dailyDigestEnabled}
+              onChange={onToggleDailyDigest}
+              label={t.notifDailyDigestLabel}
+              testId="notif-daily-digest-toggle"
+            />
           </div>
           {dailyDigestEnabled && (
             <div className="flex items-center gap-2 ps-6">
@@ -444,6 +397,7 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
       {/* Upcoming Reminder Lead Time */}
       <section
         aria-label={t.notificationsLeadTimeTitle}
+        data-setting-id="notif-lead-time"
         className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5"
       >
         <div className="flex items-start gap-2.5 min-w-0">
@@ -472,6 +426,7 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
       {/* Per-Event Channel Controls */}
       <section
         aria-label={t.notificationsChannelsTitle}
+        data-setting-id="notif-channels"
         className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
       >
         <div className="border-b border-[var(--border)] bg-[var(--canvas)]/60 px-4 py-3">

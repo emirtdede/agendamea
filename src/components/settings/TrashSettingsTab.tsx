@@ -1,7 +1,7 @@
-import { RotateCcw, Search, Trash2, X } from 'lucide-react';
+import { Clock, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
-import type { Category, Todo } from '../../types';
+import type { Category, Todo, TrashAutoPurgeDays } from '../../types';
 import {
   filterAndSortTrash,
   type TrashSortOption,
@@ -14,6 +14,10 @@ import { SelectField } from '../SelectField';
 export interface TrashSettingsTabProps {
   trashedCategories: Category[];
   trashedTodos: Todo[];
+  completedTodoCount?: number;
+  trashAutoPurgeDays?: TrashAutoPurgeDays;
+  onChangeTrashAutoPurgeDays?: (days: TrashAutoPurgeDays) => void;
+  onClearAllCompleted?: () => Promise<void>;
   onRestoreTodo: (id: string) => Promise<void>;
   onPermanentDeleteTodo: (id: string) => Promise<void>;
   onRestoreCategory: (id: string) => Promise<void>;
@@ -26,6 +30,10 @@ export interface TrashSettingsTabProps {
 export const TrashSettingsTab = React.memo(function TrashSettingsTab({
   trashedCategories,
   trashedTodos,
+  completedTodoCount = 0,
+  trashAutoPurgeDays = 30,
+  onChangeTrashAutoPurgeDays,
+  onClearAllCompleted,
   onRestoreTodo,
   onPermanentDeleteTodo,
   onRestoreCategory,
@@ -37,6 +45,7 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
   const { t, meta } = useI18n();
   const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
+  const [isClearingCompleted, setIsClearingCompleted] = useState(false);
   const [isBulkBusy, setIsBulkBusy] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [busyTrashIds, setBusyTrashIds] = useState<Set<string>>(() => new Set());
@@ -249,6 +258,78 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
           ))}
       </div>
 
+      {/* Always-Visible Trash Policy & Maintenance Card (visible even when Trash is empty) */}
+      {(onChangeTrashAutoPurgeDays || onClearAllCompleted) && (
+        <section
+          aria-label={t.generalTrashAutoPurgeTitle}
+          data-setting-id="trash-retention"
+          data-testid="trash-retention-card"
+          className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
+        >
+          {onChangeTrashAutoPurgeDays && (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                <Clock className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                    {t.generalTrashAutoPurgeTitle}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    {t.generalTrashAutoPurgeDesc}
+                  </p>
+                </div>
+              </div>
+              <SelectField
+                data-testid="general-trash-purge-select"
+                value={trashAutoPurgeDays}
+                onChange={(e) =>
+                  onChangeTrashAutoPurgeDays(Number(e.target.value) as TrashAutoPurgeDays)
+                }
+                wrapperClassName="min-w-[12.5rem] shrink-0"
+              >
+                <option value={0}>{t.generalTrashPurgeNever}</option>
+                <option value={7}>{t.generalTrashPurge7}</option>
+                <option value={30}>{t.generalTrashPurge30}</option>
+                <option value={90}>{t.generalTrashPurge90}</option>
+              </SelectField>
+            </div>
+          )}
+
+          {onClearAllCompleted && (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  {t.moveCompletedToTrashTitle}
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                  {completedTodoCount > 0
+                    ? `${completedTodoCount} ${t.completedCountLabel}`
+                    : t.moveCompletedToTrashEmptyDesc}
+                </p>
+              </div>
+              <button
+                type="button"
+                data-testid="trash-move-completed-btn"
+                disabled={completedTodoCount === 0 || isClearingCompleted}
+                onClick={async () => {
+                  if (isClearingCompleted) return;
+                  setIsClearingCompleted(true);
+                  try {
+                    await onClearAllCompleted();
+                  } finally {
+                    if (isMountedRef.current) setIsClearingCompleted(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{isClearingCompleted ? t.movingButton : t.moveButton}</span>
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Bulk Selection Action Bar */}
       {trashCount > 0 && filteredTrashCount > 0 && (
         <div
@@ -303,7 +384,7 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
       )}
 
       {trashCount === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-14 text-center">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-12 text-center">
           <Trash2 className="mb-2.5 h-6 w-6 text-[var(--text-muted)]" />
           <p className="font-display text-sm font-semibold text-[var(--text-primary)]">
             {t.trashEmptyTitle}
@@ -355,8 +436,7 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div
-                role="tablist"
+              <fieldset
                 aria-label={t.tabTrash}
                 className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5"
               >
@@ -372,9 +452,8 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                     <button
                       key={opt.id}
                       type="button"
-                      role="tab"
                       data-testid={`trash-filter-${opt.id}`}
-                      aria-selected={active}
+                      aria-pressed={active}
                       onClick={() => setTrashTypeFilter(opt.id)}
                       className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
                         active
@@ -386,7 +465,7 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                     </button>
                   );
                 })}
-              </div>
+              </fieldset>
 
               <div className="flex flex-wrap items-center gap-1.5">
                 <label className="inline-flex items-center gap-1 text-[11px] text-[var(--text-muted)]">

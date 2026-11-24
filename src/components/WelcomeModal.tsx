@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 import { preferencesStore, usePreferencesSelector } from '../store/preferencesStore';
 import { useShortcutSelector } from '../store/shortcutStore';
-import type { ThemeId } from '../types';
+import type { SettingsTabId, ThemeId } from '../types';
 import { COLOR_THEMES, resolveAppIconColors, resolveEffectiveThemeMode } from '../utils/themes';
 import { BrandMark } from './BrandMark';
 import { WelcomeFeatureSteps } from './welcome/WelcomeFeatureSteps';
@@ -12,10 +12,11 @@ import { WelcomeLanguageStep } from './welcome/WelcomeLanguageStep';
 import { WelcomeThemeStep } from './welcome/WelcomeThemeStep';
 
 interface WelcomeModalProps {
-  onComplete: (openSettingsAfter?: boolean) => void;
+  onComplete: (openSettingsTarget?: boolean | SettingsTabId) => void;
 }
 
-const TOTAL_STEPS = 7;
+const TOTAL_STEPS = 10;
+const STEP_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 const FEATURED_THEME_IDS: readonly Exclude<ThemeId, 'custom'>[] = [
   'obsidian',
   'blue',
@@ -95,14 +96,17 @@ export function WelcomeModal({ onComplete }: WelcomeModalProps) {
   const slideCopy = useMemo(
     () =>
       [
-        { title: t.languageSectionTitle, desc: t.welcomeLanguageDesc },
-        { title: t.colorThemeTitle, desc: t.customThemeHexHint },
-        { title: t.appIconSectionTitle, desc: t.appIconSectionDesc },
-        { title: t.welcomeStep1Title, desc: t.welcomeStep1Desc },
-        { title: t.welcomeStep2Title, desc: t.welcomeStep2Desc },
-        { title: t.welcomeStep3Title, desc: t.welcomeStep3Desc },
-        { title: t.welcomeStep4Title, desc: t.welcomeStep4Desc },
-      ][step] ?? { title: t.languageSectionTitle, desc: t.welcomeLanguageDesc },
+        { title: t.languageSectionTitle, desc: t.welcomeLanguageDesc, optional: false },
+        { title: t.colorThemeTitle, desc: t.customThemeHexHint, optional: false },
+        { title: t.appIconSectionTitle, desc: t.appIconSectionDesc, optional: false },
+        { title: t.welcomeStep1Title, desc: t.welcomeStep1Desc, optional: false },
+        { title: t.welcomeStep2Title, desc: t.welcomeStep2Desc, optional: false },
+        { title: t.welcomeStep3Title, desc: t.welcomeStep3Desc, optional: false },
+        { title: t.welcomeFocusTitle, desc: t.welcomeFocusDesc, optional: false },
+        { title: t.welcomeAiTitle, desc: t.welcomeAiDesc, optional: true },
+        { title: t.welcomePowerTitle, desc: t.welcomePowerDesc, optional: true },
+        { title: t.welcomeStep4Title, desc: t.welcomeStep4Desc, optional: false },
+      ][step] ?? { title: t.languageSectionTitle, desc: t.welcomeLanguageDesc, optional: false },
     [
       step,
       t.languageSectionTitle,
@@ -117,6 +121,12 @@ export function WelcomeModal({ onComplete }: WelcomeModalProps) {
       t.welcomeStep2Desc,
       t.welcomeStep3Title,
       t.welcomeStep3Desc,
+      t.welcomeFocusTitle,
+      t.welcomeFocusDesc,
+      t.welcomeAiTitle,
+      t.welcomeAiDesc,
+      t.welcomePowerTitle,
+      t.welcomePowerDesc,
       t.welcomeStep4Title,
       t.welcomeStep4Desc,
     ],
@@ -164,11 +174,11 @@ export function WelcomeModal({ onComplete }: WelcomeModalProps) {
         </div>
 
         <div
-          className="grid h-4 shrink-0 grid-cols-7 items-center gap-2 px-6 pb-1"
+          className="grid h-4 shrink-0 grid-cols-10 items-center gap-1.5 px-6 pb-1"
           role="tablist"
           aria-label="Agendamea"
         >
-          {[0, 1, 2, 3, 4, 5, 6].map((idx) => {
+          {STEP_INDICES.map((idx) => {
             const active = idx === step;
             const completed = idx < step;
             return (
@@ -198,12 +208,22 @@ export function WelcomeModal({ onComplete }: WelcomeModalProps) {
           ) : (
             <>
               <div className="mb-3 min-h-[68px] shrink-0 flex flex-col justify-start pt-0.5">
-                <h2
-                  id="welcome-modal-title"
-                  className="font-display text-xl font-semibold tracking-tight text-[var(--text-primary)]"
-                >
-                  {slideCopy.title}
-                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2
+                    id="welcome-modal-title"
+                    className="font-display text-xl font-semibold tracking-tight text-[var(--text-primary)]"
+                  >
+                    {slideCopy.title}
+                  </h2>
+                  {slideCopy.optional && (
+                    <span
+                      data-testid="welcome-optional-badge"
+                      className="rounded-full border border-[var(--accent)]/35 bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--accent)] shrink-0"
+                    >
+                      {t.welcomeOptionalBadge}
+                    </span>
+                  )}
+                </div>
                 <p className="mt-1.5 text-sm leading-relaxed text-[var(--text-secondary)]">
                   {slideCopy.desc}
                 </p>

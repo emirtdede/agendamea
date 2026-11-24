@@ -2,6 +2,25 @@
 
 const { execFile } = require('node:child_process');
 
+const DEFAULT_QUICK_ADD_KEY = 'CommandOrControl+Alt+N';
+const DEFAULT_VOICE_KEY = 'CommandOrControl+Alt+D';
+const LEGACY_VOICE_KEY = 'CommandOrControl+Alt+Space';
+
+const QUICK_ADD_FALLBACK_CANDIDATES = [
+  'CommandOrControl+Alt+N',
+  'CommandOrControl+Shift+Alt+N',
+  'CommandOrControl+Alt+Shift+T',
+  'CommandOrControl+Alt+T',
+];
+
+const VOICE_FALLBACK_CANDIDATES = [
+  'CommandOrControl+Alt+D',
+  'CommandOrControl+Shift+Alt+D',
+  'CommandOrControl+Shift+Alt+V',
+  'CommandOrControl+Alt+Shift+M',
+  'CommandOrControl+Alt+V',
+];
+
 function createShortcutAndStartupManager({
   app,
   globalShortcut,
@@ -13,10 +32,10 @@ function createShortcutAndStartupManager({
   let activeLaunchAtStartup = false;
   let activeLaunchMinimizedToTray = false;
   let activeGlobalQuickAdd = true;
-  let activeGlobalQuickAddKey = 'CommandOrControl+Alt+N';
+  let activeGlobalQuickAddKey = DEFAULT_QUICK_ADD_KEY;
   let activeQuickAddRegistered = true;
   let activeVoiceShortcutEnabled = true;
-  let activeVoiceShortcut = 'CommandOrControl+Alt+Space';
+  let activeVoiceShortcut = DEFAULT_VOICE_KEY;
   let activeVoiceRegistered = true;
 
   function applyLoginItemSetting(enabled, minimizedToTray) {
@@ -59,7 +78,30 @@ function createShortcutAndStartupManager({
     return activeLaunchAtStartup;
   }
 
-  function syncGlobalQuickAddShortcut(enabled, nextKey) {
+  function registerQuickAddKey(key) {
+    return Boolean(
+      globalShortcut.register(key, () => {
+        showAndFocusMainWindow();
+        const win = getMainWindow();
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('app:focus-quick-add');
+        }
+      }),
+    );
+  }
+
+  function registerVoiceKey(key) {
+    return Boolean(
+      globalShortcut.register(key, () => {
+        const port = getActivePort();
+        if (port) {
+          void ensureVoiceOverlayManager().toggle(port);
+        }
+      }),
+    );
+  }
+
+  function syncGlobalQuickAddShortcut(enabled, nextKey, options = {}) {
     const prevKey = activeGlobalQuickAddKey;
     if (enabled !== undefined) {
       activeGlobalQuickAdd = Boolean(enabled);
@@ -74,15 +116,26 @@ function createShortcutAndStartupManager({
         globalShortcut.unregister(activeGlobalQuickAddKey);
       }
       if (activeGlobalQuickAdd && activeGlobalQuickAddKey) {
-        registered = Boolean(
-          globalShortcut.register(activeGlobalQuickAddKey, () => {
-            showAndFocusMainWindow();
-            const win = getMainWindow();
-            if (win && !win.isDestroyed()) {
-              win.webContents.send('app:focus-quick-add');
+        registered = registerQuickAddKey(activeGlobalQuickAddKey);
+        if (
+          !registered &&
+          options.autoFallback &&
+          activeGlobalQuickAddKey === DEFAULT_QUICK_ADD_KEY
+        ) {
+          for (const candidate of QUICK_ADD_FALLBACK_CANDIDATES) {
+            if (
+              candidate === activeGlobalQuickAddKey ||
+              candidate.toLowerCase() === activeVoiceShortcut.toLowerCase()
+            ) {
+              continue;
             }
-          }),
-        );
+            if (registerQuickAddKey(candidate)) {
+              activeGlobalQuickAddKey = candidate;
+              registered = true;
+              break;
+            }
+          }
+        }
       }
     } catch {
       registered = false;
@@ -95,7 +148,7 @@ function createShortcutAndStartupManager({
     };
   }
 
-  function syncVoiceDictationShortcut(nextShortcut, enabled) {
+  function syncVoiceDictationShortcut(nextShortcut, enabled, options = {}) {
     const prev = activeVoiceShortcut;
     if (typeof enabled === 'boolean') {
       activeVoiceShortcutEnabled = enabled;
@@ -103,7 +156,7 @@ function createShortcutAndStartupManager({
     const target =
       typeof nextShortcut === 'string' && nextShortcut.trim()
         ? nextShortcut.trim()
-        : activeVoiceShortcut || 'CommandOrControl+Alt+Space';
+        : activeVoiceShortcut || DEFAULT_VOICE_KEY;
     try {
       if (prev) globalShortcut.unregister(prev);
       if (target && target !== prev) globalShortcut.unregister(target);
@@ -114,14 +167,25 @@ function createShortcutAndStartupManager({
     let registered = true;
     if (activeVoiceShortcutEnabled && activeVoiceShortcut) {
       try {
-        registered = Boolean(
-          globalShortcut.register(activeVoiceShortcut, () => {
-            const port = getActivePort();
-            if (port) {
-              void ensureVoiceOverlayManager().toggle(port);
+        registered = registerVoiceKey(activeVoiceShortcut);
+        const allowFallback =
+          options.autoFallback &&
+          (activeVoiceShortcut === DEFAULT_VOICE_KEY || activeVoiceShortcut === LEGACY_VOICE_KEY);
+        if (!registered && allowFallback) {
+          for (const candidate of VOICE_FALLBACK_CANDIDATES) {
+            if (
+              candidate === activeVoiceShortcut ||
+              candidate.toLowerCase() === activeGlobalQuickAddKey.toLowerCase()
+            ) {
+              continue;
             }
-          }),
-        );
+            if (registerVoiceKey(candidate)) {
+              activeVoiceShortcut = candidate;
+              registered = true;
+              break;
+            }
+          }
+        }
       } catch {
         registered = false;
       }
@@ -134,6 +198,86 @@ function createShortcutAndStartupManager({
     };
   }
 
+  function getRegistrationStatus() {
+    // Re-probe any currently blocked global shortcut so closing a conflicting app recovers immediately
+    if (activeGlobalQuickAdd && !activeQuickAddRegistered && activeGlobalQuickAddKey) {
+      try {
+        if (registerQuickAddKey(activeGlobalQuickAddKey)) {
+          activeQuickAddRegistered = true;
+        }
+      } catch {
+        // Still unavailable
+      }
+    }
+    if (activeVoiceShortcutEnabled && !activeVoiceRegistered && activeVoiceShortcut) {
+      try {
+        if (registerVoiceKey(activeVoiceShortcut)) {
+          activeVoiceRegistered = true;
+        }
+      } catch {
+        // Still unavailable
+      }
+    }
+    return {
+      quickAddEnabled: activeGlobalQuickAdd,
+      quickAddKey: activeGlobalQuickAddKey,
+      quickAddRegistered: activeQuickAddRegistered,
+      voiceEnabled: activeVoiceShortcutEnabled,
+      voiceShortcut: activeVoiceShortcut,
+      voiceRegistered: activeVoiceRegistered,
+    };
+  }
+
+  function autoResolveBlockedShortcuts() {
+    let resolvedAny = false;
+    if (activeGlobalQuickAdd && !activeQuickAddRegistered) {
+      // First retry current key; if still blocked, pick first free fallback
+      try {
+        if (activeGlobalQuickAddKey && registerQuickAddKey(activeGlobalQuickAddKey)) {
+          activeQuickAddRegistered = true;
+          resolvedAny = true;
+        } else {
+          for (const candidate of QUICK_ADD_FALLBACK_CANDIDATES) {
+            if (candidate.toLowerCase() === activeVoiceShortcut.toLowerCase()) continue;
+            if (registerQuickAddKey(candidate)) {
+              activeGlobalQuickAddKey = candidate;
+              activeQuickAddRegistered = true;
+              resolvedAny = true;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Keep blocked state
+      }
+    }
+    if (activeVoiceShortcutEnabled && !activeVoiceRegistered) {
+      try {
+        if (activeVoiceShortcut && registerVoiceKey(activeVoiceShortcut)) {
+          activeVoiceRegistered = true;
+          resolvedAny = true;
+        } else {
+          for (const candidate of VOICE_FALLBACK_CANDIDATES) {
+            if (candidate.toLowerCase() === activeGlobalQuickAddKey.toLowerCase()) continue;
+            if (registerVoiceKey(candidate)) {
+              activeVoiceShortcut = candidate;
+              activeVoiceRegistered = true;
+              resolvedAny = true;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Keep blocked state
+      }
+    }
+    return {
+      ok: activeQuickAddRegistered && activeVoiceRegistered,
+      resolvedAny,
+      ...getRegistrationStatus(),
+    };
+  }
+
   return {
     getState: () => ({
       launchAtStartup: activeLaunchAtStartup,
@@ -143,21 +287,15 @@ function createShortcutAndStartupManager({
       voiceShortcutEnabled: activeVoiceShortcutEnabled,
       voiceShortcut: activeVoiceShortcut,
     }),
-    getRegistrationStatus: () => ({
-      quickAddEnabled: activeGlobalQuickAdd,
-      quickAddKey: activeGlobalQuickAddKey,
-      quickAddRegistered: activeQuickAddRegistered,
-      voiceEnabled: activeVoiceShortcutEnabled,
-      voiceShortcut: activeVoiceShortcut,
-      voiceRegistered: activeVoiceRegistered,
-    }),
+    getRegistrationStatus,
+    autoResolveBlockedShortcuts,
     hydrateState: (prefs) => {
       activeLaunchAtStartup = Boolean(prefs.launchAtStartup);
       activeLaunchMinimizedToTray = Boolean(prefs.launchMinimizedToTray);
       activeGlobalQuickAdd = prefs.globalQuickAdd !== false;
-      activeGlobalQuickAddKey = prefs.globalQuickAddKey || 'CommandOrControl+Alt+N';
+      activeGlobalQuickAddKey = prefs.globalQuickAddKey || DEFAULT_QUICK_ADD_KEY;
       activeVoiceShortcutEnabled = prefs.voiceShortcutEnabled !== false;
-      activeVoiceShortcut = prefs.voiceShortcut || 'CommandOrControl+Alt+Space';
+      activeVoiceShortcut = prefs.voiceShortcut || DEFAULT_VOICE_KEY;
     },
     applyLoginItemSetting,
     syncGlobalQuickAddShortcut,

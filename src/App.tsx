@@ -28,7 +28,7 @@ import { preferencesStore, usePreferencesSelector } from './store/preferencesSto
 import { setStoreErrorReporter } from './store/storeErrorBus';
 import { workspaceSnapshotStore } from './store/workspaceSnapshotStore';
 import { useWorkspaceUiSelector, workspaceUiStore } from './store/workspaceUiStore';
-import type { Todo } from './types';
+import type { SettingsTabId, Todo } from './types';
 import { playCompletionSound } from './utils/soundEffects';
 import { computeViewCounts, filterAndSortTodos } from './utils/todoLogic';
 
@@ -381,7 +381,7 @@ export default function App() {
     [],
   );
   const handleCompleteWelcome = useCallback(
-    (openSettingsAfter = false) => {
+    (openSettingsTarget?: boolean | SettingsTabId) => {
       workspaceUiStore.setIsWelcomeOpen(false);
       try {
         localStorage.setItem('agendamea-onboarding-completed', 'true');
@@ -391,8 +391,10 @@ export default function App() {
       void api.updateSettings({ onboardingCompleted: true }).catch(() => {
         /* ignore */
       });
-      if (openSettingsAfter) {
-        workspaceUiStore.openSettings('data');
+      if (openSettingsTarget) {
+        workspaceUiStore.openSettings(
+          typeof openSettingsTarget === 'string' ? openSettingsTarget : 'data',
+        );
       } else {
         scheduleFocus(() => quickAddRef.current?.focus(), 60);
       }

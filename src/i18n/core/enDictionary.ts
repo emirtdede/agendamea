@@ -148,7 +148,7 @@ export const EN_DICTIONARY: UiDictionary = {
   legalOpenSourceTitle: 'Open Source & Third-Party Notices',
   legalAccessibilityTitle: 'Accessibility & Support Statement',
   legalLastUpdated:
-    'Last updated: November 22, 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
+    'Last updated: November 24, 2026 · © 2026 Vellium Teknoloji Anonim Şirketi (vellium.dev)',
 
   offlineBannerText: 'Working offline - your data is safely stored on your device',
   undoButton: 'Undo',
@@ -449,7 +449,7 @@ export const EN_DICTIONARY: UiDictionary = {
   overlaySendButton: 'Send',
   overlaySpeechPackHint: 'Open Windows Speech settings (ms-settings:speech)',
   overlayTryAgainLabel: 'Listen Again',
-  overlayTrayMenuDictate: 'Voice Dictation (Ctrl+Alt+Space)',
+  overlayTrayMenuDictate: 'Voice Dictation (Ctrl+Alt+D)',
   aiVoiceMicLabel: 'Microphone',
   aiVoiceMicDefaultOption: 'System Default',
   aiVoiceMicRefreshButton: 'Refresh',
@@ -931,4 +931,49 @@ export const EN_DICTIONARY: UiDictionary = {
   sttErrorModelMissing: 'Speech recognition model is not downloaded yet.',
   sttErrorUnavailable: 'Speech recognition engine is currently unavailable.',
   sttErrorFailed: 'Speech transcription failed. Please try again.',
+  settingsTabAutomation: 'Automation & Developer',
+  accessibilitySectionSubtitle:
+    'Scale the interface, boost contrast, reduce motion, and improve keyboard focus.',
+  shortcutsGlobalSectionTitle: 'System-Wide Global Shortcuts',
+  aiSubTabVoice: 'Voice & Dictation',
+  aiSubTabEngine: 'AI Engine & Models',
+  dataDangerZoneTitle: 'Danger Zone',
+  generalLanguageChangeButton: 'Change',
+  welcomeOptionalBadge: 'Optional',
+  welcomeFocusTitle: 'Focus Mode & Smart Reminders',
+  welcomeFocusDesc:
+    'Stay on top of your day without noise using focus presets, quiet hours, and gentle reminders.',
+  welcomeFocusRemindersTitle: 'Upcoming Alerts & Daily Digest',
+  welcomeFocusRemindersDesc:
+    'Get reminded ahead of timed tasks and see a single morning summary of your day.',
+  welcomeFocusQuietTitle: 'Focus Mode & Quiet Hours',
+  welcomeFocusQuietDesc:
+    'Silence alerts during deep work or rest hours with one-click notification presets.',
+  welcomeFocusComfortTitle: 'Comfortable Reading & System Tray',
+  welcomeFocusComfortDesc:
+    'Adjust zoom, fonts, and list density, and keep Agendamea ready quietly in your tray.',
+  welcomeAiTitle: 'Voice Dictation & On-Device AI',
+  welcomeAiDesc:
+    'Speak naturally to create or find tasks and listen to notes. Runs privately on your PC only if you turn it on.',
+  welcomeAiVoiceTitle: 'Hands-Free Voice Dictation',
+  welcomeAiVoiceDesc:
+    'Press the shortcut from any screen to add tasks or ask about today; audio stays on your PC.',
+  welcomeAiReadAloudTitle: 'Read Notes Aloud & Smart Search',
+  welcomeAiReadAloudDesc:
+    'Listen to long notes with system or natural voices, and search your tasks by meaning.',
+  welcomeAiZeroDownloadTitle: 'Zero Forced Downloads',
+  welcomeAiZeroDownloadDesc:
+    'Optional local models stay uninstalled until you choose them, or connect your existing Ollama / LM Studio.',
+  welcomePowerTitle: 'Optional Automation & Power Tools',
+  welcomePowerDesc:
+    'Keep Agendamea simple, or unlock extra ways to connect your favorite tools whenever you need them.',
+  welcomePowerAssistantsTitle: 'Connect Your AI Assistants',
+  welcomePowerAssistantsDesc:
+    'Link Claude, Cursor, or VS Code in one click so your assistant can plan tasks with you.',
+  welcomePowerAutomationTitle: 'Workflow Alerts & Terminal Commands',
+  welcomePowerAutomationDesc:
+    'Send task updates to Discord, Slack, or automation apps, or manage tasks quickly from your terminal.',
+  welcomePowerExportTitle: 'Encrypted Backups & Flexible Export',
+  welcomePowerExportDesc:
+    'Protect backups with a passphrase or export anytime to Calendar, CSV, Markdown, and JSON.',
 };

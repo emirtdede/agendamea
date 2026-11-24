@@ -25,6 +25,7 @@ var tr = LocaleManager.Resolve("tr");
 var en = LocaleManager.Resolve("en");
 var ar = LocaleManager.Resolve("ar");
 Check(tr.Code == "tr" && !tr.IsRtl && tr.InstallButton == "Kur", "Turkish locale resolves cleanly");
+Check(tr.ToString() == tr.DisplayLabel && tr.ToString() == "Türkçe (TR)", "InstallerLocale.ToString() returns DisplayLabel (prevents ComboBox class-name leak)");
 Check(en.Code == "en" && !en.IsRtl && en.InstallButton == "Install", "English locale resolves cleanly");
 Check(ar.Code == "ar" && ar.IsRtl, "Arabic locale marks IsRtl = true");
 

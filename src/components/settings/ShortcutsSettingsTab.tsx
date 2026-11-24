@@ -1,5 +1,5 @@
-import { AlertTriangle, CheckCircle2, Globe, Keyboard, Mic, RotateCcw } from 'lucide-react';
-import React, { useEffect, useMemo } from 'react';
+import { AlertTriangle, CheckCircle2, Globe, Keyboard, Mic, RefreshCw, Zap } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
 import {
   type CustomShortcutsMap,
@@ -7,9 +7,12 @@ import {
   DEFAULT_GLOBAL_QUICK_ADD_SHORTCUT,
   DEFAULT_VOICE_SHORTCUT,
   detectShortcutConflicts,
+  formatShortcutDisplay,
   type ShortcutActionId,
 } from '../../utils/shortcuts';
 import { ShortcutRecorder } from '../ShortcutRecorder';
+import { ToggleSwitch } from '../ToggleSwitch';
+import { SettingsTabHeader } from './SettingsTabHeader';
 
 interface ShortcutsSettingsTabProps {
   globalQuickAddShortcut: boolean;
@@ -25,6 +28,7 @@ interface ShortcutsSettingsTabProps {
   onVoiceShortcutChange: (nextKey: string) => void;
   onChangeCustomShortcut: (action: ShortcutActionId, nextShortcut: string) => void;
   onRefreshOsStatus: () => Promise<void>;
+  onAutoResolveOsShortcuts?: () => Promise<void>;
   onResetAllShortcuts: () => void;
 }
 
@@ -42,9 +46,11 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
   onVoiceShortcutChange,
   onChangeCustomShortcut,
   onRefreshOsStatus,
+  onAutoResolveOsShortcuts,
   onResetAllShortcuts,
 }: ShortcutsSettingsTabProps) {
   const { t } = useI18n();
+  const [resolvingOs, setResolvingOs] = useState(false);
   const isElectronDesktop =
     typeof window !== 'undefined' && Boolean(window.agendameaWindow?.setGlobalQuickAddShortcut);
 
@@ -53,6 +59,34 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
       void onRefreshOsStatus();
     }
   }, [isElectronDesktop, onRefreshOsStatus]);
+
+  const quickAddDisplayKey = useMemo(
+    () => formatShortcutDisplay(globalQuickAddShortcutKey || DEFAULT_GLOBAL_QUICK_ADD_SHORTCUT),
+    [globalQuickAddShortcutKey],
+  );
+
+  // Strip any legacy hardcoded "(Ctrl+Alt+N)" from localized titles and reflect live bound key in desc
+  const quickAddTitleClean = useMemo(
+    () => t.globalQuickAddTitle.replace(/\s*\([^)]*Ctrl\+Alt\+N[^)]*\)/gi, '').trim(),
+    [t.globalQuickAddTitle],
+  );
+  const quickAddDescLive = useMemo(
+    () => t.globalQuickAddDesc.replace(/Ctrl\+Alt\+N/gi, quickAddDisplayKey),
+    [t.globalQuickAddDesc, quickAddDisplayKey],
+  );
+
+  const handleResolveOsConflict = async () => {
+    setResolvingOs(true);
+    try {
+      if (onAutoResolveOsShortcuts) {
+        await onAutoResolveOsShortcuts();
+      } else {
+        await onRefreshOsStatus();
+      }
+    } finally {
+      setResolvingOs(false);
+    }
+  };
 
   const inAppRows: Array<{ id: ShortcutActionId; label: string }> = useMemo(
     () => [
@@ -111,19 +145,12 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
 
   return (
     <div className="space-y-6" data-testid="settings-shortcuts-section">
-      {/* Header + Reset All */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs leading-relaxed text-[var(--text-muted)]">{t.shortcutsSubtitle}</p>
-        <button
-          type="button"
-          data-testid="shortcuts-reset-all-btn"
-          onClick={onResetAllShortcuts}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] shrink-0"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          <span>{t.shortcutResetDefaults}</span>
-        </button>
-      </div>
+      <SettingsTabHeader
+        subtitle={t.shortcutsSubtitle}
+        onReset={onResetAllShortcuts}
+        resetLabel={t.shortcutResetDefaults}
+        resetTestId="shortcuts-reset-all-btn"
+      />
 
       {/* Live Duplicate Conflict Alert */}
       {hasAnyConflict && (
@@ -137,39 +164,57 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
         </div>
       )}
 
-      {/* OS Global Hotkey Hijack Alert */}
+      {/* OS Global Hotkey Hijack Alert with 1-Click Auto-Resolve */}
       {hasOsBlock && (
         <div
           role="alert"
           data-testid="shortcuts-os-conflict-alert"
-          className="flex items-start gap-2.5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-700 dark:text-red-300"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-700 dark:text-red-300"
         >
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-          <span>{t.shortcutsOsRegistrationFailed}</span>
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>{t.shortcutsOsRegistrationFailed}</span>
+          </div>
+          <button
+            type="button"
+            data-testid="shortcuts-os-resolve-btn"
+            disabled={resolvingOs}
+            onClick={() => void handleResolveOsConflict()}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/15 px-2.5 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-500/25 disabled:opacity-50 dark:text-red-200 whitespace-nowrap"
+          >
+            <RefreshCw className={`h-3 w-3 ${resolvingOs ? 'animate-spin' : ''}`} />
+            <span>{t.retry}</span>
+          </button>
         </div>
       )}
 
       {/* System-Wide Global Shortcuts (Desktop) */}
       {isElectronDesktop && (
         <section
-          aria-label={t.shortcutGlobalQuickAdd}
+          aria-label={t.shortcutsGlobalSectionTitle}
           data-setting-id="shortcuts-global"
           className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] divide-y divide-[var(--border)]"
         >
-          <div className="flex items-center gap-2 px-4 py-3 bg-[var(--canvas)]/60">
-            <Globe className="h-4 w-4 text-[var(--accent)]" />
-            <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
-              {t.shortcutGlobalQuickAdd}
-            </h3>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-[var(--canvas)]/60">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-[var(--accent)]" />
+              <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+                {t.shortcutsGlobalSectionTitle}
+              </h3>
+            </div>
+            <span className="text-[11px] text-[var(--text-muted)]">
+              {t.shortcutRequireModifierHint}
+            </span>
           </div>
 
           {/* Global Quick Add */}
-          <div className="px-4 py-3.5 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+              <Zap className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-medium text-[var(--text-primary)]">
-                    {t.globalQuickAddTitle}
+                    {quickAddTitleClean}
                   </p>
                   {globalQuickAddShortcut && (
                     <span
@@ -192,31 +237,10 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
                     </span>
                   )}
                 </div>
-                <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.globalQuickAddDesc}</p>
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">{quickAddDescLive}</p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={globalQuickAddShortcut}
-                aria-label={t.globalQuickAddTitle}
-                onClick={() => onToggleGlobalQuickAddShortcut(!globalQuickAddShortcut)}
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                  globalQuickAddShortcut ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                    globalQuickAddShortcut
-                      ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                      : 'translate-x-0.5 rtl:-translate-x-0.5'
-                  }`}
-                />
-              </button>
             </div>
-            <div className="flex items-center justify-between gap-3 pt-1">
-              <span className="text-xs text-[var(--text-secondary)]">
-                {t.shortcutRequireModifierHint}
-              </span>
+            <div className="flex items-center gap-3 shrink-0">
               <ShortcutRecorder
                 value={globalQuickAddShortcutKey}
                 defaultValue={DEFAULT_GLOBAL_QUICK_ADD_SHORTCUT}
@@ -224,70 +248,51 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
                 electronFormat
                 disabled={!globalQuickAddShortcut}
                 hasConflict={conflicts.has('global-quick-add')}
+                hasOsError={globalQuickAddShortcut && !quickAddRegistered}
                 testId="shortcut-recorder-global-quick-add"
                 onChange={onChangeGlobalQuickAddShortcutKey}
+              />
+              <ToggleSwitch
+                checked={globalQuickAddShortcut}
+                onChange={onToggleGlobalQuickAddShortcut}
+                label={quickAddTitleClean}
+                testId="shortcut-toggle-global-quick-add"
               />
             </div>
           </div>
 
           {/* Global Voice Dictation */}
-          <div className="px-4 py-3.5 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                <Mic className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-medium text-[var(--text-primary)]">
-                      {t.aiVoiceShortcutLabel}
-                    </p>
-                    {voiceShortcutEnabled && (
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          voiceRegistered
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                            : 'bg-red-500/15 text-red-600 dark:text-red-400'
-                        }`}
-                      >
-                        {voiceRegistered ? (
-                          <CheckCircle2 className="h-2.5 w-2.5" />
-                        ) : (
-                          <AlertTriangle className="h-2.5 w-2.5" />
-                        )}
-                        <span>
-                          {voiceRegistered
-                            ? t.shortcutsOsRegisteredBadge
-                            : t.shortcutsOsBlockedBadge}
-                        </span>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+              <Mic className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                    {t.aiVoiceShortcutLabel}
+                  </p>
+                  {voiceShortcutEnabled && (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        voiceRegistered
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-red-500/15 text-red-600 dark:text-red-400'
+                      }`}
+                    >
+                      {voiceRegistered ? (
+                        <CheckCircle2 className="h-2.5 w-2.5" />
+                      ) : (
+                        <AlertTriangle className="h-2.5 w-2.5" />
+                      )}
+                      <span>
+                        {voiceRegistered ? t.shortcutsOsRegisteredBadge : t.shortcutsOsBlockedBadge}
                       </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.shortcutGlobalVoice}</p>
+                    </span>
+                  )}
                 </div>
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.shortcutGlobalVoice}</p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                data-testid="shortcut-toggle-global-voice"
-                aria-checked={voiceShortcutEnabled}
-                aria-label={t.aiVoiceShortcutLabel}
-                onClick={() => onToggleVoiceShortcutEnabled(!voiceShortcutEnabled)}
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                  voiceShortcutEnabled ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                    voiceShortcutEnabled
-                      ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                      : 'translate-x-0.5 rtl:-translate-x-0.5'
-                  }`}
-                />
-              </button>
             </div>
-            <div className="flex items-center justify-between gap-3 pt-1">
-              <span className="text-xs text-[var(--text-secondary)]">
-                {t.shortcutRequireModifierHint}
-              </span>
+            <div className="flex items-center gap-3 shrink-0">
               <ShortcutRecorder
                 value={voiceShortcut}
                 defaultValue={DEFAULT_VOICE_SHORTCUT}
@@ -295,8 +300,15 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
                 electronFormat
                 disabled={!voiceShortcutEnabled}
                 hasConflict={conflicts.has('global-voice')}
+                hasOsError={voiceShortcutEnabled && !voiceRegistered}
                 testId="shortcut-recorder-global-voice"
                 onChange={onVoiceShortcutChange}
+              />
+              <ToggleSwitch
+                checked={voiceShortcutEnabled}
+                onChange={onToggleVoiceShortcutEnabled}
+                label={t.aiVoiceShortcutLabel}
+                testId="shortcut-toggle-global-voice"
               />
             </div>
           </div>
@@ -316,9 +328,6 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
               {t.keyboardShortcutsTitle}
             </h3>
           </div>
-          <span className="text-[11px] text-[var(--text-muted)]">
-            {t.shortcutRequireModifierHint}
-          </span>
         </div>
 
         <div className="divide-y divide-[var(--border)]">

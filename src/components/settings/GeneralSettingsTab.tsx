@@ -1,18 +1,19 @@
 import {
   Calendar,
   Check,
+  ChevronDown,
+  ChevronUp,
   Globe,
   Lock,
   Play,
   Power,
-  RotateCcw,
   Search,
   Shield,
   Sliders,
   Unlock,
   Volume2,
 } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { LanguageCode } from '../../i18n/languages';
 import type {
@@ -23,12 +24,13 @@ import type {
   LayoutMode,
   Priority,
   TimeFormatPreference,
-  TrashAutoPurgeDays,
   WeekStartDay,
 } from '../../types';
 import { playCompletionSound } from '../../utils/soundEffects';
 import { matchesLocaleQuery } from '../../utils/todoLogic';
 import { SelectField } from '../SelectField';
+import { ToggleSwitch } from '../ToggleSwitch';
+import { SettingsTabHeader } from './SettingsTabHeader';
 
 interface GeneralSettingsTabProps {
   closeBehavior: CloseBehavior;
@@ -42,8 +44,8 @@ interface GeneralSettingsTabProps {
   completedTaskBehavior: CompletedTaskBehavior;
   completionSound: CompletionSoundPreset;
   confirmBeforeDelete: boolean;
-  trashAutoPurgeDays: TrashAutoPurgeDays;
   dragLocked: boolean;
+  expandLanguageSeq?: number;
   onChangeCloseBehavior: (behavior: CloseBehavior) => void;
   onToggleLaunchAtStartup: (enabled: boolean) => void;
   onToggleLaunchMinimizedToTray: (enabled: boolean) => void;
@@ -55,7 +57,6 @@ interface GeneralSettingsTabProps {
   onChangeCompletedTaskBehavior: (behavior: CompletedTaskBehavior) => void;
   onChangeCompletionSound: (sound: CompletionSoundPreset) => void;
   onToggleConfirmBeforeDelete: (enabled: boolean) => void;
-  onChangeTrashAutoPurgeDays: (days: TrashAutoPurgeDays) => void;
   onToggleDragLock: (locked: boolean) => void;
   onResetGeneral: () => void;
 }
@@ -72,8 +73,8 @@ export const GeneralSettingsTab = React.memo(function GeneralSettingsTab({
   completedTaskBehavior,
   completionSound,
   confirmBeforeDelete,
-  trashAutoPurgeDays,
   dragLocked,
+  expandLanguageSeq,
   onChangeCloseBehavior,
   onToggleLaunchAtStartup,
   onToggleLaunchMinimizedToTray,
@@ -85,14 +86,21 @@ export const GeneralSettingsTab = React.memo(function GeneralSettingsTab({
   onChangeCompletedTaskBehavior,
   onChangeCompletionSound,
   onToggleConfirmBeforeDelete,
-  onChangeTrashAutoPurgeDays,
   onToggleDragLock,
   onResetGeneral,
 }: GeneralSettingsTabProps) {
   const { t, lang, meta, languages, onChangeLanguage } = useI18n();
+  const [langPickerOpen, setLangPickerOpen] = useState(false);
   const [langSearch, setLangSearch] = useState('');
+  const langToggleBtnRef = useRef<HTMLButtonElement>(null);
   const isElectronDesktop =
     typeof window !== 'undefined' && Boolean(window.agendameaWindow?.setCloseBehavior);
+
+  useEffect(() => {
+    if (expandLanguageSeq) {
+      setLangPickerOpen(true);
+    }
+  }, [expandLanguageSeq]);
 
   const filteredLanguages = useMemo(() => {
     const q = langSearch.trim();
@@ -107,47 +115,39 @@ export const GeneralSettingsTab = React.memo(function GeneralSettingsTab({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          data-testid="general-reset-btn"
-          onClick={onResetGeneral}
-          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          <span>{t.resetTabDefaultsButton}</span>
-        </button>
-      </div>
+      <SettingsTabHeader onReset={onResetGeneral} resetTestId="general-reset-btn" />
 
-      {/* 1. Language Card */}
+      {/* 1. Collapsible Language Card (Default Closed) */}
       <section
         aria-label={t.languageSectionTitle}
         data-setting-id="general-language"
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && langPickerOpen) {
+            e.preventDefault();
+            e.stopPropagation();
+            setLangPickerOpen(false);
+            setLangSearch('');
+            langToggleBtnRef.current?.focus();
+          }
+        }}
         className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3"
       >
-        <div className="flex items-start gap-2.5">
-          <Globe className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-              {t.languageSectionTitle}
-            </h3>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.welcomeLanguageDesc}</p>
-          </div>
-        </div>
-        <div className="space-y-2.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[180px]">
-              <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
-              <input
-                type="text"
-                value={langSearch}
-                onChange={(e) => setLangSearch(e.target.value)}
-                placeholder={t.languageSearchPlaceholder}
-                aria-label={t.languageSearchPlaceholder}
-                className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-2.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
-              />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <Globe className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                {t.languageSectionTitle}
+              </h3>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.welcomeLanguageDesc}</p>
             </div>
-            <div className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-soft)] px-2.5 text-xs font-semibold text-[var(--text-primary)]">
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <div
+              data-testid="general-active-language-pill"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--accent)]/45 bg-[var(--accent-soft)] px-2.5 text-xs font-semibold text-[var(--text-primary)]"
+            >
               <span>{meta.nativeName}</span>
               <span
                 lang="en"
@@ -158,41 +158,86 @@ export const GeneralSettingsTab = React.memo(function GeneralSettingsTab({
               </span>
               <Check className="h-3.5 w-3.5 text-[var(--accent)]" />
             </div>
-          </div>
-
-          <div
-            role="listbox"
-            aria-label={t.languageSectionTitle}
-            className="grid max-h-48 grid-cols-2 sm:grid-cols-3 gap-1.5 overflow-y-auto pe-1"
-          >
-            {filteredLanguages.map((item) => {
-              const selected = item.code === lang;
-              return (
-                <button
-                  key={item.code}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => onChangeLanguage(item.code as LanguageCode)}
-                  className={`flex items-center justify-between gap-1.5 rounded-lg border px-2.5 py-1.5 text-start text-xs transition-colors ${
-                    selected
-                      ? 'border-[var(--accent)] bg-[var(--accent-soft)] font-semibold text-[var(--text-primary)]'
-                      : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <span className="truncate">{item.nativeName}</span>
-                  <span
-                    lang="en"
-                    dir="ltr"
-                    className="shrink-0 font-mono-tabular text-[9px] uppercase text-[var(--text-muted)]"
-                  >
-                    {item.code}
-                  </span>
-                </button>
-              );
-            })}
+            <button
+              ref={langToggleBtnRef}
+              type="button"
+              data-testid="general-language-toggle-btn"
+              aria-expanded={langPickerOpen}
+              aria-controls="general-language-picker-panel"
+              onClick={() => {
+                setLangPickerOpen((prev) => {
+                  if (prev) setLangSearch('');
+                  return !prev;
+                });
+              }}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+            >
+              <span>{t.generalLanguageChangeButton}</span>
+              {langPickerOpen ? (
+                <ChevronUp className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              )}
+            </button>
           </div>
         </div>
+
+        {langPickerOpen && (
+          <div
+            id="general-language-picker-panel"
+            className="animate-accordion space-y-2.5 border-t border-[var(--border)] pt-3"
+          >
+            <div className="relative">
+              <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
+              <input
+                type="text"
+                data-testid="general-language-search-input"
+                value={langSearch}
+                onChange={(e) => setLangSearch(e.target.value)}
+                placeholder={t.languageSearchPlaceholder}
+                aria-label={t.languageSearchPlaceholder}
+                className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-2.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+              />
+            </div>
+
+            <div
+              role="listbox"
+              aria-label={t.languageSectionTitle}
+              className="grid max-h-48 grid-cols-2 sm:grid-cols-3 gap-1.5 overflow-y-auto pe-1"
+            >
+              {filteredLanguages.map((item) => {
+                const selected = item.code === lang;
+                return (
+                  <button
+                    key={item.code}
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => {
+                      onChangeLanguage(item.code as LanguageCode);
+                      setLangPickerOpen(false);
+                      setLangSearch('');
+                    }}
+                    className={`flex items-center justify-between gap-1.5 rounded-lg border px-2.5 py-1.5 text-start text-xs transition-colors ${
+                      selected
+                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] font-semibold text-[var(--text-primary)]'
+                        : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <span className="truncate">{item.nativeName}</span>
+                    <span
+                      lang="en"
+                      dir="ltr"
+                      className="shrink-0 font-mono-tabular text-[9px] uppercase text-[var(--text-muted)]"
+                    >
+                      {item.code}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 2. Calendar & Time Formatting */}
@@ -431,24 +476,12 @@ export const GeneralSettingsTab = React.memo(function GeneralSettingsTab({
                 <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.launchAtStartupDesc}</p>
               </div>
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={launchAtStartup}
-              aria-label={t.launchAtStartupTitle}
-              onClick={() => onToggleLaunchAtStartup(!launchAtStartup)}
-              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                launchAtStartup ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-              }`}
-            >
-              <span
-                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                  launchAtStartup
-                    ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                    : 'translate-x-0.5 rtl:-translate-x-0.5'
-                }`}
-              />
-            </button>
+            <ToggleSwitch
+              checked={launchAtStartup}
+              onChange={onToggleLaunchAtStartup}
+              label={t.launchAtStartupTitle}
+              testId="general-launch-startup-toggle"
+            />
           </div>
 
           {launchAtStartup && (
@@ -461,31 +494,18 @@ export const GeneralSettingsTab = React.memo(function GeneralSettingsTab({
                   {t.generalStartMinimizedDesc}
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                data-testid="general-start-minimized-toggle"
-                aria-checked={launchMinimizedToTray}
-                aria-label={t.generalStartMinimizedTitle}
-                onClick={() => onToggleLaunchMinimizedToTray(!launchMinimizedToTray)}
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                  launchMinimizedToTray ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                    launchMinimizedToTray
-                      ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                      : 'translate-x-0.5 rtl:-translate-x-0.5'
-                  }`}
-                />
-              </button>
+              <ToggleSwitch
+                checked={launchMinimizedToTray}
+                onChange={onToggleLaunchMinimizedToTray}
+                label={t.generalStartMinimizedTitle}
+                testId="general-start-minimized-toggle"
+              />
             </div>
           )}
         </div>
       )}
 
-      {/* 5. Safety, Trash Retention & Drag Lock */}
+      {/* 5. Safety & Drag Lock */}
       <div
         data-setting-id="general-safety"
         className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
@@ -502,70 +522,41 @@ export const GeneralSettingsTab = React.memo(function GeneralSettingsTab({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            data-testid="general-confirm-delete-toggle"
-            aria-checked={confirmBeforeDelete}
-            aria-label={t.generalConfirmDeleteTitle}
-            onClick={() => onToggleConfirmBeforeDelete(!confirmBeforeDelete)}
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-              confirmBeforeDelete ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-            }`}
-          >
-            <span
-              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                confirmBeforeDelete
-                  ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                  : 'translate-x-0.5 rtl:-translate-x-0.5'
-              }`}
-            />
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--text-primary)]">
-              {t.generalTrashAutoPurgeTitle}
-            </p>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.generalTrashAutoPurgeDesc}</p>
-          </div>
-          <SelectField
-            data-testid="general-trash-purge-select"
-            value={trashAutoPurgeDays}
-            onChange={(e) =>
-              onChangeTrashAutoPurgeDays(Number(e.target.value) as TrashAutoPurgeDays)
-            }
-            wrapperClassName="w-40"
-          >
-            <option value={0}>{t.generalTrashPurgeNever}</option>
-            <option value={7}>{t.generalTrashPurge7}</option>
-            <option value={30}>{t.generalTrashPurge30}</option>
-            <option value={90}>{t.generalTrashPurge90}</option>
-          </SelectField>
+          <ToggleSwitch
+            checked={confirmBeforeDelete}
+            onChange={onToggleConfirmBeforeDelete}
+            label={t.generalConfirmDeleteTitle}
+            testId="general-confirm-delete-toggle"
+          />
         </div>
 
         <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--text-primary)]">{t.dragReorderTitle}</p>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-              {dragLocked ? t.dragLockedDesc : t.dragUnlockedDesc}
-            </p>
+          <div className="flex items-start gap-2.5 min-w-0">
+            {dragLocked ? (
+              <Lock className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
+            ) : (
+              <Unlock className="h-4 w-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
+            )}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  {t.dragReorderTitle}
+                </p>
+                <span className="rounded-md bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[10.5px] font-medium text-[var(--text-muted)]">
+                  {dragLocked ? t.lockedBadge : t.unlockedBadge}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                {dragLocked ? t.dragLockedDesc : t.dragUnlockedDesc}
+              </p>
+            </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={dragLocked}
-            onClick={() => onToggleDragLock(!dragLocked)}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors shrink-0 ${
-              dragLocked
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-            }`}
-          >
-            {dragLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-            <span>{dragLocked ? t.lockedBadge : t.unlockedBadge}</span>
-          </button>
+          <ToggleSwitch
+            checked={dragLocked}
+            onChange={onToggleDragLock}
+            label={t.dragReorderTitle}
+            testId="general-drag-lock-toggle"
+          />
         </div>
       </div>
     </div>

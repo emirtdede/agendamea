@@ -671,9 +671,9 @@ test('QA-AUDIT-12: ModelManager manifest mtime cache hits on unchanged disk file
     loadLocaleBundle('ar'),
     loadLocaleBundle('ja'),
   ]);
-  assert.equal(Object.keys(deBundle.dict).length, 821);
-  assert.equal(Object.keys(arBundle.dict).length, 821);
-  assert.equal(Object.keys(jaBundle.dict).length, 821);
+  assert.equal(Object.keys(deBundle.dict).length, 853);
+  assert.equal(Object.keys(arBundle.dict).length, 853);
+  assert.equal(Object.keys(jaBundle.dict).length, 853);
   assert.ok(deBundle.dict.aiHardwareGpuVramLabel.length > 0);
   assert.ok(arBundle.dict.aiHardwareMemoryWarningBadge.length > 0);
   assert.ok(jaBundle.legal.privacy.sections.length > 0);

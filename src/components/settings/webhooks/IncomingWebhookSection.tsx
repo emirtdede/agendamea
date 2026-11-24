@@ -1,6 +1,7 @@
 import { Activity, AlertTriangle, Check, Copy, Eye, EyeOff, Info, KeyRound, X } from 'lucide-react';
 import type React from 'react';
 import { useI18n } from '../../../i18n/I18nContext';
+import { ToggleSwitch } from '../../ToggleSwitch';
 import {
   generateSecureWebhookKey,
   INCOMING_ACTION_TABS,
@@ -24,6 +25,7 @@ interface IncomingWebhookSectionProps {
   incomingTestResult: { ok: boolean; text: string } | null;
   setIncomingTestResult: (res: { ok: boolean; text: string } | null) => void;
   copiedId: string | null;
+  hideToggle?: boolean;
   onCopy: (id: string, text: string) => Promise<void>;
   onTestIncoming: () => Promise<void>;
   onToggleIncoming: (next: boolean) => void;
@@ -47,6 +49,7 @@ export function IncomingWebhookSection({
   incomingTestResult,
   setIncomingTestResult,
   copiedId,
+  hideToggle = false,
   onCopy,
   onTestIncoming,
   onToggleIncoming,
@@ -80,20 +83,14 @@ export function IncomingWebhookSection({
             <Activity className="h-3 w-3 text-[var(--accent)]" />
             <span>{t.webhookIncomingTestBtn}</span>
           </button>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={incomingEnabledDraft}
-            data-testid="docs-webhook-incoming-toggle"
-            onClick={() => onToggleIncoming(!incomingEnabledDraft)}
-            className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors whitespace-nowrap shrink-0 ${
-              incomingEnabledDraft
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'
-            }`}
-          >
-            {incomingEnabledDraft ? t.enabledBadge : t.disabledBadge}
-          </button>
+          {!hideToggle && (
+            <ToggleSwitch
+              checked={incomingEnabledDraft}
+              onChange={onToggleIncoming}
+              label={t.webhookIncomingToggleLabel}
+              testId="docs-webhook-incoming-toggle"
+            />
+          )}
         </div>
       </div>
 

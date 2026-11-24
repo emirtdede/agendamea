@@ -13,6 +13,7 @@ import React, { useMemo } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 import type { UpdateCheckResult } from '../types';
 import { getCachedDateTimeFormatter } from '../utils/intlCache';
+import { ToggleSwitch } from './ToggleSwitch';
 
 export interface AppUpdateState {
   status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'downloaded' | 'error';
@@ -273,24 +274,12 @@ export const UpdateSettingsSection = React.memo(function UpdateSettingsSection({
         {/* Auto-check toggle */}
         <div className="flex items-center justify-between gap-3 pt-2 border-t border-[var(--border)]">
           <span className="text-xs text-[var(--text-secondary)]">{t.autoUpdateToggleTitle}</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={autoUpdateCheck}
-            aria-label={t.autoUpdateToggleTitle}
-            onClick={() => onToggleAutoUpdateCheck(!autoUpdateCheck)}
-            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-              autoUpdateCheck ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-            }`}
-          >
-            <span
-              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                autoUpdateCheck
-                  ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                  : 'translate-x-0.5 rtl:-translate-x-0.5'
-              }`}
-            />
-          </button>
+          <ToggleSwitch
+            checked={autoUpdateCheck}
+            onChange={onToggleAutoUpdateCheck}
+            label={t.autoUpdateToggleTitle}
+            testId="update-auto-check-toggle"
+          />
         </div>
       </div>
     </section>

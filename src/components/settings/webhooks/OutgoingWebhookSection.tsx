@@ -16,6 +16,7 @@ import type React from 'react';
 import { useI18n } from '../../../i18n/I18nContext';
 import type { WebhookEndpointOverride, WebhookFormat, WebhookTestResult } from '../../../types';
 import { SelectField } from '../../SelectField';
+import { ToggleSwitch } from '../../ToggleSwitch';
 import {
   EVENT_OPTIONS,
   generateSecureWebhookKey,
@@ -228,28 +229,26 @@ export function OutgoingWebhookSection({
                       <option value="slack">{t.webhookFormatSlack}</option>
                       <option value="generic">{t.webhookFormatGeneric}</option>
                     </SelectField>
-                    <button
-                      type="button"
-                      role="switch"
-                      data-testid={`webhook-endpoint-enabled-${idx}`}
-                      aria-checked={!isUrlPaused}
-                      onClick={() => {
-                        setOverridesDraft((prev) => ({
-                          ...prev,
-                          [trimmedUrl]: {
-                            ...prev[trimmedUrl],
-                            enabled: isUrlPaused,
-                          },
-                        }));
-                      }}
-                      className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                        !isUrlPaused
-                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          : 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                      }`}
-                    >
-                      {!isUrlPaused ? t.enabledBadge : t.webhookEndpointPausedBadge}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                        {!isUrlPaused ? t.enabledBadge : t.webhookEndpointPausedBadge}
+                      </span>
+                      <ToggleSwitch
+                        size="sm"
+                        checked={!isUrlPaused}
+                        onChange={() => {
+                          setOverridesDraft((prev) => ({
+                            ...prev,
+                            [trimmedUrl]: {
+                              ...prev[trimmedUrl],
+                              enabled: isUrlPaused,
+                            },
+                          }));
+                        }}
+                        label={trimmedUrl}
+                        testId={`webhook-endpoint-enabled-${idx}`}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -387,20 +386,12 @@ export function OutgoingWebhookSection({
           </p>
           <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">{t.webhookAllowLocalDesc}</p>
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={allowLocalDraft}
-          data-testid="docs-webhook-allow-local-toggle"
-          onClick={() => setAllowLocalDraft((prev) => !prev)}
-          className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-colors whitespace-nowrap shrink-0 ${
-            allowLocalDraft
-              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-              : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'
-          }`}
-        >
-          {allowLocalDraft ? t.enabledBadge : t.disabledBadge}
-        </button>
+        <ToggleSwitch
+          checked={allowLocalDraft}
+          onChange={setAllowLocalDraft}
+          label={t.webhookAllowLocalLabel}
+          testId="docs-webhook-allow-local-toggle"
+        />
       </div>
 
       {hasUnsavedChanges && (

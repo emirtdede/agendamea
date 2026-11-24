@@ -16,6 +16,7 @@ interface ShortcutRecorderProps {
   disabled?: boolean;
   allowClear?: boolean;
   hasConflict?: boolean;
+  hasOsError?: boolean;
   testId?: string;
   onChange: (nextShortcut: string) => void;
 }
@@ -28,6 +29,7 @@ export const ShortcutRecorder = React.memo(function ShortcutRecorder({
   disabled = false,
   allowClear = false,
   hasConflict = false,
+  hasOsError = false,
   testId,
   onChange,
 }: ShortcutRecorderProps) {
@@ -83,9 +85,11 @@ export const ShortcutRecorder = React.memo(function ShortcutRecorder({
         className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 font-mono-tabular text-[11px] font-medium transition-colors whitespace-nowrap disabled:opacity-45 ${
           recording
             ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] animate-pulse'
-            : hasConflict
-              ? 'border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300'
-              : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]'
+            : hasOsError
+              ? 'border-red-500/60 bg-red-500/10 text-red-700 dark:text-red-300'
+              : hasConflict
+                ? 'border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]'
         }`}
       >
         <Keyboard className="h-3 w-3 shrink-0 opacity-75" />

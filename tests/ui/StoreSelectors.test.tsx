@@ -235,7 +235,7 @@ describe('Selector Store Isolation (React 19 useSyncExternalStore)', () => {
     shortcuts.setCustomShortcut('newTask', 'Ctrl+K');
     expect(shortcuts.getState().voiceShortcut).toBe('CommandOrControl+Shift+V');
     shortcuts.resetAll();
-    expect(shortcuts.getState().voiceShortcut).toBe('CommandOrControl+Alt+Space');
+    expect(shortcuts.getState().voiceShortcut).toBe('CommandOrControl+Alt+D');
 
     // 7. preferencesStore
     const prefs = createPreferencesStore(persist, onErr);

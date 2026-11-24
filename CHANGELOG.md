@@ -2,10 +2,15 @@
 
 All notable changes to **Agendamea** are documented in this file.
 
-## [1.1.0] - 2026-11-22
+## [1.1.0] - 2026-11-24
 
 ### Added
 
+- **Settings IA v2, 12-Client Collapsible MCP Hub & Self-Healing Shortcuts:**
+  - Consolidated 12 Settings tabs into 10 focused tabs with a single ARIA `tablist`, unified `<ToggleSwitch />` controls, 73-language deep Settings search, collapsible 73-language picker, isolated red **Danger Zone**, always-visible Trash retention controls, and Cold-Start local AI setup guidance.
+  - Expanded one-click MCP client integration into a default-collapsed 12-card (`6x2`) grid covering **Claude Desktop**, **Cursor**, **VS Code**, **Windsurf**, **Claude Code**, **Antigravity**, **ChatGPT Codex** (comment-preserving TOML), **OpenCode** (`mcp.agendamea`), **Bionic (LM Studio)**, **Zed** (`context_servers`), **Gemini CLI**, and **Custom MCP (`.json` / `.jsonc` / `.toml`)** auto-detecting file picker.
+  - Switched default global voice dictation shortcut across all 73 locales from `Ctrl+Alt+Space` (which collides with Claude Desktop Quick Entry on Windows) to **`Ctrl+Alt+D`**, with automatic startup OS conflict fallback (`autoFallback`), live status re-probing, and 1-click conflict auto-resolution.
+  - Updated all 5 offline legal documents (Privacy Policy, Terms of Use, KVKK/GDPR, Open Source Licenses, Accessibility) for v1.1.0 compliance (SQLite WAL, Hugging Face SHA-256 downloads, Webhooks SSRF/HMAC, MCP third-party boundaries, Piper neural voice licenses, and KVKK/GDPR statutory rights).
 - **On-Device Local AI, Hybrid RAG & Neural Voice Dictation:**
   - Hardware auto-profiling (64-bit VRAM detection, RAM, CPU cores, free disk) with 3 local model tiers (Light / Medium / Strong - 100% Apache 2.0 / MIT: Whisper.cpp, Qwen3, Multilingual-E5) plus zero-download **External Local Engine (Ollama / LM Studio)** model picker and automatic runtime server detection.
   - Upgraded 100% offline neural audio pipeline: **Mozilla RNNoise WASM** deep-learning noise suppression (`48 kHz` AudioWorklet), **Silero VAD v5 ONNX** neural speech detector with continuous EMA adaptive noise-floor fallback (`Auto`, `Low`, `Medium`, `High`), selectable microphone device + live level meter, 5 selectable ready chimes (`Soft`, `Crystal`, `Studio`, `Minimal`, `None`), and automatic no-speech timeout.

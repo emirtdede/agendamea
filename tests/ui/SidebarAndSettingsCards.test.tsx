@@ -168,6 +168,11 @@ describe('Sidebar, Data/Docs Settings Cards & VoiceVadController', () => {
 
     await user.click(screen.getByTestId('docs-copy-mcp-btn'));
     expect(onCopy).toHaveBeenCalledWith('mcp-standard', '{"mcpServers":{"agendamea":{}}}');
+
+    // MCP one-click client grid starts collapsed and expands on click
+    expect(screen.queryByTestId('mcp-client-claude-desktop')).toBeNull();
+    await user.click(screen.getByTestId('mcp-clients-accordion-toggle'));
+    expect(screen.getByTestId('mcp-client-claude-desktop')).toBeInTheDocument();
   });
 
   it('tracks speech onset, trailing silence auto-stop, and speech ratio in VoiceVadController', () => {

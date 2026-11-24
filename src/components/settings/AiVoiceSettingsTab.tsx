@@ -1,4 +1,4 @@
-import { Sparkles, X } from 'lucide-react';
+import { Cpu, Download, Mic, Sparkles, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { subscribeServerEvents } from '../../api/eventStream';
@@ -12,14 +12,21 @@ import { ModelCatalogSection } from './ai/ModelCatalogSection';
 import { TierSelectorSection } from './ai/TierSelectorSection';
 import { VoiceAudioSection } from './ai/VoiceAudioSection';
 
+export type AiSubTabId = 'voice' | 'engine';
+
 interface AiVoiceSettingsTabProps {
   onNotifyVoice?: (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => void;
+  requestedSubTab?: AiSubTabId;
+  subTabSeq?: number;
 }
 
 export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   onNotifyVoice,
+  requestedSubTab,
+  subTabSeq,
 }: AiVoiceSettingsTabProps) {
   const { t, lang } = useI18n();
+  const [activeSubTab, setActiveSubTab] = useState<AiSubTabId>(requestedSubTab ?? 'voice');
   const [status, setStatus] = useState<AiStatusPayload | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [rescanning, setRescanning] = useState<boolean>(false);
@@ -95,6 +102,26 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
     setPiperVoices,
     refreshPiperVoices,
   });
+
+  useEffect(() => {
+    if (subTabSeq !== undefined && requestedSubTab) {
+      setActiveSubTab(requestedSubTab);
+    }
+  }, [requestedSubTab, subTabSeq]);
+
+  useEffect(() => {
+    if (activeSubTab !== 'voice' && testingMic) {
+      void handleToggleMicTest();
+    }
+  }, [activeSubTab, testingMic, handleToggleMicTest]);
+
+  const handleSwitchSubTab = useCallback(
+    (next: AiSubTabId) => {
+      if (next === activeSubTab) return;
+      setActiveSubTab(next);
+    },
+    [activeSubTab],
+  );
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -256,6 +283,15 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
     [piperVoices],
   );
   const hasActiveDownload = hasActiveModelDownload || hasActivePiperDownload;
+
+  const hasReadyAiEngine = useMemo(() => {
+    if (!status) return true;
+    const hasLocal = status.installedDiskBytes > 0 || status.models.some((m) => m.present);
+    const hasExternal =
+      (status.recommendation?.externalOllama?.models?.length ?? 0) > 0 ||
+      (status.recommendation?.externalLmStudio?.models?.length ?? 0) > 0;
+    return hasLocal || hasExternal;
+  }, [status]);
 
   useEffect(() => {
     if (!hasActiveDownload) return;
@@ -487,7 +523,61 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   }, []);
 
   return (
-    <div className="space-y-6" data-testid="settings-ai-section">
+    <div className="space-y-5" data-testid="settings-ai-section">
+      {/* 2-Way Segmented View Switcher (role="group" to avoid nested tablist) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <fieldset
+          aria-label={t.settingsTabAi}
+          className="inline-flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1"
+        >
+          <button
+            type="button"
+            data-testid="ai-subtab-voice"
+            aria-pressed={activeSubTab === 'voice'}
+            onClick={() => handleSwitchSubTab('voice')}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeSubTab === 'voice'
+                ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Mic className="h-3.5 w-3.5 shrink-0" />
+            <span>{t.aiSubTabVoice}</span>
+            {hasActivePiperDownload && (
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"
+              />
+            )}
+          </button>
+
+          <button
+            type="button"
+            data-testid="ai-subtab-engine"
+            aria-pressed={activeSubTab === 'engine'}
+            onClick={() => handleSwitchSubTab('engine')}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeSubTab === 'engine'
+                ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Cpu className="h-3.5 w-3.5 shrink-0" />
+            <span>{t.aiSubTabEngine}</span>
+            {hasActiveModelDownload && (
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"
+              />
+            )}
+          </button>
+        </fieldset>
+
+        {activeSubTab === 'voice' && (
+          <p className="text-[11px] text-[var(--text-muted)]">{t.aiPrivacyBadgeText}</p>
+        )}
+      </div>
+
       {/* Sticky Dismissible Action Error Banner */}
       {actionError && (
         <div
@@ -507,112 +597,151 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
         </div>
       )}
 
-      <HardwareProfileSection
-        status={status}
-        loading={loading}
-        rescanning={rescanning}
-        reindexing={reindexing}
-        reindexNotice={reindexNotice}
-        onRescan={handleRescanHardware}
-        onReindexRag={() => void handleReindexRag()}
-        onDismissReindexNotice={handleDismissReindexNotice}
-      />
-
-      {/* Quick-Enable Tray + Startup Guide Card for Always-Ready Voice Hotkey */}
-      {isElectronDesktop &&
-        (desktopPrefs.closeBehavior !== 'tray' || !desktopPrefs.launchAtStartup) && (
-          <section
-            data-testid="ai-tray-startup-guide-card"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--accent)]/35 bg-[var(--accent-soft)] px-4 py-3"
-          >
-            <div className="flex items-start gap-2.5 min-w-0 flex-1">
-              <Sparkles className="h-4 w-4 text-[var(--accent)] shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-[var(--text-primary)]">
-                  {t.aiVoiceTrayGuideTitle}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-                  {t.aiVoiceTrayGuideDesc}
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              data-testid="ai-enable-tray-startup-btn"
-              onClick={handleEnableTrayAndStartup}
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 shrink-0"
-              style={{
-                backgroundColor: 'var(--accent)',
-                color: 'var(--accent-fg)',
-              }}
+      {activeSubTab === 'voice' ? (
+        <div className="space-y-5 animate-tab-enter">
+          {/* Cold-Start Readiness Callout when no local/external AI model is installed yet */}
+          {!loading && status && !hasReadyAiEngine && (
+            <section
+              data-testid="ai-cold-start-banner"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3"
             >
-              {t.aiVoiceEnableTrayButton}
-            </button>
-          </section>
-        )}
+              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                <Download className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-[var(--text-primary)]">
+                    {t.sttErrorModelMissing}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                    {t.aiSectionSubtitle}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                data-testid="ai-cold-start-setup-btn"
+                onClick={() => handleSwitchSubTab('engine')}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 shrink-0 whitespace-nowrap"
+                style={{
+                  backgroundColor: 'var(--accent)',
+                  color: 'var(--accent-fg)',
+                }}
+              >
+                <Cpu className="h-3.5 w-3.5" />
+                <span>{t.aiSubTabEngine}</span>
+              </button>
+            </section>
+          )}
 
-      <div data-setting-id="ai-tier">
-        <TierSelectorSection
-          status={status}
-          selectedTier={selectedTier}
-          externalModel={externalModel}
-          externalBaseUrl={externalBaseUrl}
-          detectedExternalModels={detectedExternalModels}
-          isExternalTierSelected={isExternalTierSelected}
-          rescanning={rescanning}
-          onSelectTier={(tierId) => void handleSelectTier(tierId)}
-          onChangeExternalModelDraft={setExternalModel}
-          onCommitExternalModel={(modelName) => void handleExternalModelChange(modelName)}
-          onChangeExternalBaseUrlDraft={setExternalBaseUrl}
-          onCommitExternalBaseUrl={(url) => void handleExternalBaseUrlCommit(url)}
-          onRescanExternal={handleRescanExternal}
-        />
-      </div>
+          {/* Quick-Enable Tray + Startup Guide Card for Always-Ready Voice Hotkey */}
+          {isElectronDesktop &&
+            (desktopPrefs.closeBehavior !== 'tray' || !desktopPrefs.launchAtStartup) && (
+              <section
+                data-testid="ai-tray-startup-guide-card"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--accent)]/35 bg-[var(--accent-soft)] px-4 py-3"
+              >
+                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                  <Sparkles className="h-4 w-4 text-[var(--accent)] shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[var(--text-primary)]">
+                      {t.aiVoiceTrayGuideTitle}
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                      {t.aiVoiceTrayGuideDesc}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="ai-enable-tray-startup-btn"
+                  onClick={handleEnableTrayAndStartup}
+                  className="rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 shrink-0"
+                  style={{
+                    backgroundColor: 'var(--accent)',
+                    color: 'var(--accent-fg)',
+                  }}
+                >
+                  {t.aiVoiceEnableTrayButton}
+                </button>
+              </section>
+            )}
 
-      <div data-setting-id="ai-voice">
-        <VoiceAudioSection
-          voiceMicDeviceId={voiceMicDeviceId}
-          voiceDictationLanguage={voiceDictationLanguage}
-          micDevices={micDevices}
-          testingMic={testingMic}
-          micLevel={micLevel}
-          voiceNoiseSuppression={voiceNoiseSuppression}
-          voiceAutoStopMs={voiceAutoStopMs}
-          voiceSensitivity={voiceSensitivity}
-          voiceChimePreset={voiceChimePreset}
-          voiceTtsEnabled={voiceTtsEnabled}
-          voiceTtsVoice={voiceTtsVoice}
-          voiceTtsStyle={voiceTtsStyle}
-          previewingTts={previewingTts}
-          voices={voices}
-          piperVoices={piperVoices}
-          busyPiperVoiceId={busyPiperVoiceId}
-          onRefreshMics={handleRefreshMicsClick}
-          onToggleMicTest={() => void handleToggleMicTest()}
-          onMicChange={(id) => void handleMicChange(id)}
-          onDictationLanguageChange={(code) => void handleDictationLanguageChange(code)}
-          onNoiseSuppressionToggle={(enabled) => void handleNoiseSuppressionToggle(enabled)}
-          onAutoStopChange={(ms) => void handleAutoStopChange(ms)}
-          onSensitivityChange={(mode) => void handleSensitivityChange(mode)}
-          onChimePresetChange={(preset) => void handleChimePresetChange(preset)}
-          onPreviewTts={(overrideVoice) => void handlePreviewTts(overrideVoice)}
-          onTtsToggle={(enabled) => void handleTtsToggle(enabled)}
-          onTtsVoiceChange={(uri) => void handleTtsVoiceChange(uri)}
-          onTtsStyleChange={(style) => void handleTtsStyleChange(style)}
-          onDownloadPiperVoice={(id) => void handleDownloadPiperVoice(id)}
-          onCancelPiperVoice={(id) => void handleCancelPiperVoice(id)}
-          onDeletePiperVoice={(id) => void handleDeletePiperVoice(id)}
-        />
-      </div>
+          <div data-setting-id="ai-voice">
+            <VoiceAudioSection
+              voiceMicDeviceId={voiceMicDeviceId}
+              voiceDictationLanguage={voiceDictationLanguage}
+              micDevices={micDevices}
+              testingMic={testingMic}
+              micLevel={micLevel}
+              voiceNoiseSuppression={voiceNoiseSuppression}
+              voiceAutoStopMs={voiceAutoStopMs}
+              voiceSensitivity={voiceSensitivity}
+              voiceChimePreset={voiceChimePreset}
+              voiceTtsEnabled={voiceTtsEnabled}
+              voiceTtsVoice={voiceTtsVoice}
+              voiceTtsStyle={voiceTtsStyle}
+              previewingTts={previewingTts}
+              voices={voices}
+              piperVoices={piperVoices}
+              busyPiperVoiceId={busyPiperVoiceId}
+              onRefreshMics={handleRefreshMicsClick}
+              onToggleMicTest={() => void handleToggleMicTest()}
+              onMicChange={(id) => void handleMicChange(id)}
+              onDictationLanguageChange={(code) => void handleDictationLanguageChange(code)}
+              onNoiseSuppressionToggle={(enabled) => void handleNoiseSuppressionToggle(enabled)}
+              onAutoStopChange={(ms) => void handleAutoStopChange(ms)}
+              onSensitivityChange={(mode) => void handleSensitivityChange(mode)}
+              onChimePresetChange={(preset) => void handleChimePresetChange(preset)}
+              onPreviewTts={(overrideVoice) => void handlePreviewTts(overrideVoice)}
+              onTtsToggle={(enabled) => void handleTtsToggle(enabled)}
+              onTtsVoiceChange={(uri) => void handleTtsVoiceChange(uri)}
+              onTtsStyleChange={(style) => void handleTtsStyleChange(style)}
+              onDownloadPiperVoice={(id) => void handleDownloadPiperVoice(id)}
+              onCancelPiperVoice={(id) => void handleCancelPiperVoice(id)}
+              onDeletePiperVoice={(id) => void handleDeletePiperVoice(id)}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6 animate-tab-enter">
+          <HardwareProfileSection
+            status={status}
+            loading={loading}
+            rescanning={rescanning}
+            reindexing={reindexing}
+            reindexNotice={reindexNotice}
+            onRescan={handleRescanHardware}
+            onReindexRag={() => void handleReindexRag()}
+            onDismissReindexNotice={handleDismissReindexNotice}
+          />
 
-      <ModelCatalogSection
-        status={status}
-        busyModelId={busyModelId}
-        onDownloadModel={(id) => void handleDownloadModel(id)}
-        onCancelDownload={(id) => void handleCancelDownload(id)}
-        onDeleteModel={(id) => void handleDeleteModel(id)}
-        onDeleteAll={() => void handleDeleteAll()}
-      />
+          <div data-setting-id="ai-tier">
+            <TierSelectorSection
+              status={status}
+              selectedTier={selectedTier}
+              externalModel={externalModel}
+              externalBaseUrl={externalBaseUrl}
+              detectedExternalModels={detectedExternalModels}
+              isExternalTierSelected={isExternalTierSelected}
+              rescanning={rescanning}
+              onSelectTier={(tierId) => void handleSelectTier(tierId)}
+              onChangeExternalModelDraft={setExternalModel}
+              onCommitExternalModel={(modelName) => void handleExternalModelChange(modelName)}
+              onChangeExternalBaseUrlDraft={setExternalBaseUrl}
+              onCommitExternalBaseUrl={(url) => void handleExternalBaseUrlCommit(url)}
+              onRescanExternal={handleRescanExternal}
+            />
+          </div>
+
+          <ModelCatalogSection
+            status={status}
+            busyModelId={busyModelId}
+            onDownloadModel={(id) => void handleDownloadModel(id)}
+            onCancelDownload={(id) => void handleCancelDownload(id)}
+            onDeleteModel={(id) => void handleDeleteModel(id)}
+            onDeleteAll={() => void handleDeleteAll()}
+          />
+        </div>
+      )}
     </div>
   );
 });

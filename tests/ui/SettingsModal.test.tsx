@@ -73,7 +73,7 @@ describe('SettingsModal (Viewport Isolation & Tab Navigation)', () => {
     }
   });
 
-  it('supports deep settings search jumping directly to a matching tab', async () => {
+  it('supports deep settings search jumping directly to a matching tab via Ctrl+F', async () => {
     const user = userEvent.setup();
     render(
       <I18nProvider lang="en" onChangeLanguage={vi.fn()}>
@@ -81,6 +81,7 @@ describe('SettingsModal (Viewport Isolation & Tab Navigation)', () => {
       </I18nProvider>,
     );
 
+    await user.keyboard('{Control>}f{/Control}');
     const searchInput = screen.getByTestId('settings-deep-search-input');
     await user.type(searchInput, 'quiet');
     const hit = screen.getByTestId('settings-search-hit-notif-quiet-digest');

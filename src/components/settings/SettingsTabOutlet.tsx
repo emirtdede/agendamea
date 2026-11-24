@@ -6,10 +6,10 @@ import { shortcutStore, useShortcutSelector } from '../../store/shortcutStore';
 import { useWebhookSelector, webhookStore } from '../../store/webhookStore';
 import { useWorkspaceSnapshotSelector } from '../../store/workspaceSnapshotStore';
 import type { BootstrapPayload, OneDriveStatus, SettingsTabId } from '../../types';
-import { DocsSettingsSection } from '../DocsSettingsSection';
-import { AboutLegalSettingsTab } from './AboutLegalSettingsTab';
+import { DocsSettingsSection, type DocsSubTabId } from '../DocsSettingsSection';
+import { AboutLegalSettingsTab, type AboutSubTabId } from './AboutLegalSettingsTab';
 import { AccessibilitySettingsTab } from './AccessibilitySettingsTab';
-import { AiVoiceSettingsTab } from './AiVoiceSettingsTab';
+import { type AiSubTabId, AiVoiceSettingsTab } from './AiVoiceSettingsTab';
 import { AppearanceSettingsTab } from './AppearanceSettingsTab';
 import { DataBackupSettingsTab, type PendingImportState } from './DataBackupSettingsTab';
 import { GeneralSettingsTab } from './GeneralSettingsTab';
@@ -18,6 +18,12 @@ import { NotificationsSettingsTab } from './NotificationsSettingsTab';
 import { ShortcutsSettingsTab } from './ShortcutsSettingsTab';
 import { TrashSettingsTab } from './TrashSettingsTab';
 import { WebhooksSettingsTab } from './WebhooksSettingsTab';
+
+export interface SettingsNavigationSignal {
+  subTab?: string;
+  expandSectionId?: string;
+  seq: number;
+}
 
 export interface SettingsRuntimeActions {
   onToggleDragLock: (locked: boolean) => void;
@@ -93,8 +99,10 @@ const ConnectedAccessibilityTab = React.memo(function ConnectedAccessibilityTab(
 
 const ConnectedGeneralTab = React.memo(function ConnectedGeneralTab({
   onToggleDragLock,
+  expandLanguageSeq,
 }: {
   onToggleDragLock: (locked: boolean) => void;
+  expandLanguageSeq?: number;
 }) {
   const slice = usePreferencesSelector((s) => ({
     closeBehavior: s.closeBehavior,
@@ -108,12 +116,12 @@ const ConnectedGeneralTab = React.memo(function ConnectedGeneralTab({
     completedTaskBehavior: s.completedTaskBehavior,
     completionSound: s.completionSound,
     confirmBeforeDelete: s.confirmBeforeDelete,
-    trashAutoPurgeDays: s.trashAutoPurgeDays,
     dragLocked: s.dragLocked,
   }));
   return (
     <GeneralSettingsTab
       {...slice}
+      expandLanguageSeq={expandLanguageSeq}
       onChangeCloseBehavior={preferencesStore.setCloseBehavior}
       onToggleLaunchAtStartup={preferencesStore.setLaunchAtStartup}
       onToggleLaunchMinimizedToTray={preferencesStore.setLaunchMinimizedToTray}
@@ -125,7 +133,6 @@ const ConnectedGeneralTab = React.memo(function ConnectedGeneralTab({
       onChangeCompletedTaskBehavior={preferencesStore.setCompletedTaskBehavior}
       onChangeCompletionSound={preferencesStore.setCompletionSound}
       onToggleConfirmBeforeDelete={preferencesStore.setConfirmBeforeDelete}
-      onChangeTrashAutoPurgeDays={preferencesStore.setTrashAutoPurgeDays}
       onToggleDragLock={onToggleDragLock}
       onResetGeneral={preferencesStore.resetGeneral}
     />
@@ -151,6 +158,7 @@ const ConnectedShortcutsTab = React.memo(function ConnectedShortcutsTab() {
       onVoiceShortcutChange={shortcutStore.setVoiceShortcut}
       onChangeCustomShortcut={shortcutStore.setCustomShortcut}
       onRefreshOsStatus={shortcutStore.refreshOsStatus}
+      onAutoResolveOsShortcuts={shortcutStore.autoResolveOsConflicts}
       onResetAllShortcuts={shortcutStore.resetAll}
     />
   );
@@ -224,21 +232,16 @@ const ConnectedDataTab = React.memo(function ConnectedDataTab({
   formatTimestamp: (iso: string | null) => string;
   actions: SettingsRuntimeActions;
 }) {
-  const counts = useWorkspaceSnapshotSelector((s) => ({
-    totalTodoCount: s.totalTodoCount,
-    completedTodoCount: s.completedTodoCount,
-  }));
+  const totalTodoCount = useWorkspaceSnapshotSelector((s) => s.totalTodoCount, Object.is);
   return (
     <DataBackupSettingsTab
-      totalTodoCount={counts.totalTodoCount}
-      completedTodoCount={counts.completedTodoCount}
+      totalTodoCount={totalTodoCount}
       oneDriveStatus={oneDriveStatus}
       onOneDriveStatusChange={onOneDriveStatusChange}
       isImporting={isImporting}
       onImportingChange={onImportingChange}
       pendingImport={pendingImport}
       onPendingImportChange={onPendingImportChange}
-      onClearAllCompleted={actions.onClearAllCompleted}
       onImportBackup={actions.onImportBackup}
       onApplyRestoredBootstrap={actions.onApplyRestoredBootstrap}
       onResetAllData={actions.onResetAllData}
@@ -258,11 +261,17 @@ const ConnectedTrashTab = React.memo(function ConnectedTrashTab({
   const trash = useWorkspaceSnapshotSelector((s) => ({
     trashedCategories: s.trashedCategories,
     trashedTodos: s.trashedTodos,
+    completedTodoCount: s.completedTodoCount,
   }));
+  const trashAutoPurgeDays = usePreferencesSelector((s) => s.trashAutoPurgeDays, Object.is);
   return (
     <TrashSettingsTab
       trashedCategories={trash.trashedCategories}
       trashedTodos={trash.trashedTodos}
+      completedTodoCount={trash.completedTodoCount}
+      trashAutoPurgeDays={trashAutoPurgeDays}
+      onChangeTrashAutoPurgeDays={preferencesStore.setTrashAutoPurgeDays}
+      onClearAllCompleted={actions.onClearAllCompleted}
       onRestoreTodo={actions.onRestoreTodo}
       onPermanentDeleteTodo={actions.onPermanentDeleteTodo}
       onRestoreCategory={actions.onRestoreCategory}
@@ -276,6 +285,7 @@ const ConnectedTrashTab = React.memo(function ConnectedTrashTab({
 
 interface SettingsTabOutletProps {
   activeTab: SettingsTabId;
+  navSignal?: SettingsNavigationSignal | null;
   oneDriveStatus: OneDriveStatus | null;
   onOneDriveStatusChange: (status: OneDriveStatus | null) => void;
   isImporting: boolean;
@@ -289,6 +299,7 @@ interface SettingsTabOutletProps {
 
 export const SettingsTabOutlet = React.memo(function SettingsTabOutlet({
   activeTab,
+  navSignal,
   oneDriveStatus,
   onOneDriveStatusChange,
   isImporting,
@@ -305,13 +316,30 @@ export const SettingsTabOutlet = React.memo(function SettingsTabOutlet({
     case 'accessibility':
       return <ConnectedAccessibilityTab />;
     case 'general':
-      return <ConnectedGeneralTab onToggleDragLock={actions.onToggleDragLock} />;
+      return (
+        <ConnectedGeneralTab
+          onToggleDragLock={actions.onToggleDragLock}
+          expandLanguageSeq={
+            navSignal?.expandSectionId === 'general-language' ? navSignal.seq : undefined
+          }
+        />
+      );
     case 'shortcuts':
       return <ConnectedShortcutsTab />;
     case 'notifications':
       return <ConnectedNotificationsTab onSendTest={actions.onSendTestNotification} />;
     case 'ai':
-      return <AiVoiceSettingsTab onNotifyVoice={actions.onNotifyVoice} />;
+      return (
+        <AiVoiceSettingsTab
+          onNotifyVoice={actions.onNotifyVoice}
+          requestedSubTab={
+            navSignal?.subTab === 'voice' || navSignal?.subTab === 'engine'
+              ? (navSignal.subTab as AiSubTabId)
+              : undefined
+          }
+          subTabSeq={navSignal?.seq}
+        />
+      );
     case 'data':
       return (
         <ConnectedDataTab
@@ -328,7 +356,20 @@ export const SettingsTabOutlet = React.memo(function SettingsTabOutlet({
     case 'trash':
       return <ConnectedTrashTab formatTimestamp={formatTimestamp} actions={actions} />;
     case 'docs':
-      return <DocsSettingsSection />;
+      return (
+        <DocsSettingsSection
+          webhookNode={<ConnectedWebhooksTab />}
+          requestedSubTab={
+            navSignal?.subTab === 'cli' ||
+            navSignal?.subTab === 'mcp' ||
+            navSignal?.subTab === 'api' ||
+            navSignal?.subTab === 'webhooks'
+              ? (navSignal.subTab as DocsSubTabId)
+              : undefined
+          }
+          subTabSeq={navSignal?.seq}
+        />
+      );
     case 'webhooks':
       return <ConnectedWebhooksTab />;
     case 'legal':
@@ -342,6 +383,13 @@ export const SettingsTabOutlet = React.memo(function SettingsTabOutlet({
           onCancelUpdateDownload={actions.onCancelUpdateDownload}
           onQuitAndInstallUpdate={actions.onQuitAndInstallUpdate}
           onOpenLegalDoc={onOpenLegalDoc}
+          requestedSubTab={
+            navSignal?.subTab === 'about' || navSignal?.subTab === 'guide'
+              ? (navSignal.subTab as AboutSubTabId)
+              : undefined
+          }
+          expandSectionId={navSignal?.expandSectionId}
+          subTabSeq={navSignal?.seq}
         />
       );
   }

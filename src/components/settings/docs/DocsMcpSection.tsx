@@ -6,6 +6,7 @@ import {
   Copy,
   Cpu,
   Download,
+  FileCode2,
   FolderOpen,
   Info,
   Play,
@@ -202,17 +203,19 @@ export interface DocsMcpSectionProps {
   mcpClients: McpClientStatus[];
   mcpBusyId: string | null;
   mcpActionMsg: string | null;
+  customMcpPath?: string | null;
   mcpProbe: McpProbeResult | null;
   mcpProbing: boolean;
-  mcpFormat: 'standard' | 'vscode' | 'cli' | 'http';
+  mcpFormat: 'standard' | 'vscode' | 'codex' | 'opencode' | 'cli' | 'http';
   runtimePort: number;
   activeMcpJson: string;
   copiedKey: string | null;
   onRefreshClients: () => void;
   onTestMcp: () => void;
   onInstallMcpClient: (clientId: string) => void;
+  onInstallCustomMcp?: () => void;
   onUninstallMcpClient: (clientId: string) => void;
-  onSelectFormat: (fmt: 'standard' | 'vscode' | 'cli' | 'http') => void;
+  onSelectFormat: (fmt: 'standard' | 'vscode' | 'codex' | 'opencode' | 'cli' | 'http') => void;
   onCopy: (key: string, text: string) => void;
 }
 
@@ -222,6 +225,7 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
   mcpClients,
   mcpBusyId,
   mcpActionMsg,
+  customMcpPath = null,
   mcpProbe,
   mcpProbing,
   mcpFormat,
@@ -231,11 +235,13 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
   onRefreshClients,
   onTestMcp,
   onInstallMcpClient,
+  onInstallCustomMcp,
   onUninstallMcpClient,
   onSelectFormat,
   onCopy,
 }: DocsMcpSectionProps) {
   const { t, lang } = useI18n();
+  const [clientsOpen, setClientsOpen] = useState(false);
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
   const [runningTool, setRunningTool] = useState<string | null>(null);
   const [toolOutputs, setToolOutputs] = useState<Record<string, string>>({});
@@ -249,6 +255,21 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
   }, []);
 
   const q = searchQuery.trim();
+  const matchesAnyClient = useMemo(
+    () =>
+      Boolean(q) &&
+      (mcpClients.some((c) => matchesLocaleQuery(c.name, q) || matchesLocaleQuery(c.id, q)) ||
+        matchesLocaleQuery('custom', q) ||
+        matchesLocaleQuery('toml', q)),
+    [mcpClients, q],
+  );
+  const isClientsExpanded = clientsOpen || Boolean(mcpBusyId) || matchesAnyClient;
+  const connectedCount = useMemo(
+    () => mcpClients.filter((c) => c.configured).length + (customMcpPath ? 1 : 0),
+    [customMcpPath, mcpClients],
+  );
+  const detectedCount = useMemo(() => mcpClients.filter((c) => c.detected).length, [mcpClients]);
+  const totalClientCards = mcpClients.length + (hasDesktopBridge && onInstallCustomMcp ? 1 : 0);
   const filteredTools = useMemo(() => {
     if (!q) return MCP_TOOLS_CATALOG;
     return MCP_TOOLS_CATALOG.filter(
@@ -363,106 +384,198 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
           </div>
         )}
 
-        {/* One-Click AI Client Installer Cards */}
+        {/* Collapsible One-Click AI Client Installer Grid (12 cards / 6x2, default collapsed) */}
         {mcpClients.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[11px] font-semibold text-[var(--text-secondary)]">
-              {t.docsMcpAutoClientsTitle}
-            </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {mcpClients.map((c) => {
-                const isBusy = mcpBusyId === c.id;
-                const statusBadge = c.parseError
-                  ? {
-                      text: t.docsMcpClientErrorBadge,
-                      cls: 'bg-red-500/15 text-red-600 dark:text-red-400',
-                    }
-                  : c.configured && c.usesLegacyCmd
-                    ? {
-                        text: t.docsMcpClientLegacyBadge,
-                        cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-                      }
-                    : c.configured
+          <div
+            data-testid="mcp-clients-accordion"
+            className="rounded-lg border border-[var(--border)] bg-[var(--canvas)]/60 overflow-hidden"
+          >
+            <button
+              type="button"
+              data-testid="mcp-clients-accordion-toggle"
+              aria-expanded={isClientsExpanded}
+              onClick={() => setClientsOpen((prev) => !prev)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-start transition-colors hover:bg-[var(--surface-hover)]"
+            >
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  {t.docsMcpAutoClientsTitle}
+                </span>
+                <span className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10px] text-[var(--text-muted)]">
+                  {connectedCount}/{totalClientCards}
+                </span>
+                {connectedCount > 0 && (
+                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                    {connectedCount} {t.docsMcpClientConnectedBadge}
+                  </span>
+                )}
+                {detectedCount > 0 && (
+                  <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]">
+                    {detectedCount} {t.docsMcpClientDetectedBadge}
+                  </span>
+                )}
+              </div>
+              {isClientsExpanded ? (
+                <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
+              )}
+            </button>
+
+            {isClientsExpanded && (
+              <div className="animate-accordion border-t border-[var(--border)] p-2.5 space-y-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {mcpClients.map((c) => {
+                    const isBusy = mcpBusyId === c.id;
+                    const statusBadge = c.parseError
                       ? {
-                          text: t.docsMcpClientConnectedBadge,
-                          cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+                          text: t.docsMcpClientErrorBadge,
+                          cls: 'bg-red-500/15 text-red-600 dark:text-red-400',
                         }
-                      : c.detected
+                      : c.configured && c.usesLegacyCmd
                         ? {
-                            text: t.docsMcpClientDetectedBadge,
-                            cls: 'bg-[var(--accent-soft)] text-[var(--accent)]',
+                            text: t.docsMcpClientLegacyBadge,
+                            cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
                           }
-                        : {
-                            text: t.docsMcpClientNotFoundBadge,
-                            cls: 'bg-[var(--surface-subtle)] text-[var(--text-muted)]',
-                          };
-                return (
-                  <div
-                    key={c.id}
-                    data-testid={`mcp-client-${c.id}`}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2.5"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-xs font-semibold text-[var(--text-primary)]">
-                          {c.name}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadge.cls}`}
-                        >
-                          {statusBadge.text}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 truncate font-mono-tabular text-[10px] text-[var(--text-muted)]">
-                        {c.configPath}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void window.agendameaWindow?.openFileLocation?.(c.configPath)
-                        }
-                        aria-label={t.docsMcpOpenConfigFolder}
-                        title={t.docsMcpOpenConfigFolder}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                        : c.configured
+                          ? {
+                              text: t.docsMcpClientConnectedBadge,
+                              cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+                            }
+                          : c.detected
+                            ? {
+                                text: t.docsMcpClientDetectedBadge,
+                                cls: 'bg-[var(--accent-soft)] text-[var(--accent)]',
+                              }
+                            : {
+                                text: t.docsMcpClientNotFoundBadge,
+                                cls: 'bg-[var(--surface-subtle)] text-[var(--text-muted)]',
+                              };
+                    return (
+                      <div
+                        key={c.id}
+                        data-testid={`mcp-client-${c.id}`}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
                       >
-                        <FolderOpen className="h-3.5 w-3.5" />
-                      </button>
-                      {c.configured && !c.usesLegacyCmd ? (
-                        <button
-                          type="button"
-                          onClick={() => onUninstallMcpClient(c.id)}
-                          disabled={isBusy}
-                          className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-red-500 disabled:opacity-50"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                          <span>{t.docsMcpClientRemoveBtn}</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => onInstallMcpClient(c.id)}
-                          disabled={isBusy}
-                          className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
-                          style={{
-                            backgroundColor: 'var(--accent)',
-                            color: 'var(--accent-fg)',
-                          }}
-                        >
-                          <Download className="h-3 w-3" />
-                          <span>
-                            {c.usesLegacyCmd ? t.docsMcpClientUpdateBtn : t.docsMcpClientInstallBtn}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-semibold text-[var(--text-primary)]">
+                              {c.name}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadge.cls}`}
+                            >
+                              {statusBadge.text}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 truncate font-mono-tabular text-[10px] text-[var(--text-muted)]">
+                            {c.configPath}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void window.agendameaWindow?.openFileLocation?.(c.configPath)
+                            }
+                            aria-label={t.docsMcpOpenConfigFolder}
+                            title={t.docsMcpOpenConfigFolder}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                          >
+                            <FolderOpen className="h-3.5 w-3.5" />
+                          </button>
+                          {c.configured && !c.usesLegacyCmd ? (
+                            <button
+                              type="button"
+                              onClick={() => onUninstallMcpClient(c.id)}
+                              disabled={isBusy}
+                              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-red-500 disabled:opacity-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              <span>{t.docsMcpClientRemoveBtn}</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => onInstallMcpClient(c.id)}
+                              disabled={isBusy}
+                              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+                              style={{
+                                backgroundColor: 'var(--accent)',
+                                color: 'var(--accent-fg)',
+                              }}
+                            >
+                              <Download className="h-3 w-3" />
+                              <span>
+                                {c.usesLegacyCmd
+                                  ? t.docsMcpClientUpdateBtn
+                                  : t.docsMcpClientInstallBtn}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* 12th Card: Custom User-Selected MCP Config (.json / .jsonc / .toml) */}
+                  {hasDesktopBridge && onInstallCustomMcp && (
+                    <div
+                      data-testid="mcp-client-custom"
+                      className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-3 py-2.5 transition-colors hover:border-[var(--accent)]"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <FileCode2 className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                          <span className="text-xs font-semibold text-[var(--text-primary)]">
+                            {t.notificationsProfileCustom} MCP
                           </span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              customMcpPath
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-[var(--surface-subtle)] text-[var(--text-muted)]'
+                            }`}
+                          >
+                            {customMcpPath ? t.docsMcpClientConnectedBadge : '.json / .toml'}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 truncate font-mono-tabular text-[10px] text-[var(--text-muted)]">
+                          {customMcpPath || 'mcp.json · settings.json · config.toml'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {customMcpPath && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void window.agendameaWindow?.openFileLocation?.(customMcpPath)
+                            }
+                            aria-label={t.docsMcpOpenConfigFolder}
+                            title={t.docsMcpOpenConfigFolder}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                          >
+                            <FolderOpen className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          data-testid="mcp-custom-install-btn"
+                          onClick={onInstallCustomMcp}
+                          disabled={mcpBusyId === 'custom'}
+                          className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-primary)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                        >
+                          <Download className="h-3 w-3 text-[var(--accent)]" />
+                          <span>{t.docsMcpClientInstallBtn}</span>
                         </button>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-            {mcpActionMsg && (
-              <p className="text-xs font-medium text-[var(--accent)]">{mcpActionMsg}</p>
+                  )}
+                </div>
+                {mcpActionMsg && (
+                  <p className="text-xs font-medium text-[var(--accent)]">{mcpActionMsg}</p>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -470,11 +583,13 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
         {/* Format Switcher & Copyable Config Snippet */}
         <div className="space-y-2 border-t border-[var(--border)] pt-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="inline-flex flex-wrap rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5 text-[11px]">
+            <div className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5 text-[10.5px]">
               {(
                 [
                   ['standard', t.docsMcpFormatStandard],
                   ['vscode', t.docsMcpFormatVsCode],
+                  ['codex', 'Codex (TOML)'],
+                  ['opencode', 'OpenCode'],
                   ['cli', t.docsMcpFormatClaudeCli],
                   ['http', t.docsMcpFormatHttp],
                 ] as const
@@ -484,7 +599,7 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                   type="button"
                   data-testid={`docs-mcp-format-${fmt}`}
                   onClick={() => onSelectFormat(fmt)}
-                  className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                  className={`rounded-md px-2 py-1 font-medium transition-colors whitespace-nowrap ${
                     mcpFormat === fmt
                       ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -498,7 +613,7 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
               type="button"
               data-testid="docs-copy-mcp-btn"
               onClick={() => onCopy(`mcp-${mcpFormat}`, activeMcpJson)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] whitespace-nowrap"
             >
               {copiedKey === `mcp-${mcpFormat}` ? (
                 <Check className="h-3 w-3 text-emerald-500" />

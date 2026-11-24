@@ -38,6 +38,14 @@ interface NativeWindowBridge {
     voiceShortcut?: string;
     voiceRegistered: boolean;
   }>;
+  autoResolveShortcuts?: () => Promise<{
+    ok: boolean;
+    resolvedAny?: boolean;
+    quickAddKey?: string;
+    quickAddRegistered?: boolean;
+    voiceShortcut?: string;
+    voiceRegistered?: boolean;
+  }>;
   showDesktopNotification?: (payload: {
     title: string;
     body: string;
@@ -98,6 +106,15 @@ interface NativeWindowBridge {
     name?: string;
     configPath?: string;
     requiresRestart?: boolean;
+    error?: string;
+  }>;
+  installCustomMcpFile?: () => Promise<{
+    ok: boolean;
+    canceled?: boolean;
+    name?: string;
+    configPath?: string;
+    format?: string;
+    rootKey?: string;
     error?: string;
   }>;
   uninstallMcpClient?: (clientId: string) => Promise<{

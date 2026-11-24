@@ -119,7 +119,7 @@ function readWindowPrefs(userDataDir) {
         voiceShortcut:
           typeof parsed?.voiceShortcut === 'string' && parsed.voiceShortcut.trim()
             ? parsed.voiceShortcut.trim()
-            : 'CommandOrControl+Alt+Space',
+            : 'CommandOrControl+Alt+D',
       };
     }
   } catch {
@@ -132,7 +132,7 @@ function readWindowPrefs(userDataDir) {
     globalQuickAdd: true,
     globalQuickAddKey: 'CommandOrControl+Alt+N',
     voiceShortcutEnabled: true,
-    voiceShortcut: 'CommandOrControl+Alt+Space',
+    voiceShortcut: 'CommandOrControl+Alt+D',
   };
 }
 
@@ -334,6 +334,7 @@ registerCoreIpcHandlers({
   syncGlobalQuickAddShortcut: shortcuts.syncGlobalQuickAddShortcut,
   syncVoiceDictationShortcut: shortcuts.syncVoiceDictationShortcut,
   getShortcutRegistrationStatus: shortcuts.getRegistrationStatus,
+  autoResolveBlockedShortcuts: shortcuts.autoResolveBlockedShortcuts,
   saveWindowPrefs,
   ensureVoiceOverlayManager,
   getVoiceOverlayManager: () => voiceOverlayManager,
@@ -372,8 +373,19 @@ app
     const prefs = readWindowPrefs(app.getPath('userData'));
     activeCloseBehavior = prefs.closeBehavior;
     shortcuts.hydrateState(prefs);
-    shortcuts.syncGlobalQuickAddShortcut(prefs.globalQuickAdd, prefs.globalQuickAddKey);
-    shortcuts.syncVoiceDictationShortcut(prefs.voiceShortcut, prefs.voiceShortcutEnabled);
+    const quickRes = shortcuts.syncGlobalQuickAddShortcut(
+      prefs.globalQuickAdd,
+      prefs.globalQuickAddKey,
+      { autoFallback: true },
+    );
+    const voiceRes = shortcuts.syncVoiceDictationShortcut(
+      prefs.voiceShortcut,
+      prefs.voiceShortcutEnabled,
+      { autoFallback: true },
+    );
+    if (quickRes.key !== prefs.globalQuickAddKey || voiceRes.shortcut !== prefs.voiceShortcut) {
+      saveWindowPrefs(app.getPath('userData'));
+    }
     trayShell.rebuildWindowsJumpList();
     trayShell.syncExistingCliShimsOnStartup();
     trayShell.ensureStartMenuShortcutAumid();

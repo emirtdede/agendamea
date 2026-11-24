@@ -51,6 +51,8 @@ public sealed class InstallerLocale
     public bool IsRtl => string.Equals(Dir, "rtl", StringComparison.OrdinalIgnoreCase);
 
     public string DisplayLabel => $"{NativeName} ({Code.ToUpperInvariant()})";
+
+    public override string ToString() => DisplayLabel;
 }
 
 public static class LocaleManager

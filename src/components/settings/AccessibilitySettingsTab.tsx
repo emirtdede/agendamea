@@ -2,6 +2,8 @@ import { Contrast, Eye, Focus, Minus, Plus, RotateCcw, Sparkles, ZoomIn } from '
 import React from 'react';
 import { useI18n } from '../../i18n/I18nContext';
 import { getNextZoomPreset, getPrevZoomPreset, ZOOM_PRESETS } from '../../utils/themes';
+import { ToggleSwitch } from '../ToggleSwitch';
+import { SettingsTabHeader } from './SettingsTabHeader';
 
 interface AccessibilitySettingsTabProps {
   zoomPercent: number;
@@ -39,7 +41,7 @@ export const AccessibilitySettingsTab = React.memo(function AccessibilitySetting
       title: t.highContrastTitle,
       desc: t.highContrastDesc,
       checked: highContrast,
-      onToggle: () => onToggleHighContrast(!highContrast),
+      onChange: onToggleHighContrast,
     },
     {
       id: 'reduced-motion',
@@ -47,7 +49,7 @@ export const AccessibilitySettingsTab = React.memo(function AccessibilitySetting
       title: t.reducedMotionTitle,
       desc: t.reducedMotionDesc,
       checked: reducedMotion,
-      onToggle: () => onToggleReducedMotion(!reducedMotion),
+      onChange: onToggleReducedMotion,
     },
     {
       id: 'colorblind-shapes',
@@ -55,7 +57,7 @@ export const AccessibilitySettingsTab = React.memo(function AccessibilitySetting
       title: t.accessibilityColorBlindTitle,
       desc: t.accessibilityColorBlindDesc,
       checked: colorBlindShapes,
-      onToggle: () => onToggleColorBlindShapes(!colorBlindShapes),
+      onChange: onToggleColorBlindShapes,
     },
     {
       id: 'strong-focus',
@@ -63,24 +65,17 @@ export const AccessibilitySettingsTab = React.memo(function AccessibilitySetting
       title: t.accessibilityStrongFocusTitle,
       desc: t.accessibilityStrongFocusDesc,
       checked: strongFocusRing,
-      onToggle: () => onToggleStrongFocusRing(!strongFocusRing),
+      onChange: onToggleStrongFocusRing,
     },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs leading-relaxed text-[var(--text-muted)]">{t.settingsSubtitle}</p>
-        <button
-          type="button"
-          data-testid="a11y-reset-btn"
-          onClick={onResetAccessibility}
-          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          <span>{t.resetTabDefaultsButton}</span>
-        </button>
-      </div>
+      <SettingsTabHeader
+        subtitle={t.accessibilitySectionSubtitle}
+        onReset={onResetAccessibility}
+        resetTestId="a11y-reset-btn"
+      />
 
       {/* Interface Zoom / Scale Card */}
       <section
@@ -174,25 +169,12 @@ export const AccessibilitySettingsTab = React.memo(function AccessibilitySetting
                   <p className="mt-0.5 text-xs text-[var(--text-muted)]">{row.desc}</p>
                 </div>
               </div>
-              <button
-                type="button"
-                role="switch"
-                data-testid={`a11y-toggle-${row.id}`}
-                aria-checked={row.checked}
-                aria-label={row.title}
-                onClick={row.onToggle}
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                  row.checked ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
-                    row.checked
-                      ? 'translate-x-4.5 rtl:-translate-x-4.5'
-                      : 'translate-x-0.5 rtl:-translate-x-0.5'
-                  }`}
-                />
-              </button>
+              <ToggleSwitch
+                checked={row.checked}
+                onChange={row.onChange}
+                label={row.title}
+                testId={`a11y-toggle-${row.id}`}
+              />
             </div>
           );
         })}

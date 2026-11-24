@@ -56,6 +56,7 @@ function registerCoreIpcHandlers(ctx) {
     syncGlobalQuickAddShortcut,
     syncVoiceDictationShortcut,
     getShortcutRegistrationStatus,
+    autoResolveBlockedShortcuts,
     saveWindowPrefs,
     ensureVoiceOverlayManager,
     getVoiceOverlayManager,
@@ -142,6 +143,18 @@ function registerCoreIpcHandlers(ctx) {
           voiceEnabled: true,
           voiceRegistered: true,
         };
+  });
+
+  ipcMain.handle('shortcut:auto-resolve', (event) => {
+    assertTrustedIpcSender(event);
+    if (typeof autoResolveBlockedShortcuts !== 'function') {
+      return { ok: true, resolvedAny: false };
+    }
+    const res = autoResolveBlockedShortcuts();
+    if (res?.resolvedAny) {
+      saveWindowPrefs(app.getPath('userData'));
+    }
+    return res;
   });
 
   ipcMain.handle('notification:show', (event, payload) => {
@@ -314,6 +327,34 @@ function registerCoreIpcHandlers(ctx) {
     } catch (err) {
       ipcLog().error({ err, clientId }, 'MCP client uninstall error');
       return { ok: false, error: 'MCP_UNINSTALL_FAILED' };
+    }
+  });
+
+  ipcMain.handle('mcp:install-custom-file', async (event) => {
+    assertTrustedIpcSender(event);
+    try {
+      const senderWin = resolveSenderWindow(event);
+      const picked = await dialog.showOpenDialog(senderWin || undefined, {
+        properties: ['openFile'],
+        defaultPath: os.homedir(),
+        filters: [{ name: 'MCP Config (JSON / TOML)', extensions: ['json', 'jsonc', 'toml'] }],
+      });
+      if (picked.canceled || !picked.filePaths?.length) {
+        return { ok: false, canceled: true };
+      }
+      const selectedPath = picked.filePaths[0];
+      const runtimeRoot = getRuntimeRoot();
+      return mcpClients.installCustomMcpConfig(selectedPath, {
+        runtimeRoot,
+        execPath: process.execPath,
+        mcpPath: path.join(runtimeRoot, 'mcp', 'server.cjs'),
+      });
+    } catch (err) {
+      ipcLog().error({ err }, 'MCP custom config install error');
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : 'MCP_INSTALL_FAILED',
+      };
     }
   });
 

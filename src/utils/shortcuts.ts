@@ -24,7 +24,7 @@ export const DEFAULT_CUSTOM_SHORTCUTS: CustomShortcutsMap = {
 };
 
 export const DEFAULT_GLOBAL_QUICK_ADD_SHORTCUT = 'CommandOrControl+Alt+N';
-export const DEFAULT_VOICE_SHORTCUT = 'CommandOrControl+Alt+Space';
+export const DEFAULT_VOICE_SHORTCUT = 'CommandOrControl+Alt+D';
 
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta', 'OS']);
 

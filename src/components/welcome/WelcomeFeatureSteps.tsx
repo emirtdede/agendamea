@@ -1,20 +1,31 @@
 import {
+  Bell,
   Calendar,
   Check,
   ChevronRight,
   Clock,
   Cloud,
   Columns3,
+  Cpu,
+  Eye,
   Grid2x2,
   Hash,
   List,
+  Lock,
+  Mic,
+  Moon,
   RotateCcw,
   Shield,
   ShieldCheck,
+  Sparkles,
+  Volume2,
+  Webhook,
   WifiOff,
   Zap,
 } from 'lucide-react';
+import type React from 'react';
 import { useI18n } from '../../i18n/I18nContext';
+import type { SettingsTabId } from '../../types';
 import { DEFAULT_CUSTOM_SHORTCUTS, formatShortcutDisplay } from '../../utils/shortcuts';
 import { BrandMark } from '../BrandMark';
 
@@ -23,7 +34,36 @@ interface WelcomeFeatureStepsProps {
   activeIconColors: { bg: string; fg: string };
   customShortcuts: Partial<typeof DEFAULT_CUSTOM_SHORTCUTS>;
   voiceShortcut: string;
-  onComplete: (openSettingsAfter?: boolean) => void;
+  onComplete: (openSettingsTarget?: boolean | SettingsTabId) => void;
+}
+
+interface WelcomeFeatureRow {
+  Icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  desc: string;
+  action?: React.ReactNode;
+}
+
+function WelcomeRowList({ rows }: { rows: WelcomeFeatureRow[] }) {
+  return (
+    <div className="flex flex-1 flex-col justify-center divide-y divide-[var(--border)]">
+      {rows.map(({ Icon, title, desc, action }) => (
+        <div key={title} className="flex items-start gap-4 py-4 first:pt-1 last:pb-1">
+          <span
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
+          >
+            <Icon className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-sm font-semibold text-[var(--text-primary)]">{title}</p>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{desc}</p>
+          </div>
+          {action}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function WelcomeFeatureSteps({
@@ -34,6 +74,18 @@ export function WelcomeFeatureSteps({
   onComplete,
 }: WelcomeFeatureStepsProps) {
   const { t, meta } = useI18n();
+
+  const renderSettingsJump = (target: SettingsTabId, testId: string) => (
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={() => onComplete(target)}
+      className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0 self-center"
+    >
+      <span>{t.settings}</span>
+      <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180 shrink-0" />
+    </button>
+  );
 
   if (step === 3) {
     return (
@@ -171,7 +223,7 @@ export function WelcomeFeatureSteps({
               label: t.shortcutSearch,
             },
             {
-              keycap: formatShortcutDisplay(voiceShortcut || 'CommandOrControl+Alt+Space'),
+              keycap: formatShortcutDisplay(voiceShortcut || 'CommandOrControl+Alt+D'),
               label: t.settingsTabAi,
             },
             {
@@ -195,54 +247,101 @@ export function WelcomeFeatureSteps({
 
   if (step === 6) {
     return (
-      <div className="flex flex-1 flex-col justify-center divide-y divide-[var(--border)]">
-        {[
+      <WelcomeRowList
+        rows={[
+          {
+            Icon: Bell,
+            title: t.welcomeFocusRemindersTitle,
+            desc: t.welcomeFocusRemindersDesc,
+          },
+          {
+            Icon: Moon,
+            title: t.welcomeFocusQuietTitle,
+            desc: t.welcomeFocusQuietDesc,
+            action: renderSettingsJump('notifications', 'welcome-open-notifications'),
+          },
+          {
+            Icon: Eye,
+            title: t.welcomeFocusComfortTitle,
+            desc: t.welcomeFocusComfortDesc,
+          },
+        ]}
+      />
+    );
+  }
+
+  if (step === 7) {
+    return (
+      <WelcomeRowList
+        rows={[
+          {
+            Icon: Mic,
+            title: t.welcomeAiVoiceTitle,
+            desc: t.welcomeAiVoiceDesc,
+          },
+          {
+            Icon: Volume2,
+            title: t.welcomeAiReadAloudTitle,
+            desc: t.welcomeAiReadAloudDesc,
+          },
+          {
+            Icon: Cpu,
+            title: t.welcomeAiZeroDownloadTitle,
+            desc: t.welcomeAiZeroDownloadDesc,
+            action: renderSettingsJump('ai', 'welcome-open-ai'),
+          },
+        ]}
+      />
+    );
+  }
+
+  if (step === 8) {
+    return (
+      <WelcomeRowList
+        rows={[
+          {
+            Icon: Sparkles,
+            title: t.welcomePowerAssistantsTitle,
+            desc: t.welcomePowerAssistantsDesc,
+            action: renderSettingsJump('docs', 'welcome-open-automation'),
+          },
+          {
+            Icon: Webhook,
+            title: t.welcomePowerAutomationTitle,
+            desc: t.welcomePowerAutomationDesc,
+          },
+          {
+            Icon: Lock,
+            title: t.welcomePowerExportTitle,
+            desc: t.welcomePowerExportDesc,
+          },
+        ]}
+      />
+    );
+  }
+
+  if (step === 9) {
+    return (
+      <WelcomeRowList
+        rows={[
           {
             Icon: Shield,
             title: t.welcomePrivacyLocalTitle,
             desc: t.welcomePrivacyLocalDesc,
-            action: null,
           },
           {
             Icon: Cloud,
             title: t.welcomePrivacyCloudTitle,
             desc: t.welcomePrivacyCloudDesc,
-            action: (
-              <button
-                type="button"
-                data-testid="welcome-open-settings"
-                onClick={() => onComplete(true)}
-                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0 self-center"
-              >
-                <span>{t.settings}</span>
-                <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180 shrink-0" />
-              </button>
-            ),
+            action: renderSettingsJump('data', 'welcome-open-settings'),
           },
           {
             Icon: RotateCcw,
             title: t.welcomePrivacyUndoTitle,
             desc: t.welcomePrivacyUndoDesc,
-            action: null,
           },
-        ].map(({ Icon, title, desc, action }) => (
-          <div key={title} className="flex items-start gap-4 py-4 first:pt-1 last:pb-1">
-            <span
-              className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-              style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
-            >
-              <Icon className="h-4 w-4" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-sm font-semibold text-[var(--text-primary)]">
-                {title}
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{desc}</p>
-            </div>
-            {action}
-          </div>
-        ))}
-      </div>
+        ]}
+      />
     );
   }
 

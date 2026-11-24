@@ -16,7 +16,7 @@ import {
 import { reportStoreError } from './storeErrorBus';
 
 export const DEFAULT_GLOBAL_QUICK_ADD_KEY = 'CommandOrControl+Alt+N';
-export const DEFAULT_VOICE_SHORTCUT_KEY = 'CommandOrControl+Alt+Space';
+export const DEFAULT_VOICE_SHORTCUT_KEY = 'CommandOrControl+Alt+D';
 
 export interface ShortcutStoreState {
   globalQuickAddShortcut: boolean;
@@ -39,6 +39,7 @@ export interface ShortcutStore extends SelectorStore<ShortcutStoreState> {
   setVoiceShortcut: (nextKey: string) => void;
   setCustomShortcut: (action: ShortcutActionId, nextShortcut: string) => void;
   refreshOsStatus: () => Promise<void>;
+  autoResolveOsConflicts: () => Promise<void>;
   resetAll: () => void;
 }
 
@@ -168,10 +169,58 @@ export function createShortcutStore(
     try {
       const st = await getBridge()?.getShortcutStatus?.();
       if (st) {
-        base.patchState({
+        const prev = base.getState();
+        const patch: Partial<ShortcutStoreState> = {
           quickAddRegistered: Boolean(st.quickAddRegistered),
           voiceRegistered: Boolean(st.voiceRegistered),
-        });
+        };
+        const persistPatch: Partial<AppSettings> = {};
+        if (st.quickAddKey && st.quickAddKey !== prev.globalQuickAddShortcutKey) {
+          patch.globalQuickAddShortcutKey = st.quickAddKey;
+          persistPatch.globalQuickAddShortcutKey = st.quickAddKey;
+        }
+        if (st.voiceShortcut && st.voiceShortcut !== prev.voiceShortcut) {
+          patch.voiceShortcut = st.voiceShortcut;
+          persistPatch.voiceShortcut = st.voiceShortcut;
+        }
+        base.patchState(patch);
+        if (Object.keys(persistPatch).length > 0) {
+          void persistSettings(persistPatch).catch(onError);
+        }
+      }
+    } catch {
+      // Ignore in web mode
+    }
+  };
+
+  const autoResolveOsConflicts = async (): Promise<void> => {
+    try {
+      const res = await getBridge()?.autoResolveShortcuts?.();
+      if (!res) {
+        await refreshOsStatus();
+        return;
+      }
+      const prev = base.getState();
+      const patch: Partial<ShortcutStoreState> = {
+        quickAddRegistered:
+          typeof res.quickAddRegistered === 'boolean'
+            ? res.quickAddRegistered
+            : prev.quickAddRegistered,
+        voiceRegistered:
+          typeof res.voiceRegistered === 'boolean' ? res.voiceRegistered : prev.voiceRegistered,
+      };
+      const persistPatch: Partial<AppSettings> = {};
+      if (res.quickAddKey && res.quickAddKey !== prev.globalQuickAddShortcutKey) {
+        patch.globalQuickAddShortcutKey = res.quickAddKey;
+        persistPatch.globalQuickAddShortcutKey = res.quickAddKey;
+      }
+      if (res.voiceShortcut && res.voiceShortcut !== prev.voiceShortcut) {
+        patch.voiceShortcut = res.voiceShortcut;
+        persistPatch.voiceShortcut = res.voiceShortcut;
+      }
+      base.patchState(patch);
+      if (Object.keys(persistPatch).length > 0) {
+        void persistSettings(persistPatch).catch(onError);
       }
     } catch {
       // Ignore in web mode
@@ -283,6 +332,7 @@ export function createShortcutStore(
     setVoiceShortcut,
     setCustomShortcut,
     refreshOsStatus,
+    autoResolveOsConflicts,
     resetAll,
   };
 }

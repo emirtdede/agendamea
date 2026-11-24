@@ -77,18 +77,35 @@ function syncOsSettingsBridge(patch, mergedSettings) {
           mergedSettings.launchAtStartup !== undefined
             ? Boolean(mergedSettings.launchAtStartup)
             : Boolean(existing.launchAtStartup),
+        launchMinimizedToTray:
+          existing.launchMinimizedToTray !== undefined
+            ? Boolean(existing.launchMinimizedToTray)
+            : false,
         globalQuickAdd:
           mergedSettings.globalQuickAddShortcut !== undefined
             ? Boolean(mergedSettings.globalQuickAddShortcut)
             : existing.globalQuickAdd !== undefined
               ? Boolean(existing.globalQuickAdd)
               : true,
+        globalQuickAddKey:
+          typeof mergedSettings.globalQuickAddShortcutKey === 'string' &&
+          mergedSettings.globalQuickAddShortcutKey.trim()
+            ? mergedSettings.globalQuickAddShortcutKey.trim()
+            : typeof existing.globalQuickAddKey === 'string' && existing.globalQuickAddKey.trim()
+              ? existing.globalQuickAddKey.trim()
+              : 'CommandOrControl+Alt+N',
+        voiceShortcutEnabled:
+          mergedSettings.voiceShortcutEnabled !== undefined
+            ? Boolean(mergedSettings.voiceShortcutEnabled)
+            : existing.voiceShortcutEnabled !== undefined
+              ? Boolean(existing.voiceShortcutEnabled)
+              : true,
         voiceShortcut:
           typeof mergedSettings.voiceShortcut === 'string' && mergedSettings.voiceShortcut.trim()
             ? mergedSettings.voiceShortcut.trim()
             : typeof existing.voiceShortcut === 'string' && existing.voiceShortcut.trim()
               ? existing.voiceShortcut.trim()
-              : 'CommandOrControl+Alt+Space',
+              : 'CommandOrControl+Alt+D',
       };
       fs.writeFileSync(prefsPath, JSON.stringify(nextPrefs, null, 2), 'utf8');
 

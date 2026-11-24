@@ -1,4 +1,4 @@
-import { BookOpen, Cpu, Search, Server, Terminal, X } from 'lucide-react';
+import { Cpu, Search, Server, Terminal, Webhook, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n/I18nContext';
@@ -6,13 +6,22 @@ import type { McpClientStatus, McpProbeResult } from '../types';
 import { DocsCliTab } from './settings/docs/DocsCliTab';
 import { DocsMcpSection } from './settings/docs/DocsMcpSection';
 import { DocsRestApiTab } from './settings/docs/DocsRestApiTab';
-import { DocsUserGuideTab } from './settings/docs/DocsUserGuideTab';
 
-type DocsSubTabId = 'guide' | 'cli' | 'mcp' | 'api';
+export type DocsSubTabId = 'cli' | 'mcp' | 'api' | 'webhooks';
 
-export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
+interface DocsSettingsSectionProps {
+  webhookNode?: React.ReactNode;
+  requestedSubTab?: DocsSubTabId;
+  subTabSeq?: number;
+}
+
+export const DocsSettingsSection = React.memo(function DocsSettingsSection({
+  webhookNode,
+  requestedSubTab,
+  subTabSeq,
+}: DocsSettingsSectionProps) {
   const { t } = useI18n();
-  const [activeSubTab, setActiveSubTab] = useState<DocsSubTabId>('guide');
+  const [activeSubTab, setActiveSubTab] = useState<DocsSubTabId>(requestedSubTab ?? 'cli');
   const [searchQuery, setSearchQuery] = useState('');
   const [cliInstalled, setCliInstalled] = useState<boolean>(false);
   const [cliExePath, setCliExePath] = useState<string>('');
@@ -23,10 +32,19 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
   const [mcpClients, setMcpClients] = useState<McpClientStatus[]>([]);
   const [mcpBusyId, setMcpBusyId] = useState<string | null>(null);
   const [mcpActionMsg, setMcpActionMsg] = useState<string | null>(null);
+  const [customMcpPath, setCustomMcpPath] = useState<string | null>(null);
   const [mcpProbe, setMcpProbe] = useState<McpProbeResult | null>(null);
   const [mcpProbing, setMcpProbing] = useState<boolean>(false);
-  const [mcpFormat, setMcpFormat] = useState<'standard' | 'vscode' | 'cli' | 'http'>('standard');
+  const [mcpFormat, setMcpFormat] = useState<
+    'standard' | 'vscode' | 'codex' | 'opencode' | 'cli' | 'http'
+  >('standard');
   const copyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (subTabSeq !== undefined && requestedSubTab) {
+      setActiveSubTab(requestedSubTab);
+    }
+  }, [requestedSubTab, subTabSeq]);
 
   const hasDesktopBridge =
     typeof window !== 'undefined' && Boolean(window.agendameaWindow?.installCliShims);
@@ -167,6 +185,27 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
     [refreshMcpClients, t.docsMcpRemovedOk, t.operationFailedToast],
   );
 
+  const handleInstallCustomMcp = useCallback(async () => {
+    if (!window.agendameaWindow?.installCustomMcpFile) return;
+    setMcpBusyId('custom');
+    setMcpActionMsg(null);
+    try {
+      const res = await window.agendameaWindow.installCustomMcpFile();
+      if (res?.canceled) return;
+      if (res?.ok && res.configPath) {
+        setCustomMcpPath(res.configPath);
+        setMcpActionMsg(`${res.name || 'MCP'}: ${t.docsMcpInstalledOk}`);
+        await refreshMcpClients();
+      } else {
+        setMcpActionMsg(res?.error || t.operationFailedToast);
+      }
+    } catch {
+      setMcpActionMsg(t.operationFailedToast);
+    } finally {
+      setMcpBusyId(null);
+    }
+  }, [refreshMcpClients, t.docsMcpInstalledOk, t.operationFailedToast]);
+
   const handleTestMcp = useCallback(async () => {
     if (!window.agendameaWindow?.testMcpServer) return;
     setMcpProbing(true);
@@ -190,8 +229,30 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
         2,
       );
     }
+    if (mcpFormat === 'codex') {
+      const cmdToml = mcpStdioCommand.includes("'")
+        ? JSON.stringify(mcpStdioCommand)
+        : `'${mcpStdioCommand}'`;
+      return `# ~/.codex/config.toml\n[mcp_servers.agendamea]\ncommand = ${cmdToml}\nargs = ['mcp']`;
+    }
+    if (mcpFormat === 'opencode') {
+      return JSON.stringify(
+        {
+          $schema: 'https://opencode.ai/config.json',
+          mcp: {
+            agendamea: {
+              type: 'local',
+              command: [mcpStdioCommand, 'mcp'],
+              enabled: true,
+            },
+          },
+        },
+        null,
+        2,
+      );
+    }
     if (mcpFormat === 'cli') {
-      return `# Claude Code CLI\nclaude mcp add agendamea -- "${mcpStdioCommand}" mcp\n\n# OpenAI Codex CLI\ncodex mcp add agendamea -- "${mcpStdioCommand}" mcp`;
+      return `# Claude Code CLI\nclaude mcp add agendamea -- "${mcpStdioCommand}" mcp\n\n# ChatGPT Codex CLI\ncodex mcp add agendamea -- "${mcpStdioCommand}" mcp`;
     }
     if (mcpFormat === 'http') {
       return JSON.stringify(
@@ -216,24 +277,26 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
     label: string;
     icon: React.ComponentType<{ className?: string }>;
   }> = [
-    { id: 'guide', label: t.docsSubTabGuide, icon: BookOpen },
     { id: 'cli', label: t.docsSubTabCli, icon: Terminal },
     { id: 'mcp', label: t.docsSubTabMcp, icon: Cpu },
     { id: 'api', label: t.docsSubTabApi, icon: Server },
+    ...(webhookNode
+      ? [{ id: 'webhooks' as const, label: t.settingsTabWebhooks, icon: Webhook }]
+      : []),
   ];
 
   return (
     <section
-      aria-label={t.settingsTabDocs}
+      aria-label={t.settingsTabAutomation}
+      data-setting-id="docs-main"
       className="space-y-4"
       data-testid="docs-settings-section"
     >
-      {/* Audience-Separated Sub-Tabs + Instant Docs Search */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div
-          role="tablist"
-          aria-label={t.settingsTabDocs}
-          className="inline-flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1"
+      {/* 4-Way Developer Segmented Control (single clean horizontal row, zero nested tablist) */}
+      <div className="flex flex-col gap-3">
+        <fieldset
+          aria-label={t.settingsTabAutomation}
+          className="inline-flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1"
         >
           {subTabs.map((tab) => {
             const Icon = tab.icon;
@@ -242,11 +305,10 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
               <button
                 key={tab.id}
                 type="button"
-                role="tab"
-                aria-selected={active}
+                aria-pressed={active}
                 data-testid={`docs-subtab-${tab.id}`}
                 onClick={() => setActiveSubTab(tab.id)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
                   active
                     ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
@@ -257,33 +319,34 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
               </button>
             );
           })}
-        </div>
+        </fieldset>
 
-        <div className="relative min-w-[200px] sm:w-56">
-          <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
-          <input
-            type="text"
-            data-testid="docs-search-input"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t.docsSearchPlaceholder}
-            aria-label={t.docsSearchPlaceholder}
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 ps-8 pe-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              aria-label={t.clearSearch}
-              className="absolute end-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </div>
+        {activeSubTab !== 'webhooks' && (
+          <div className="relative w-full">
+            <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
+            <input
+              type="text"
+              data-testid="docs-search-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t.docsSearchPlaceholder}
+              aria-label={t.docsSearchPlaceholder}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 ps-8 pe-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label={t.clearSearch}
+                className="absolute end-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {activeSubTab === 'guide' && <DocsUserGuideTab searchQuery={searchQuery} />}
       {activeSubTab === 'cli' && (
         <DocsCliTab
           searchQuery={searchQuery}
@@ -304,6 +367,7 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
           mcpClients={mcpClients}
           mcpBusyId={mcpBusyId}
           mcpActionMsg={mcpActionMsg}
+          customMcpPath={customMcpPath}
           mcpProbe={mcpProbe}
           mcpProbing={mcpProbing}
           mcpFormat={mcpFormat}
@@ -313,6 +377,7 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
           onRefreshClients={() => void refreshMcpClients()}
           onTestMcp={() => void handleTestMcp()}
           onInstallMcpClient={(id) => void handleInstallMcpClient(id)}
+          onInstallCustomMcp={() => void handleInstallCustomMcp()}
           onUninstallMcpClient={(id) => void handleUninstallMcpClient(id)}
           onSelectFormat={setMcpFormat}
           onCopy={(k, text) => void handleCopy(k, text)}
@@ -326,6 +391,7 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection() {
           onCopy={(k, text) => void handleCopy(k, text)}
         />
       )}
+      {activeSubTab === 'webhooks' && webhookNode}
     </section>
   );
 });

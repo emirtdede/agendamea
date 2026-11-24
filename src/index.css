@@ -235,6 +235,14 @@ html.high-contrast [role="status"] {
   border-width: 2px !important;
 }
 
+html.high-contrast [role="switch"] {
+  border: 2px solid var(--border-strong) !important;
+}
+
+html.high-contrast [role="switch"][aria-checked="true"] {
+  border-color: var(--accent) !important;
+}
+
 /* Accessibility: Strong Focus Ring */
 html.strong-focus-ring button:focus-visible,
 html.strong-focus-ring a:focus-visible,

@@ -859,6 +859,38 @@ export interface UiDictionary {
   sttErrorModelMissing: string;
   sttErrorUnavailable: string;
   sttErrorFailed: string;
+  settingsTabAutomation: string;
+  accessibilitySectionSubtitle: string;
+  shortcutsGlobalSectionTitle: string;
+  aiSubTabVoice: string;
+  aiSubTabEngine: string;
+  dataDangerZoneTitle: string;
+  generalLanguageChangeButton: string;
+  welcomeOptionalBadge: string;
+  welcomeFocusTitle: string;
+  welcomeFocusDesc: string;
+  welcomeFocusRemindersTitle: string;
+  welcomeFocusRemindersDesc: string;
+  welcomeFocusQuietTitle: string;
+  welcomeFocusQuietDesc: string;
+  welcomeFocusComfortTitle: string;
+  welcomeFocusComfortDesc: string;
+  welcomeAiTitle: string;
+  welcomeAiDesc: string;
+  welcomeAiVoiceTitle: string;
+  welcomeAiVoiceDesc: string;
+  welcomeAiReadAloudTitle: string;
+  welcomeAiReadAloudDesc: string;
+  welcomeAiZeroDownloadTitle: string;
+  welcomeAiZeroDownloadDesc: string;
+  welcomePowerTitle: string;
+  welcomePowerDesc: string;
+  welcomePowerAssistantsTitle: string;
+  welcomePowerAssistantsDesc: string;
+  welcomePowerAutomationTitle: string;
+  welcomePowerAutomationDesc: string;
+  welcomePowerExportTitle: string;
+  welcomePowerExportDesc: string;
 }
 
 export type LegalDocId = 'privacy' | 'terms' | 'gdpr' | 'opensource' | 'accessibility';

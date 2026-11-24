@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
   setGlobalQuickAddShortcutKey: (shortcut) =>
     ipcRenderer.invoke('shortcut:set-global-quick-add-key', String(shortcut || '')),
   getShortcutStatus: () => ipcRenderer.invoke('shortcut:get-status'),
+  autoResolveShortcuts: () => ipcRenderer.invoke('shortcut:auto-resolve'),
   showDesktopNotification: (payload) => ipcRenderer.invoke('notification:show', payload || {}),
   onFocusTodo: (callback) => {
     const listener = (_event, todoId) => callback(String(todoId || ''));
@@ -54,6 +55,7 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
   openCliTerminal: () => ipcRenderer.invoke('cli:open-terminal'),
   listMcpClients: () => ipcRenderer.invoke('mcp:list-clients'),
   installMcpClient: (clientId) => ipcRenderer.invoke('mcp:install-client', String(clientId || '')),
+  installCustomMcpFile: () => ipcRenderer.invoke('mcp:install-custom-file'),
   uninstallMcpClient: (clientId) =>
     ipcRenderer.invoke('mcp:uninstall-client', String(clientId || '')),
   testMcpServer: () => ipcRenderer.invoke('mcp:test-server'),

@@ -2,6 +2,7 @@ import { Check, Cloud, FolderOpen, RefreshCw, Upload } from 'lucide-react';
 import React from 'react';
 import { useI18n } from '../../../i18n/I18nContext';
 import type { DetectedCloudProvider, OneDriveStatus } from '../../../types';
+import { ToggleSwitch } from '../../ToggleSwitch';
 
 interface CloudSyncCardProps {
   oneDriveStatus: OneDriveStatus | null;
@@ -199,20 +200,13 @@ export const CloudSyncCard = React.memo(function CloudSyncCard({
           <span className="text-xs font-medium text-[var(--text-secondary)]">
             {t.onedriveAutoSyncTitle}
           </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={oneDriveStatus.autoSync}
+          <ToggleSwitch
+            checked={oneDriveStatus.autoSync}
+            onChange={() => onToggleAutoSync()}
             disabled={isOneDriveBusy}
-            onClick={onToggleAutoSync}
-            className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors shrink-0 ${
-              oneDriveStatus.autoSync
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            {oneDriveStatus.autoSync ? t.enabledBadge : t.disabledBadge}
-          </button>
+            label={t.onedriveAutoSyncTitle}
+            testId="cloud-auto-sync-toggle"
+          />
         </div>
       )}
     </div>
