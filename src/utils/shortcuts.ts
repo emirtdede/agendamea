@@ -186,11 +186,49 @@ export function sanitizeCustomShortcuts(raw: unknown): CustomShortcutsMap {
   const obj = raw as Record<string, unknown>;
   for (const key of Object.keys(DEFAULT_CUSTOM_SHORTCUTS) as ShortcutActionId[]) {
     if (typeof obj[key] === 'string') {
-      const norm = normalizeShortcutString(obj[key] as string);
-      if (norm) {
-        result[key] = norm;
+      const trimmed = (obj[key] as string).trim();
+      if (trimmed === '') {
+        result[key] = '';
+      } else {
+        const norm = normalizeShortcutString(trimmed);
+        if (norm) {
+          result[key] = norm;
+        }
       }
     }
   }
   return result;
+}
+
+export interface ShortcutConflictEntry {
+  id: string;
+  shortcut: string;
+}
+
+/**
+ * Finds duplicate normalized shortcuts across both global OS hotkeys and in-app bindings.
+ * Returns a Map from binding ID -> array of other colliding binding IDs.
+ */
+export function detectShortcutConflicts(
+  entries: readonly ShortcutConflictEntry[],
+): Map<string, string[]> {
+  const byNorm = new Map<string, string[]>();
+  for (const entry of entries) {
+    const norm = normalizeShortcutString(entry.shortcut);
+    if (!norm) continue;
+    const list = byNorm.get(norm) ?? [];
+    list.push(entry.id);
+    byNorm.set(norm, list);
+  }
+  const conflicts = new Map<string, string[]>();
+  for (const ids of byNorm.values()) {
+    if (ids.length <= 1) continue;
+    for (const id of ids) {
+      conflicts.set(
+        id,
+        ids.filter((other) => other !== id),
+      );
+    }
+  }
+  return conflicts;
 }

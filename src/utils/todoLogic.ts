@@ -1,13 +1,16 @@
 import type {
   ActiveView,
   Category,
+  CompletedTaskBehavior,
   MatrixQuadrant,
   Priority,
   SmartView,
   SortOption,
   StatusFilter,
+  TimeFormatPreference,
   Todo,
 } from '../types';
+import { getCachedDateTimeFormatter } from './intlCache';
 
 const PRIORITY_WEIGHT: Record<Priority, number> = {
   high: 3,
@@ -32,11 +35,7 @@ export function sanitizeDueTime(value: unknown): string | null {
 
 export function sanitizeTagName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  const cleaned = raw
-    .trim()
-    .replace(/^#+/, '')
-    .replace(/\s+/g, '-')
-    .slice(0, MAX_TAG_LEN);
+  const cleaned = raw.trim().replace(/^#+/, '').replace(/\s+/g, '-').slice(0, MAX_TAG_LEN);
   return cleaned.length > 0 ? cleaned : null;
 }
 
@@ -67,24 +66,17 @@ export function sanitizeTags(value: unknown): string[] {
   return result;
 }
 
-const FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
-
 function getShortDateFormatter(locale = 'tr-TR'): Intl.DateTimeFormat {
-  let fmt = FORMATTER_CACHE.get(locale);
-  if (!fmt) {
-    try {
-      fmt = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' });
-    } catch {
-      fmt = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' });
-    }
-    FORMATTER_CACHE.set(locale, fmt);
-  }
-  return fmt;
+  return getCachedDateTimeFormatter(locale, 'todo-short-date', {
+    day: 'numeric',
+    month: 'short',
+  });
 }
 
 export function isValidIsoDateString(value: string): boolean {
   if (!ISO_DATE_RE.test(value)) return false;
   const [y, m, d] = value.split('-').map(Number);
+  if (y === undefined || m === undefined || d === undefined) return false;
   const dt = new Date(y, m - 1, d);
   return (
     !Number.isNaN(dt.getTime()) &&
@@ -103,9 +95,7 @@ export function normalizeDateRange(
       ? startDate.trim()
       : null;
   const validDue =
-    typeof dueDate === 'string' && isValidIsoDateString(dueDate.trim())
-      ? dueDate.trim()
-      : null;
+    typeof dueDate === 'string' && isValidIsoDateString(dueDate.trim()) ? dueDate.trim() : null;
 
   if (validStart && validDue && validStart > validDue) {
     return { startDate: validDue, dueDate: validStart };
@@ -125,6 +115,9 @@ export function addDaysToDateString(baseDateStr: string, days: number): string {
     return getLocalDateString();
   }
   const [y, m, d] = baseDateStr.split('-').map(Number);
+  if (y === undefined || m === undefined || d === undefined) {
+    return getLocalDateString();
+  }
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() + days);
   return getLocalDateString(dt);
@@ -181,6 +174,7 @@ export function formatDueDateLabel(
   }
 
   const [y, m, d] = dueDate.split('-').map(Number);
+  if (y === undefined || m === undefined || d === undefined) return null;
   const dt = new Date(y, m - 1, d);
   if (Number.isNaN(dt.getTime())) return null;
 
@@ -191,6 +185,19 @@ export function formatDueDateLabel(
   };
 }
 
+export function formatDueTimeDisplay(
+  hhmm: string | null | undefined,
+  timeFormat: TimeFormatPreference = '24h',
+): string | null {
+  const valid = sanitizeDueTime(hhmm);
+  if (!valid) return null;
+  if (timeFormat !== '12h') return valid;
+  const [hRaw = 0, mRaw = 0] = valid.split(':').map(Number);
+  const period = hRaw >= 12 ? 'PM' : 'AM';
+  const h12 = hRaw % 12 === 0 ? 12 : hRaw % 12;
+  return `${h12}:${String(mRaw).padStart(2, '0')} ${period}`;
+}
+
 export function formatTodoDateSchedule(
   startDate: string | null | undefined,
   dueDate: string | null | undefined,
@@ -198,10 +205,11 @@ export function formatTodoDateSchedule(
   locale = 'tr-TR',
   labels: RelativeDateLabels = DEFAULT_TR_DATE_LABELS,
   dueTime?: string | null,
+  timeFormat: TimeFormatPreference = '24h',
 ): { label: string; isOverdue: boolean; isToday: boolean; isRange: boolean } | null {
   const { startDate: normStart, dueDate: normDue } = normalizeDateRange(startDate, dueDate);
-  const validTime = sanitizeDueTime(dueTime);
-  const timeSuffix = validTime ? ` · ${validTime}` : '';
+  const formattedTime = formatDueTimeDisplay(dueTime, timeFormat);
+  const timeSuffix = formattedTime ? ` · ${formattedTime}` : '';
 
   if (!normStart && !normDue) return null;
 
@@ -231,17 +239,20 @@ export function formatTodoDateSchedule(
 
   const startInfo = formatDueDateLabel(normStart, todayStr, locale, labels);
   const dueInfo = formatDueDateLabel(normDue, todayStr, locale, labels);
-  if (!startInfo || !dueInfo) return null;
+  if (!startInfo || !dueInfo || !normStart || !normDue) return null;
 
   return {
     label: `${startInfo.label} - ${dueInfo.label}${timeSuffix}`,
     isOverdue: dueInfo.isOverdue,
-    isToday: (normStart! <= todayStr && todayStr <= normDue!) || dueInfo.isToday,
+    isToday: (normStart <= todayStr && todayStr <= normDue) || dueInfo.isToday,
     isRange: true,
   };
 }
 
-export function isTodoScheduledForToday(todo: Pick<Todo, 'startDate' | 'dueDate'>, todayStr: string): boolean {
+export function isTodoScheduledForToday(
+  todo: Pick<Todo, 'startDate' | 'dueDate'>,
+  todayStr: string,
+): boolean {
   const { startDate, dueDate } = normalizeDateRange(todo.startDate, todo.dueDate);
   if (dueDate !== null && dueDate <= todayStr) {
     return true;
@@ -252,15 +263,30 @@ export function isTodoScheduledForToday(todo: Pick<Todo, 'startDate' | 'dueDate'
   return false;
 }
 
+const TURKISH_UPPER_I_RE = /[Iİ]/g;
+
 export function normalizeTurkish(text: string): string {
-  return text.toLocaleLowerCase('tr-TR').trim();
+  if (!text) return '';
+  const mapped =
+    text.indexOf('I') !== -1 || text.indexOf('İ') !== -1
+      ? text.replace(TURKISH_UPPER_I_RE, (ch) => (ch === 'İ' ? 'i' : 'ı'))
+      : text;
+  return mapped.toLowerCase().trim();
 }
 
 function matchesMultilingualSearch(haystack: string, qTr: string, qStd: string): boolean {
-  return (
-    normalizeTurkish(haystack).includes(qTr) ||
-    haystack.toLowerCase().trim().includes(qStd)
-  );
+  if (!haystack) return false;
+  if (haystack.toLowerCase().includes(qStd)) return true;
+  if (haystack.indexOf('I') !== -1 || haystack.indexOf('İ') !== -1) {
+    return normalizeTurkish(haystack).includes(qTr);
+  }
+  return qTr !== qStd && haystack.toLowerCase().includes(qTr);
+}
+
+export function matchesLocaleQuery(haystack: string, query: string): boolean {
+  const trimmed = query.trim();
+  if (!trimmed) return true;
+  return matchesMultilingualSearch(haystack, normalizeTurkish(trimmed), trimmed.toLowerCase());
 }
 
 export function matchesTodoDateRange(
@@ -292,6 +318,7 @@ export function filterAndSortTodos(params: {
   tagFilter?: string | null;
   dateFrom?: string;
   dateTo?: string;
+  completedBehavior?: CompletedTaskBehavior;
 }): Todo[] {
   const {
     todos,
@@ -303,13 +330,15 @@ export function filterAndSortTodos(params: {
     tagFilter = null,
     dateFrom = '',
     dateTo = '',
+    completedBehavior = 'bottom',
   } = params;
 
   const q = normalizeTurkish(searchQuery);
   const qStd = searchQuery.toLowerCase().trim();
   const qTag = q.startsWith('#') ? q.slice(1) : q;
   const qTagStd = qStd.startsWith('#') ? qStd.slice(1) : qStd;
-  const normalizedTagFilter = tagFilter ? tagFilter.trim().toLowerCase() : null;
+  const normalizedTagFilterTr = tagFilter ? normalizeTurkish(tagFilter) : null;
+  const normalizedTagFilterStd = tagFilter ? tagFilter.trim().toLowerCase() : null;
 
   const filtered = todos.filter((todo) => {
     // View scoping
@@ -329,11 +358,16 @@ export function filterAndSortTodos(params: {
     if (!(activeView.type === 'smart' && activeView.id === 'completed')) {
       if (statusFilter === 'active' && todo.completed) return false;
       if (statusFilter === 'completed' && !todo.completed) return false;
+      if (statusFilter === 'all' && completedBehavior === 'hide' && todo.completed) return false;
     }
 
-    // Active tag chip filter
-    if (normalizedTagFilter) {
-      const hasTag = (todo.tags ?? []).some((tg) => tg.toLowerCase() === normalizedTagFilter);
+    // Active tag chip filter (supports both Turkish İ/ı and international I/i)
+    if (normalizedTagFilterTr && normalizedTagFilterStd) {
+      const hasTag = (todo.tags ?? []).some(
+        (tg) =>
+          normalizeTurkish(tg) === normalizedTagFilterTr ||
+          tg.toLowerCase() === normalizedTagFilterStd,
+      );
       if (!hasTag) return false;
     }
 
@@ -357,8 +391,8 @@ export function filterAndSortTodos(params: {
   });
 
   return [...filtered].sort((a, b) => {
-    // Always float active tasks above completed tasks in mixed views
-    if (a.completed !== b.completed) {
+    // Float active tasks above completed tasks when completedBehavior is 'bottom' (default)
+    if (completedBehavior !== 'show' && a.completed !== b.completed) {
       return a.completed ? 1 : -1;
     }
 
@@ -454,7 +488,7 @@ export function computeViewCounts(
         smart.important += 1;
       }
       if (todo.categoryId && catCounts[todo.categoryId] !== undefined) {
-        catCounts[todo.categoryId] += 1;
+        catCounts[todo.categoryId] = (catCounts[todo.categoryId] ?? 0) + 1;
       }
     }
   }
@@ -492,19 +526,16 @@ export function sortCategoriesWithPin(categories: Category[]): Category[] {
   });
 }
 
-export function getVerticalDropPosition(
-  clientY: number,
-  rect: DOMRect,
-): 'before' | 'after' {
+export function getVerticalDropPosition(clientY: number, rect: DOMRect): 'before' | 'after' {
   return clientY - rect.top < rect.height / 2 ? 'before' : 'after';
 }
 
 export function compareSemver(a: string, b: string): number {
-  const [coreA, preA] = String(a || '')
+  const [coreA = '', preA] = String(a || '')
     .trim()
     .replace(/^v/i, '')
     .split('-', 2);
-  const [coreB, preB] = String(b || '')
+  const [coreB = '', preB] = String(b || '')
     .trim()
     .replace(/^v/i, '')
     .split('-', 2);

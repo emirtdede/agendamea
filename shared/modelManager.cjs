@@ -5,26 +5,19 @@
  * AbortController Cancel, Mandatory Streaming SHA-256 Verification & MSIX userData/models Cleanup.
  */
 
-const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { getAppLogger } = require('./logger.cjs');
 const {
   MODEL_CATALOG,
   MODELS_BY_ID,
   assertAllowedModelLicense,
   buildDownloadUrl,
 } = require('./aiCatalog.cjs');
-const { getDiskFreeBytes } = require('./hardwareProfiler.cjs');
 
-function computeFileSha256(filePath) {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', reject);
-  });
-}
+const modelLog = () => getAppLogger('model-manager');
+const { getDiskFreeBytes } = require('./hardwareProfiler.cjs');
+const { computeFileSha256, writeChunkSafe, renameWithRetry } = require('./downloadUtils.cjs');
 
 function parseContentRangeTotal(res, fallbackStart = 0) {
   const cr = res?.headers?.get?.('content-range');
@@ -48,62 +41,22 @@ function parseContentRangeTotal(res, fallbackStart = 0) {
   return { start: fallbackStart, total: null };
 }
 
-async function writeChunkSafe(stream, buf, getWriteErr) {
-  const existingErr = getWriteErr();
-  if (existingErr) throw existingErr;
-  if (stream.write(buf)) return;
-  await new Promise((resolve, reject) => {
-    const cleanup = () => {
-      stream.off('drain', onDrain);
-      stream.off('error', onError);
-      stream.off('close', onClose);
-    };
-    const onDrain = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = (err) => {
-      cleanup();
-      reject(err);
-    };
-    const onClose = () => {
-      cleanup();
-      reject(getWriteErr() || new Error('DISK_STREAM_CLOSED'));
-    };
-    stream.once('drain', onDrain);
-    stream.once('error', onError);
-    stream.once('close', onClose);
-  });
-}
-
-async function renameWithRetry(fromPath, toPath, attempts = 5) {
-  for (let i = 0; i < attempts; i += 1) {
-    try {
-      fs.renameSync(fromPath, toPath);
-      return;
-    } catch (err) {
-      if (i === attempts - 1 || (err?.code !== 'EPERM' && err?.code !== 'EBUSY')) {
-        throw err;
-      }
-      await new Promise((r) => setTimeout(r, 150 * (i + 1)));
-    }
-  }
-}
-
 class ModelManager {
   constructor(options = {}) {
     if (!options.modelsDir) {
       throw new Error('ModelManager requires modelsDir (e.g. <userData>/models).');
     }
     this.modelsDir = path.resolve(options.modelsDir);
-    this.fetchFn = options.fetchFn || ((...args) => globalThis.fetch(...args));
+    this.fetchFn = options.fetchFn || ((input, init) => globalThis.fetch(input, init));
     this.statfsFn = options.statfsFn || null;
     this.urlOverrideById = options.urlOverrideById || {};
-    this.onProgressEvent = typeof options.onProgressEvent === 'function' ? options.onProgressEvent : null;
+    this.onProgressEvent =
+      typeof options.onProgressEvent === 'function' ? options.onProgressEvent : null;
     this.activeControllers = new Map();
     this.activePromises = new Map();
     this.pendingCleanParts = new Set();
     this.downloadProgress = new Map();
+    this._manifestCache = new Map();
   }
 
   ensureDir() {
@@ -138,8 +91,20 @@ class ModelManager {
   readManifest(modelId, customSpec = null) {
     try {
       const p = this.getManifestPath(modelId, customSpec);
-      if (!fs.existsSync(p)) return null;
-      return JSON.parse(fs.readFileSync(p, 'utf8'));
+      let stat;
+      try {
+        stat = fs.statSync(p);
+      } catch {
+        this._manifestCache.delete(p);
+        return null;
+      }
+      const cached = this._manifestCache.get(p);
+      if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+        return cached.data;
+      }
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+      this._manifestCache.set(p, { mtimeMs: stat.mtimeMs, size: stat.size, data });
+      return data;
     } catch {
       return null;
     }
@@ -205,7 +170,12 @@ class ModelManager {
     }
     const sha256 = await computeFileSha256(full);
     if (sha256.toLowerCase() !== spec.sha256.toLowerCase()) {
-      return { ok: false, code: 'SHA256_MISMATCH', expectedSha256: spec.sha256, actualSha256: sha256 };
+      return {
+        ok: false,
+        code: 'SHA256_MISMATCH',
+        expectedSha256: spec.sha256,
+        actualSha256: sha256,
+      };
     }
     return { ok: true, bytes: size, sha256 };
   }
@@ -241,6 +211,7 @@ class ModelManager {
     const full = path.join(this.modelsDir, spec.file);
     const part = `${full}.part`;
     const manifest = `${full}.manifest.json`;
+    this._manifestCache.delete(manifest);
     let removed = false;
     for (const target of [full, part, manifest]) {
       try {
@@ -256,6 +227,7 @@ class ModelManager {
   }
 
   deleteAllModels() {
+    this._manifestCache.clear();
     for (const activeId of Array.from(this.activeControllers.keys())) {
       this.cancelDownload(activeId, { cleanPart: true });
     }
@@ -308,7 +280,6 @@ class ModelManager {
   }
 
   async _downloadModelInternal(spec, customSpec, options, onProgress) {
-
     this.ensureDir();
     const fullPath = path.join(this.modelsDir, spec.file);
     const partPath = `${fullPath}.part`;
@@ -365,7 +336,13 @@ class ModelManager {
 
       // If .part already matches exact target bytes, jump directly to SHA-256 verification!
       if (startAt === spec.bytes && startAt > 0) {
-        const finalRes = await this._finalizeVerifiedPart(spec, partPath, fullPath, manifestPath, true);
+        const finalRes = await this._finalizeVerifiedPart(
+          spec,
+          partPath,
+          fullPath,
+          manifestPath,
+          true,
+        );
         downloadOk = Boolean(finalRes?.ok);
         return finalRes;
       }
@@ -387,7 +364,7 @@ class ModelManager {
         if (controller.signal.aborted) {
           return { ok: false, code: 'CANCELLED', error: 'Download cancelled.' };
         }
-        console.error(`[ModelManager] fetch failed for ${spec.id}:`, err);
+        modelLog().error({ modelId: spec.id, err }, 'Model download fetch failed');
         return {
           ok: false,
           code: 'NETWORK_ERROR',
@@ -398,7 +375,13 @@ class ModelManager {
       if (res.status === 416) {
         const rangeInfo = parseContentRangeTotal(res, startAt);
         if (startAt === spec.bytes && rangeInfo.total === spec.bytes) {
-          const finalRes = await this._finalizeVerifiedPart(spec, partPath, fullPath, manifestPath, true);
+          const finalRes = await this._finalizeVerifiedPart(
+            spec,
+            partPath,
+            fullPath,
+            manifestPath,
+            true,
+          );
           downloadOk = Boolean(finalRes?.ok);
           return finalRes;
         }
@@ -414,7 +397,7 @@ class ModelManager {
           if (controller.signal.aborted) {
             return { ok: false, code: 'CANCELLED', error: 'Download cancelled.' };
           }
-          console.error(`[ModelManager] 416 retry fetch failed for ${spec.id}:`, err);
+          modelLog().error({ modelId: spec.id, err }, 'Model download 416 retry fetch failed');
           return {
             ok: false,
             code: 'NETWORK_ERROR',
@@ -428,7 +411,11 @@ class ModelManager {
         const rangeInfo = parseContentRangeTotal(res, startAt);
         if (rangeInfo.start !== startAt) {
           fs.rmSync(partPath, { force: true });
-          return { ok: false, code: 'RANGE_MISMATCH', error: 'Server returned mismatched byte range.' };
+          return {
+            ok: false,
+            code: 'RANGE_MISMATCH',
+            error: 'Server returned mismatched byte range.',
+          };
         }
         resumed = true;
       } else if (res.status === 200) {
@@ -469,6 +456,11 @@ class ModelManager {
           if (value && value.byteLength > 0) {
             const buf = Buffer.from(value.buffer, value.byteOffset, value.byteLength);
             receivedBytes += buf.length;
+            if (spec.bytes > 0 && receivedBytes > spec.bytes) {
+              throw Object.assign(new Error('Downloaded model stream exceeded expected size.'), {
+                code: 'SIZE_EXCEEDED',
+              });
+            }
             await writeChunkSafe(out, buf, () => writeErr);
             if (writeErr) throw writeErr;
             const percent = Math.min(100, Math.round((receivedBytes / spec.bytes) * 100));
@@ -493,10 +485,12 @@ class ModelManager {
         } catch {
           // Ignore cancel error
         }
-        await new Promise((resolve) => {
-          out.once('close', resolve);
-          out.end(() => resolve());
-        });
+        await new Promise(
+          /** @param {(v?: void) => void} resolve */ (resolve) => {
+            out.once('close', () => resolve());
+            out.end(() => resolve());
+          },
+        );
         if (controller.signal.aborted || err?.name === 'AbortError') {
           return {
             ok: false,
@@ -506,23 +500,51 @@ class ModelManager {
             error: 'Download cancelled.',
           };
         }
-        console.error(`[ModelManager] stream error for ${spec.id}:`, err);
+        if (err?.code === 'SIZE_EXCEEDED') {
+          try {
+            fs.rmSync(partPath, { force: true });
+          } catch {
+            // Ignore cleanup failure
+          }
+          return {
+            ok: false,
+            code: 'SIZE_EXCEEDED',
+            receivedBytes,
+            totalBytes: spec.bytes,
+            error: 'Download exceeded expected file size.',
+          };
+        }
+        modelLog().error({ modelId: spec.id, err }, 'Model download stream failed');
         return {
           ok: false,
           code: writeErr ? 'DISK_WRITE_ERROR' : 'STREAM_ERROR',
-          error: writeErr ? 'Disk write failed during model download.' : 'Download stream was interrupted.',
+          error: writeErr
+            ? 'Disk write failed during model download.'
+            : 'Download stream was interrupted.',
         };
       }
 
-      await new Promise((resolve, reject) => {
-        out.end((err) => (err ? reject(err) : resolve()));
-      });
+      await new Promise(
+        /** @param {(v?: void) => void} resolve */ (resolve, reject) => {
+          out.end((err) => (err ? reject(err) : resolve()));
+        },
+      );
       if (writeErr) {
-        console.error(`[ModelManager] disk write error for ${spec.id}:`, writeErr);
-        return { ok: false, code: 'DISK_WRITE_ERROR', error: 'Disk write failed during model download.' };
+        modelLog().error({ modelId: spec.id, err: writeErr }, 'Model download disk write failed');
+        return {
+          ok: false,
+          code: 'DISK_WRITE_ERROR',
+          error: 'Disk write failed during model download.',
+        };
       }
 
-      const finalRes = await this._finalizeVerifiedPart(spec, partPath, fullPath, manifestPath, resumed);
+      const finalRes = await this._finalizeVerifiedPart(
+        spec,
+        partPath,
+        fullPath,
+        manifestPath,
+        resumed,
+      );
       downloadOk = Boolean(finalRes?.ok);
       return finalRes;
     } finally {
@@ -583,6 +605,12 @@ class ModelManager {
       downloadedAt: new Date().toISOString(),
     };
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    try {
+      const st = fs.statSync(manifestPath);
+      this._manifestCache.set(manifestPath, { mtimeMs: st.mtimeMs, size: st.size, data: manifest });
+    } catch {
+      this._manifestCache.delete(manifestPath);
+    }
 
     return {
       ok: true,

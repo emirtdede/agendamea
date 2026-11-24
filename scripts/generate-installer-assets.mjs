@@ -337,7 +337,9 @@ async function main() {
     await renderBmp24(installerHeaderSvg, 150, 57),
   );
 
-  console.log('Generated Windows 11 NSIS installer/uninstaller BMPs and ICOs in electron-resources/.');
+  console.log(
+    'Generated Windows 11 NSIS installer/uninstaller BMPs and ICOs in electron-resources/.',
+  );
 }
 
 main().catch((err) => {

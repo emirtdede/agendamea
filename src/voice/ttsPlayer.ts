@@ -50,12 +50,17 @@ export function sanitizeTextForSpeech(rawText: string): string {
     .trim();
 }
 
-export function truncateForSpeech(rawText: string, maxChars = MAX_SPOKEN_CHARS): {
+export function truncateForSpeech(
+  rawText: string,
+  maxChars = MAX_SPOKEN_CHARS,
+): {
   spokenText: string;
   fullText: string;
   truncated: boolean;
 } {
-  const fullText = String(rawText || '').replace(/\s+/g, ' ').trim();
+  const fullText = String(rawText || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const cleanForSpeech = sanitizeTextForSpeech(fullText);
   const limit = Math.max(40, maxChars);
   if (cleanForSpeech.length <= limit) {
@@ -83,7 +88,11 @@ export function rankTtsVoices(
   voices: readonly SpeechSynthesisVoice[],
   baseLang: string,
 ): SpeechSynthesisVoice[] {
-  const matches = voices.filter((v) => String(v.lang || '').toLowerCase().startsWith(baseLang));
+  const matches = voices.filter((v) =>
+    String(v.lang || '')
+      .toLowerCase()
+      .startsWith(baseLang),
+  );
   const score = (v: SpeechSynthesisVoice): number => {
     const name = String(v.name || '');
     let pts = 0;
@@ -114,7 +123,7 @@ export function listAvailableTtsVoices(
   try {
     const all = api ? api.getVoices() : [];
     if (!preferredLang || all.length <= 1) return all;
-    const baseLang = String(preferredLang).toLowerCase().split('-')[0];
+    const baseLang = String(preferredLang).toLowerCase().split('-')[0] ?? 'en';
     const prioritized = rankTtsVoices(all, baseLang);
     const seen = new Set(prioritized.map((v) => v.voiceURI));
     const others = all.filter((v) => !seen.has(v.voiceURI));
@@ -168,7 +177,10 @@ export function speakLocalText(
   }
 
   const voices = typeof api.getVoices === 'function' ? api.getVoices() : [];
-  const baseLang = String(options?.language || 'tr').toLowerCase().split('-')[0];
+  const baseLang =
+    String(options?.language || 'en')
+      .toLowerCase()
+      .split('-')[0] ?? 'en';
   let chosen: SpeechSynthesisVoice | null = null;
 
   if (options?.preferredVoice) {
@@ -198,7 +210,7 @@ export function speakLocalText(
     const utterance = new Utterance(spokenText);
     const preset = TTS_STYLE_PRESETS[options?.style ?? 'natural'] ?? TTS_STYLE_PRESETS.natural;
     utterance.voice = chosen;
-    utterance.lang = chosen.lang || options?.language || 'tr-TR';
+    utterance.lang = chosen.lang || options?.language || 'en-US';
     utterance.rate = preset.rate;
     utterance.pitch = preset.pitch;
     if (options?.onEnd) {
@@ -259,8 +271,9 @@ export async function speakLocalTextAsync(
     };
   }
 
-  if (isPiperVoiceId(options?.preferredVoice)) {
-    const piperId = stripPiperVoicePrefix(options!.preferredVoice!);
+  const preferredVoice = options?.preferredVoice;
+  if (preferredVoice && isPiperVoiceId(preferredVoice)) {
+    const piperId = stripPiperVoicePrefix(preferredVoice);
     const ok = await speakWithPiperVoice(piperId, spokenText, {
       style: options?.style,
       onEnd: options?.onEnd,

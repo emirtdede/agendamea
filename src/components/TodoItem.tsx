@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
 import { Check, Pin, Star, Trash2 } from 'lucide-react';
+import React, { useMemo } from 'react';
 import { useI18n } from '../i18n/I18nContext';
+import { usePreferencesSelector } from '../store/preferencesStore';
 import type { Category, Todo } from '../types';
 import { formatTodoDateSchedule } from '../utils/todoLogic';
 import { ColorDot } from './ColorDot';
@@ -49,6 +50,8 @@ export const TodoItem = React.memo(function TodoItem({
   onContextMenu,
 }: TodoItemProps) {
   const { t, meta } = useI18n();
+  const timeFormat = usePreferencesSelector((s) => s.timeFormat, Object.is);
+  const colorBlindShapes = usePreferencesSelector((s) => s.colorBlindShapes, Object.is);
   const dueInfo = useMemo(
     () =>
       formatTodoDateSchedule(
@@ -62,6 +65,7 @@ export const TodoItem = React.memo(function TodoItem({
           yesterday: t.yesterday,
         },
         todo.dueTime,
+        timeFormat,
       ),
     [
       todo.startDate,
@@ -72,11 +76,12 @@ export const TodoItem = React.memo(function TodoItem({
       t.today,
       t.tomorrow,
       t.yesterday,
+      timeFormat,
     ],
   );
   let completedSubtasks = 0;
-  for (let i = 0; i < todo.subtasks.length; i += 1) {
-    if (todo.subtasks[i].completed) completedSubtasks += 1;
+  for (const sub of todo.subtasks) {
+    if (sub.completed) completedSubtasks += 1;
   }
   const totalSubtasks = todo.subtasks.length;
 
@@ -116,8 +121,8 @@ export const TodoItem = React.memo(function TodoItem({
   }
 
   if (todo.priority !== 'normal') {
-    const prioText =
-      todo.priority === 'high' ? t.priorityHigh : t.priorityLow;
+    const prioText = todo.priority === 'high' ? t.priorityHigh : t.priorityLow;
+    const shapeGlyph = colorBlindShapes ? (todo.priority === 'high' ? '▲ ' : '▼ ') : '';
     metadataParts.push({
       key: 'priority',
       content: (
@@ -128,6 +133,7 @@ export const TodoItem = React.memo(function TodoItem({
               : ''
           }
         >
+          {shapeGlyph}
           {prioText} {t.prioritySuffix}
         </span>
       ),
@@ -151,29 +157,28 @@ export const TodoItem = React.memo(function TodoItem({
       key: 'tags',
       content: (
         <span className="inline-flex flex-wrap items-center gap-1">
-          {tags.map((tg) => (
-            <span
-              key={tg}
-              role={onTagClick ? 'button' : undefined}
-              tabIndex={onTagClick ? 0 : undefined}
-              onClick={(e) => {
-                if (!onTagClick) return;
-                e.stopPropagation();
-                onTagClick(tg);
-              }}
-              onKeyDown={(e) => {
-                if (!onTagClick) return;
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
+          {tags.map((tg) =>
+            onTagClick ? (
+              <button
+                key={tg}
+                type="button"
+                onClick={(e) => {
                   e.stopPropagation();
                   onTagClick(tg);
-                }
-              }}
-              className="inline-flex items-center rounded border border-[var(--border)] bg-[var(--surface-subtle)] px-1.5 py-0.2 text-[11px] font-medium text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
-            >
-              #{tg}
-            </span>
-          ))}
+                }}
+                className="inline-flex items-center rounded border border-[var(--border)] bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+              >
+                #{tg}
+              </button>
+            ) : (
+              <span
+                key={tg}
+                className="inline-flex items-center rounded border border-[var(--border)] bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]"
+              >
+                #{tg}
+              </span>
+            ),
+          )}
         </span>
       ),
     });
@@ -182,6 +187,7 @@ export const TodoItem = React.memo(function TodoItem({
   const trimmedNotes = todo.notes.trim();
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: HTML5 drag-drop & context-menu row container; actions exposed via inner buttons
     <div
       data-testid="todo-item"
       data-todo-id={todo.id}
@@ -210,10 +216,8 @@ export const TodoItem = React.memo(function TodoItem({
         e.preventDefault();
         onContextMenu(e, todo);
       }}
-      className={`group relative flex items-start gap-3 px-4 py-3 border-b border-[var(--border)] last:border-b-0 transition-colors duration-150 ${
-        isSelected
-          ? 'bg-[var(--accent-soft)]'
-          : 'hover:bg-[var(--surface-hover)]/70'
+      className={`ag-todo-row group relative flex items-start gap-3 px-4 py-3 border-b border-[var(--border)] last:border-b-0 transition-colors duration-150 ${
+        isSelected ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--surface-hover)]/70'
       } ${isDragging ? 'opacity-45' : ''}`}
     >
       {/* Subtle insertion indicator during drag-over (no static icons) */}
@@ -262,7 +266,7 @@ export const TodoItem = React.memo(function TodoItem({
         type="button"
         onClick={() => onSelect(todo.id)}
         aria-label={todo.title}
-        className="flex-1 min-w-0 text-left focus:outline-none"
+        className="flex-1 min-w-0 text-start focus:outline-none"
       >
         <p
           className={`text-[15px] leading-snug break-words transition-colors ${

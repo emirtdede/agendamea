@@ -66,17 +66,13 @@ function parseGitHubRelease(data, currentVersion, fallbackReleaseUrl, checkedAt,
     releaseUrl:
       typeof data?.html_url === 'string' && data.html_url ? data.html_url : fallbackReleaseUrl,
     setupUrl:
-      typeof setupAsset?.browser_download_url === 'string'
-        ? setupAsset.browser_download_url
-        : null,
+      typeof setupAsset?.browser_download_url === 'string' ? setupAsset.browser_download_url : null,
     portableUrl:
       typeof portableAsset?.browser_download_url === 'string'
         ? portableAsset.browser_download_url
         : null,
     msixUrl:
-      typeof msixAsset?.browser_download_url === 'string'
-        ? msixAsset.browser_download_url
-        : null,
+      typeof msixAsset?.browser_download_url === 'string' ? msixAsset.browser_download_url : null,
     checkedAt,
   };
 }

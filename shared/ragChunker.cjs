@@ -47,7 +47,10 @@ function buildTodoDocumentText(todo) {
  */
 function chunkTaskDocument(todo, options = {}) {
   const maxTokens = Math.max(32, Number(options.maxTokens) || DEFAULT_CHUNK_TOKENS);
-  const overlapTokens = Math.max(0, Math.min(maxTokens - 8, Number(options.overlapTokens) || DEFAULT_OVERLAP_TOKENS));
+  const overlapTokens = Math.max(
+    0,
+    Math.min(maxTokens - 8, Number(options.overlapTokens) || DEFAULT_OVERLAP_TOKENS),
+  );
   const fullText = typeof todo === 'string' ? todo.trim() : buildTodoDocumentText(todo);
   if (!fullText) return [];
 
@@ -100,7 +103,10 @@ function chunkTaskDocument(todo, options = {}) {
 }
 
 function computeChunkHash(text) {
-  return crypto.createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(String(text || ''), 'utf8')
+    .digest('hex');
 }
 
 function l2Normalize(vec) {
@@ -259,7 +265,10 @@ function fuseHybridRanks({
       const rrfNorm = Math.min(1, entry.rrf / maxPossibleRrf);
       let score;
       if (entry.ftsRank !== null && entry.vectorRank !== null) {
-        score = Math.min(1, 0.55 * rrfNorm + 0.30 * Math.max(0, entry.cosine) + 0.15 * entry.lexicalCoverage);
+        score = Math.min(
+          1,
+          0.55 * rrfNorm + 0.3 * Math.max(0, entry.cosine) + 0.15 * entry.lexicalCoverage,
+        );
       } else if (entry.vectorRank !== null) {
         score = Math.max(0, Math.min(1, entry.cosine));
       } else {

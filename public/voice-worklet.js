@@ -7,8 +7,7 @@
 class AgendameaVoiceProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
-    this.targetRate =
-      (options && options.processorOptions && options.processorOptions.targetSampleRate) || 16000;
+    this.targetRate = options?.processorOptions?.targetSampleRate || 16000;
     this.inputRate = sampleRate || 48000;
     this.ratio = this.inputRate / this.targetRate;
     this.srcOffset = 0;
@@ -20,8 +19,8 @@ class AgendameaVoiceProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs) {
-    const input = inputs && inputs[0];
-    if (!input || !input[0] || input[0].length === 0) {
+    const input = inputs?.[0];
+    if (!input?.[0] || input[0].length === 0) {
       return true;
     }
 

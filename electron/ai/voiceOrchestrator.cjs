@@ -10,25 +10,31 @@
  */
 
 const crypto = require('node:crypto');
+const serverMessagesMod = require('../../shared/serverMessages.cjs');
 const { parseVoiceIntent, formatLocalDate } = require('../../shared/voiceIntentParser.cjs');
 const { prepareSpokenSummary } = require('./ttsService.cjs');
 
-const DESTRUCTIVE_INTENTS = new Set([
-  'delete_task',
-  'clear_completed',
-  'empty_trash',
-  'reset_all',
-]);
+const DESTRUCTIVE_INTENTS = new Set(['delete_task', 'clear_completed', 'empty_trash', 'reset_all']);
 
-function isTurkish(lang) {
-  return String(lang || 'tr').toLowerCase().startsWith('tr');
+function resolveVoiceLang(lang) {
+  if (typeof lang === 'boolean') return lang ? 'tr' : 'en';
+  return serverMessagesMod.normalizeServerLang(lang || 'en');
+}
+
+function tVoice(lang, key, vars) {
+  let text = serverMessagesMod.getServerMessage(resolveVoiceLang(lang), key);
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) {
+      text = text.replace(`{${k}}`, String(v));
+    }
+  }
+  return text;
 }
 
 function formatReadFallback(matches, lang) {
-  const tr = isTurkish(lang);
   const top = matches[0];
   if (!top) {
-    return tr ? 'Eşleşen not bulunamadı.' : 'No matching note found.';
+    return tVoice(lang, 'voiceNoMatchingNote');
   }
   const bits = [top.title];
   if (top.dueDate) {
@@ -41,6 +47,8 @@ function formatReadFallback(matches, lang) {
   return bits.join(' - ');
 }
 
+const MAX_PENDING_CONFIRMATIONS = 100;
+
 class VoiceOrchestrator {
   constructor(options = {}) {
     this.pendingConfirmations = new Map();
@@ -48,13 +56,19 @@ class VoiceOrchestrator {
   }
 
   _issueConfirmationToken(action) {
-    const token = crypto.randomBytes(12).toString('hex');
-    const expiresAt = Date.now() + this.confirmationTtlMs;
-    this.pendingConfirmations.set(token, { action, expiresAt });
-    // Prune expired
+    const now = Date.now();
+    // Prune expired first
     for (const [k, v] of this.pendingConfirmations.entries()) {
-      if (v.expiresAt < Date.now()) this.pendingConfirmations.delete(k);
+      if (v.expiresAt < now) this.pendingConfirmations.delete(k);
     }
+    while (this.pendingConfirmations.size >= MAX_PENDING_CONFIRMATIONS) {
+      const oldest = this.pendingConfirmations.keys().next().value;
+      if (oldest === undefined) break;
+      this.pendingConfirmations.delete(oldest);
+    }
+    const token = crypto.randomBytes(12).toString('hex');
+    const expiresAt = now + this.confirmationTtlMs;
+    this.pendingConfirmations.set(token, { action, expiresAt });
     return token;
   }
 
@@ -72,7 +86,7 @@ class VoiceOrchestrator {
    */
   async handleUtterance({
     text,
-    language = 'tr',
+    language = 'en',
     readOnly = false,
     confirmToken = null,
     selectedTodoId = null,
@@ -81,28 +95,29 @@ class VoiceOrchestrator {
     llmService = null,
     now = new Date(),
   }) {
-    const tr = isTurkish(language);
+    const lang = resolveVoiceLang(language);
 
     // 0. Explicit Confirmation Execution Path (ONLY way a destructive action can execute)
     if (confirmToken && !readOnly) {
       const approved = this._consumeConfirmationToken(confirmToken);
       if (!approved) {
+        const msg = tVoice(lang, 'voiceConfirmationExpired');
         return {
           ok: false,
           status: 'confirmation_expired',
           mutated: false,
-          spokenText: tr ? 'Onay süresi doldu.' : 'Confirmation expired.',
-          displayText: tr ? 'Onay süresi doldu.' : 'Confirmation expired.',
+          spokenText: msg,
+          displayText: msg,
         };
       }
-      return this._executeDestructiveAction(approved, storeAdapter, tr);
+      return this._executeDestructiveAction(approved, storeAdapter, lang);
     }
 
     // 0B. Explicit Disambiguation Choice (user clicked chip 1/2/3 in overlay)
     if (selectedTodoId && typeof storeAdapter?.getTodoById === 'function') {
       const todo = await storeAdapter.getTodoById(selectedTodoId);
       if (!todo) {
-        const msg = tr ? 'Eşleşen not bulunamadı.' : 'No matching note found.';
+        const msg = tVoice(lang, 'voiceNoMatchingNote');
         return {
           ok: true,
           status: 'not_found',
@@ -113,7 +128,7 @@ class VoiceOrchestrator {
           matches: [],
         };
       }
-      const fullText = formatReadFallback([todo], language);
+      const fullText = formatReadFallback([todo], lang);
       const speech = prepareSpokenSummary(fullText);
       return {
         ok: true,
@@ -136,7 +151,12 @@ class VoiceOrchestrator {
     let parserUsed = 'fast-path';
 
     // Optional LLM fallback ONLY when Fast Path confidence < 0.85 and LLM is available
-    if (confidence < 0.85 && llmService && typeof llmService.isAvailable === 'function' && llmService.isAvailable()) {
+    if (
+      confidence < 0.85 &&
+      llmService &&
+      typeof llmService.isAvailable === 'function' &&
+      llmService.isAvailable()
+    ) {
       try {
         const extracted = await llmService.extractActionJson({
           utterance: text,
@@ -146,8 +166,13 @@ class VoiceOrchestrator {
         if (extracted && typeof extracted.intent === 'string' && extracted.intent !== 'unknown') {
           intent = extracted.intent;
           confidence = Number(extracted.confidence) || 0.85;
-          payload = extracted.payload || {};
-          query = extracted.query || query;
+          payload =
+            extracted.payload &&
+            typeof extracted.payload === 'object' &&
+            !Array.isArray(extracted.payload)
+              ? extracted.payload
+              : {};
+          query = typeof extracted.query === 'string' ? extracted.query : query;
           parserUsed = 'local-llm';
         }
       } catch {
@@ -157,9 +182,7 @@ class VoiceOrchestrator {
 
     // 1. MANDATORY DESTRUCTIVE LOCK (R-14): Never execute delete / clear_completed / empty_trash / reset automatically!
     if (intent === 'reset_all') {
-      const msg = tr
-        ? 'Tüm verileri sıfırlama işlemi güvenlik nedeniyle sesle yapılamaz; lütfen Ayarlar ekranını kullanın.'
-        : 'Full data reset cannot be run via voice for safety. Please use Settings.';
+      const msg = tVoice(lang, 'voiceResetBlocked');
       return {
         ok: true,
         status: 'blocked',
@@ -174,9 +197,7 @@ class VoiceOrchestrator {
 
     if (DESTRUCTIVE_INTENTS.has(intent) || parsed.destructive) {
       if (readOnly) {
-        const msg = tr
-          ? 'Salt-okunur modda değişiklik veya silme işlemi engellendi.'
-          : 'Mutations and destructive actions are blocked in read-only mode.';
+        const msg = tVoice(lang, 'voiceReadOnlyBlocked');
         return {
           ok: true,
           status: 'blocked_read_only',
@@ -188,9 +209,7 @@ class VoiceOrchestrator {
         };
       }
       const token = this._issueConfirmationToken({ intent, payload });
-      const msg = tr
-        ? 'Bu işlem veri siler. Devam etmek için onaylayın.'
-        : 'This action removes data. Please confirm to continue.';
+      const msg = tVoice(lang, 'voiceConfirmDeletePrompt');
       return {
         ok: true,
         status: 'confirmation_required',
@@ -209,7 +228,7 @@ class VoiceOrchestrator {
     if (intent === 'list_today') {
       const todayTasks = await storeAdapter.listToday();
       if (!todayTasks || todayTasks.length === 0) {
-        const msg = tr ? 'Bugün için planlanmış aktif görev yok.' : 'No active tasks scheduled for today.';
+        const msg = tVoice(lang, 'voiceNoTasksToday');
         return {
           ok: true,
           status: 'answered',
@@ -226,9 +245,10 @@ class VoiceOrchestrator {
         .slice(0, 5)
         .map((t, i) => `${i + 1}. ${t.title}${t.dueTime ? ` (${t.dueTime})` : ''}`)
         .join(', ');
-      const msg = tr
-        ? `Bugün ${todayTasks.length} görevin var: ${listLine}`
-        : `You have ${todayTasks.length} tasks today: ${listLine}`;
+      const msg = tVoice(lang, 'voiceTasksTodaySummary', {
+        count: todayTasks.length,
+        list: listLine,
+      });
       const speech = prepareSpokenSummary(msg);
       return {
         ok: true,
@@ -252,7 +272,7 @@ class VoiceOrchestrator {
 
       // R-15: 0-match anti-hallucination guard -> NEVER call LLM!
       if (hits.length === 0) {
-        const msg = tr ? 'Eşleşen not bulunamadı.' : 'No matching note found.';
+        const msg = tVoice(lang, 'voiceNoMatchingNote');
         return {
           ok: true,
           status: 'not_found',
@@ -270,9 +290,7 @@ class VoiceOrchestrator {
       // R-15: Multi-match disambiguation (top-2 score delta < 0.06)
       if (rag.disambiguationRequired && hits.length >= 2) {
         const topChoices = hits.slice(0, 3);
-        const msg = tr
-          ? `Birden fazla benzer not bulundu (${topChoices.length}). Hangisini okuyayım?`
-          : `Multiple similar notes found (${topChoices.length}). Which one should I read?`;
+        const msg = tVoice(lang, 'voiceDisambiguateNotes', { count: topChoices.length });
         return {
           ok: true,
           status: 'disambiguation',
@@ -294,14 +312,14 @@ class VoiceOrchestrator {
       }
 
       // Single clear match -> Isolated Read-Only LLM (tools: [] + <untrusted_note_data>) or direct deterministic read
-      let answerText = formatReadFallback(hits, language);
+      let answerText = formatReadFallback(hits, lang);
       let llmCalled = false;
       if (llmService && typeof llmService.isAvailable === 'function' && llmService.isAvailable()) {
         try {
           const llmRes = await llmService.answerReadOnlyRag({
             query: searchQ,
             chunks: hits.slice(0, 3),
-            language,
+            language: lang,
           });
           llmCalled = true;
           if (llmRes?.text) {
@@ -331,21 +349,36 @@ class VoiceOrchestrator {
     }
 
     // 4. SAFE MUTATIONS (add_task, complete_task, undo_trash)
-    if (intent === 'add_task' && payload?.title) {
+    const validatedTitle =
+      typeof payload?.title === 'string' ? payload.title.trim().slice(0, 300) : '';
+    if (intent === 'add_task' && validatedTitle) {
+      const validPriority =
+        payload.priority === 'high' || payload.priority === 'low' || payload.priority === 'normal'
+          ? payload.priority
+          : 'normal';
       const created = await storeAdapter.addTask({
-        title: payload.title,
-        dueDate: payload.dueDate || null,
-        dueTime: payload.dueTime || null,
-        priority: payload.priority || 'normal',
+        title: validatedTitle,
+        dueDate:
+          typeof payload.dueDate === 'string' && payload.dueDate.trim()
+            ? payload.dueDate.trim()
+            : null,
+        dueTime:
+          typeof payload.dueTime === 'string' && payload.dueTime.trim()
+            ? payload.dueTime.trim()
+            : null,
+        priority: validPriority,
         important: Boolean(payload.important),
         pinned: Boolean(payload.pinned),
-        tags: Array.isArray(payload.tags) ? payload.tags : [],
-        category: payload.category || undefined,
+        tags: Array.isArray(payload.tags)
+          ? payload.tags.filter((x) => typeof x === 'string' && x.trim()).slice(0, 20)
+          : [],
+        category:
+          typeof payload.category === 'string' && payload.category.trim()
+            ? payload.category.trim()
+            : undefined,
       });
       const schedulePart = [created.dueDate, created.dueTime].filter(Boolean).join(' ');
-      const msg = tr
-        ? `Eklendi: ${created.title}${schedulePart ? ` (${schedulePart})` : ''}`
-        : `Added: ${created.title}${schedulePart ? ` (${schedulePart})` : ''}`;
+      const msg = `${tVoice(lang, 'voiceAddedPrefix')}: ${created.title}${schedulePart ? ` (${schedulePart})` : ''}`;
       return {
         ok: true,
         status: 'executed',
@@ -358,12 +391,11 @@ class VoiceOrchestrator {
       };
     }
 
-    if (intent === 'complete_task' && payload?.selector) {
+    const validatedSelector = typeof payload?.selector === 'string' ? payload.selector.trim() : '';
+    if (intent === 'complete_task' && validatedSelector) {
       try {
-        const updated = await storeAdapter.completeTask(payload.selector, true);
-        const msg = tr
-          ? `Tamamlandı: ${updated.title}`
-          : `Completed: ${updated.title}`;
+        const updated = await storeAdapter.completeTask(validatedSelector, true);
+        const msg = `${tVoice(lang, 'voiceCompletedPrefix')}: ${updated.title}`;
         return {
           ok: true,
           status: 'executed',
@@ -375,7 +407,7 @@ class VoiceOrchestrator {
           displayText: msg,
         };
       } catch {
-        const msg = tr ? 'Görev bulunamadı.' : 'Task not found.';
+        const msg = tVoice(lang, 'taskNotFound');
         return {
           ok: false,
           status: 'not_found',
@@ -391,9 +423,7 @@ class VoiceOrchestrator {
       try {
         const restored = await storeAdapter.undoTrash();
         const name = restored?.item?.title || restored?.item?.name || '';
-        const msg = tr
-          ? `Geri yüklendi${name ? `: ${name}` : '.'}`
-          : `Restored${name ? `: ${name}` : '.'}`;
+        const msg = `${tVoice(lang, 'voiceRestoredPrefix')}${name ? `: ${name}` : '.'}`;
         return {
           ok: true,
           status: 'executed',
@@ -405,7 +435,7 @@ class VoiceOrchestrator {
           displayText: msg,
         };
       } catch {
-        const msg = tr ? 'Çöp kutusu boş.' : 'Trash is empty.';
+        const msg = tVoice(lang, 'voiceTrashEmpty');
         return {
           ok: true,
           status: 'not_found',
@@ -426,56 +456,118 @@ class VoiceOrchestrator {
       parser: parserUsed,
       mutated: false,
       payload: { title: previewTitle },
-      spokenText: tr ? 'Görev olarak eklemek için onaylayın.' : 'Confirm to add as a task.',
+      spokenText: tVoice(lang, 'voiceConfirmAddTask'),
       displayText: previewTitle,
     };
   }
 
-  async _executeDestructiveAction(action, storeAdapter, tr) {
+  async _executeDestructiveAction(action, storeAdapter, langOrTr) {
+    const lang = resolveVoiceLang(langOrTr);
     if (action.intent === 'delete_task' && action.payload?.scope === 'all') {
-      const msg = tr
-        ? 'Toplu silme işlemi güvenlik nedeniyle Ayarlar ekranından yapılmalıdır.'
-        : 'Bulk deletion must be performed from Settings for safety.';
-      return { ok: true, status: 'blocked', intent: 'delete_task', mutated: false, spokenText: msg, displayText: msg };
+      const msg = tVoice(lang, 'voiceBulkDeleteBlocked');
+      return {
+        ok: true,
+        status: 'blocked',
+        intent: 'delete_task',
+        mutated: false,
+        spokenText: msg,
+        displayText: msg,
+      };
     }
     if (action.intent === 'delete_task' && action.payload?.selector) {
       try {
         const deleted = await storeAdapter.deleteTask(action.payload.selector);
         if (!deleted) {
-          const msg = tr ? 'Görev bulunamadı.' : 'Task not found.';
-          return { ok: false, status: 'not_found', intent: 'delete_task', mutated: false, spokenText: msg, displayText: msg };
+          const msg = tVoice(lang, 'taskNotFound');
+          return {
+            ok: false,
+            status: 'not_found',
+            intent: 'delete_task',
+            mutated: false,
+            spokenText: msg,
+            displayText: msg,
+          };
         }
-        const msg = tr
-          ? `Çöp kutusuna taşındı: ${deleted?.title || action.payload.selector}`
-          : `Moved to Trash: ${deleted?.title || action.payload.selector}`;
-        return { ok: true, status: 'executed', intent: 'delete_task', mutated: true, spokenText: msg, displayText: msg };
+        const msg = `${tVoice(lang, 'voiceMovedToTrashPrefix')}: ${deleted?.title || action.payload.selector}`;
+        return {
+          ok: true,
+          status: 'executed',
+          intent: 'delete_task',
+          mutated: true,
+          spokenText: msg,
+          displayText: msg,
+        };
       } catch {
-        const msg = tr ? 'Görev bulunamadı.' : 'Task not found.';
-        return { ok: false, status: 'not_found', intent: 'delete_task', mutated: false, spokenText: msg, displayText: msg };
+        const msg = tVoice(lang, 'taskNotFound');
+        return {
+          ok: false,
+          status: 'not_found',
+          intent: 'delete_task',
+          mutated: false,
+          spokenText: msg,
+          displayText: msg,
+        };
       }
     }
     if (action.intent === 'clear_completed') {
       try {
         const res = await storeAdapter.clearCompleted();
-        const msg = tr ? 'Tamamlanan görevler çöpe taşındı.' : 'Completed tasks moved to Trash.';
-        return { ok: true, status: 'executed', intent: 'clear_completed', mutated: true, result: res, spokenText: msg, displayText: msg };
+        const msg = tVoice(lang, 'voiceCompletedMovedToTrash');
+        return {
+          ok: true,
+          status: 'executed',
+          intent: 'clear_completed',
+          mutated: true,
+          result: res,
+          spokenText: msg,
+          displayText: msg,
+        };
       } catch {
-        const msg = tr ? 'Tamamlanan görevler temizlenemedi.' : 'Could not clear completed tasks.';
-        return { ok: false, status: 'blocked', intent: 'clear_completed', mutated: false, spokenText: msg, displayText: msg };
+        const msg = tVoice(lang, 'clearCompletedFailed');
+        return {
+          ok: false,
+          status: 'blocked',
+          intent: 'clear_completed',
+          mutated: false,
+          spokenText: msg,
+          displayText: msg,
+        };
       }
     }
     if (action.intent === 'empty_trash') {
       try {
         const res = await storeAdapter.emptyTrash();
-        const msg = tr ? 'Çöp kutusu boşaltıldı.' : 'Trash emptied.';
-        return { ok: true, status: 'executed', intent: 'empty_trash', mutated: true, result: res, spokenText: msg, displayText: msg };
+        const msg = tVoice(lang, 'voiceTrashEmptied');
+        return {
+          ok: true,
+          status: 'executed',
+          intent: 'empty_trash',
+          mutated: true,
+          result: res,
+          spokenText: msg,
+          displayText: msg,
+        };
       } catch {
-        const msg = tr ? 'Çöp kutusu boşaltılamadı.' : 'Could not empty Trash.';
-        return { ok: false, status: 'blocked', intent: 'empty_trash', mutated: false, spokenText: msg, displayText: msg };
+        const msg = tVoice(lang, 'trashEmptyFailed');
+        return {
+          ok: false,
+          status: 'blocked',
+          intent: 'empty_trash',
+          mutated: false,
+          spokenText: msg,
+          displayText: msg,
+        };
       }
     }
-    const msg = tr ? 'İşlem iptal edildi.' : 'Action cancelled.';
-    return { ok: false, status: 'blocked', intent: action.intent, mutated: false, spokenText: msg, displayText: msg };
+    const msg = tVoice(lang, 'voiceActionCancelled');
+    return {
+      ok: false,
+      status: 'blocked',
+      intent: action.intent,
+      mutated: false,
+      spokenText: msg,
+      displayText: msg,
+    };
   }
 }
 

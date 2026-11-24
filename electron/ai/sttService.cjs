@@ -10,27 +10,103 @@
  */
 
 const fs = require('node:fs');
+const { getAppLogger } = require('../../shared/logger.cjs');
+
+const sttLog = () => getAppLogger('server');
 
 const SAMPLE_RATE = 16000;
 const MIN_SAMPLES = 8000; // 0.5s
 const MAX_SAMPLES = 480000; // 30s cap per WBS-3.1 / WBS-3.2
 const SPEECH_THRESHOLD = 0.02;
-const MIN_SPEECH_RATIO = 0.10;
+const MIN_SPEECH_RATIO = 0.1;
 const DEFAULT_IDLE_UNLOAD_MS = 180_000;
 
 // All 73 Agendamea UI languages mapped cleanly to Whisper ISO-639-1 codes
 const WHISPER_LANG_MAP = Object.freeze({
-  tr: 'tr', en: 'en', de: 'de', fr: 'fr', es: 'es', it: 'it', pt: 'pt', 'pt-BR': 'pt',
-  ru: 'ru', ja: 'ja', ko: 'ko', zh: 'zh', 'zh-CN': 'zh', 'zh-TW': 'zh', ar: 'ar', hi: 'hi',
-  nl: 'nl', pl: 'pl', uk: 'uk', cs: 'cs', sk: 'sk', hu: 'hu', ro: 'ro', bg: 'bg', el: 'el',
-  sv: 'sv', da: 'da', no: 'no', nb: 'no', fi: 'fi', hr: 'hr', sr: 'sr', sl: 'sl',
-  lt: 'lt', lv: 'lv', et: 'et', he: 'he', fa: 'fa', ur: 'ur', bn: 'bn', ta: 'ta',
-  te: 'te', mr: 'mr', gu: 'gu', kn: 'kn', ml: 'ml', pa: 'pa', vi: 'vi', th: 'th',
-  id: 'id', ms: 'ms', tl: 'tl', fil: 'tl', sw: 'sw', af: 'af', ca: 'ca', eu: 'eu',
-  gl: 'gl', sq: 'sq', mk: 'mk', bs: 'bs', is: 'is', ga: 'en', cy: 'cy', mt: 'mt',
-  ka: 'ka', hy: 'hy', az: 'az', kk: 'kk', uz: 'uz', ky: 'auto', tk: 'tk', mn: 'mn',
-  ne: 'ne', si: 'si', km: 'km', lo: 'lo', my: 'my', am: 'am', ha: 'ha', yo: 'yo',
-  zu: 'en', ps: 'ps', be: 'be',
+  tr: 'tr',
+  en: 'en',
+  de: 'de',
+  fr: 'fr',
+  es: 'es',
+  it: 'it',
+  pt: 'pt',
+  'pt-BR': 'pt',
+  ru: 'ru',
+  ja: 'ja',
+  ko: 'ko',
+  zh: 'zh',
+  'zh-CN': 'zh',
+  'zh-TW': 'zh',
+  ar: 'ar',
+  hi: 'hi',
+  nl: 'nl',
+  pl: 'pl',
+  uk: 'uk',
+  cs: 'cs',
+  sk: 'sk',
+  hu: 'hu',
+  ro: 'ro',
+  bg: 'bg',
+  el: 'el',
+  sv: 'sv',
+  da: 'da',
+  no: 'no',
+  nb: 'no',
+  fi: 'fi',
+  hr: 'hr',
+  sr: 'sr',
+  sl: 'sl',
+  lt: 'lt',
+  lv: 'lv',
+  et: 'et',
+  he: 'he',
+  fa: 'fa',
+  ur: 'ur',
+  bn: 'bn',
+  ta: 'ta',
+  te: 'te',
+  mr: 'mr',
+  gu: 'gu',
+  kn: 'kn',
+  ml: 'ml',
+  pa: 'pa',
+  vi: 'vi',
+  th: 'th',
+  id: 'id',
+  ms: 'ms',
+  tl: 'tl',
+  fil: 'tl',
+  sw: 'sw',
+  af: 'af',
+  ca: 'ca',
+  eu: 'eu',
+  gl: 'gl',
+  sq: 'sq',
+  mk: 'mk',
+  bs: 'bs',
+  is: 'is',
+  ga: 'en',
+  cy: 'cy',
+  mt: 'mt',
+  ka: 'ka',
+  hy: 'hy',
+  az: 'az',
+  kk: 'kk',
+  uz: 'uz',
+  ky: 'auto',
+  tk: 'tk',
+  mn: 'mn',
+  ne: 'ne',
+  si: 'si',
+  km: 'km',
+  lo: 'lo',
+  my: 'my',
+  am: 'am',
+  ha: 'ha',
+  yo: 'yo',
+  zu: 'en',
+  ps: 'ps',
+  be: 'be',
 });
 
 // Common Whisper silence/noise hallucinations across TR & EN
@@ -84,7 +160,7 @@ function isLikelyHallucination(text) {
 
 function toFloat32Array(input) {
   if (input instanceof Float32Array) return input;
-  if (ArrayBuffer.isView(input) && input.BYTES_PER_ELEMENT === 4) {
+  if (ArrayBuffer.isView(input) && 'BYTES_PER_ELEMENT' in input && input.BYTES_PER_ELEMENT === 4) {
     return new Float32Array(input.buffer, input.byteOffset, input.byteLength / 4);
   }
   if (Buffer.isBuffer(input) && input.byteLength % 4 === 0) {
@@ -105,6 +181,7 @@ class SttService {
     this.idleUnloadMs =
       typeof options.idleUnloadMs === 'number' ? options.idleUnloadMs : DEFAULT_IDLE_UNLOAD_MS;
     this.context = null;
+    this._loadedModelPath = null;
     this.useGpu = true;
     this.gpuFallbackUsed = false;
     this.idleTimer = null;
@@ -133,9 +210,37 @@ class SttService {
     const changed = this.modelPath !== nextPath || this.modelId !== nextId;
     this.modelPath = nextPath;
     this.modelId = nextId;
-    if (changed) {
-      void this.unload();
+    if (changed && this.context) {
+      void this._unloadIfStale();
     }
+  }
+
+  async _unloadIfStale() {
+    await this._acquireSlot();
+    try {
+      if (!this.context || this._loadedModelPath === this.modelPath) {
+        return;
+      }
+      await this._releaseContextLocked();
+    } finally {
+      this._releaseSlot();
+    }
+  }
+
+  async _releaseContextLocked() {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    if (this.context && typeof this.context.release === 'function') {
+      try {
+        await this.context.release();
+      } catch {
+        // Ignore release error
+      }
+    }
+    this.context = null;
+    this._loadedModelPath = null;
   }
 
   getStatus() {
@@ -172,9 +277,12 @@ class SttService {
   }
 
   async ensureContext() {
-    if (this.context) {
+    if (this.context && this._loadedModelPath === this.modelPath) {
       this.touch();
       return this.context;
+    }
+    if (this.context && this._loadedModelPath !== this.modelPath) {
+      await this._releaseContextLocked();
     }
     if (!this._loadingPromise) {
       this._loadingPromise = this._loadContextInternal().finally(() => {
@@ -185,11 +293,12 @@ class SttService {
   }
 
   async _loadContextInternal() {
-    if (this.context) {
+    if (this.context && this._loadedModelPath === this.modelPath) {
       this.touch();
       return this.context;
     }
-    if (!this.modelPath || !fs.existsSync(this.modelPath)) {
+    const targetPath = this.modelPath;
+    if (!targetPath || !fs.existsSync(targetPath)) {
       throw new Error('STT_MODEL_MISSING');
     }
     const binding = await this.ensureBinding();
@@ -198,7 +307,8 @@ class SttService {
     }
     if (this.useGpu) {
       try {
-        this.context = await binding.initWhisper({ filePath: this.modelPath, useGpu: true }, 'vulkan');
+        this.context = await binding.initWhisper({ filePath: targetPath, useGpu: true }, 'vulkan');
+        this._loadedModelPath = targetPath;
         this.gpuFallbackUsed = false;
         this.touch();
         return this.context;
@@ -208,12 +318,13 @@ class SttService {
         this.gpuFallbackUsed = true;
       }
     }
-    this.context = await binding.initWhisper({ filePath: this.modelPath, useGpu: false }, 'default');
+    this.context = await binding.initWhisper({ filePath: targetPath, useGpu: false }, 'default');
+    this._loadedModelPath = targetPath;
     this.touch();
     return this.context;
   }
 
-  async transcribePcm(pcm16k, uiLang = 'tr') {
+  async transcribePcm(pcm16k, uiLang = 'en') {
     const startedAt = Date.now();
     const samples = toFloat32Array(pcm16k);
     if (!samples) {
@@ -252,11 +363,15 @@ class SttService {
       try {
         context = await this.ensureContext();
       } catch (err) {
-        const code = err && err.message === 'STT_MODEL_MISSING' ? 'STT_MODEL_MISSING' : 'STT_UNAVAILABLE';
+        const code =
+          err && err.message === 'STT_MODEL_MISSING' ? 'STT_MODEL_MISSING' : 'STT_UNAVAILABLE';
         return {
           ok: false,
           code,
-          message: code === 'STT_MODEL_MISSING' ? 'Speech model is not downloaded.' : 'Speech engine unavailable.',
+          message:
+            code === 'STT_MODEL_MISSING'
+              ? 'Speech model is not downloaded.'
+              : 'Speech engine unavailable.',
         };
       }
 
@@ -279,7 +394,7 @@ class SttService {
           noSpeechThold: 0.6,
           no_speech_thold: 0.6,
         });
-        const result = job && job.promise ? await job.promise : job;
+        const result = job?.promise ? await job.promise : job;
         this.touch();
         const rawText = String(result?.result || result?.text || '').trim();
         if (!rawText || isLikelyHallucination(rawText)) {
@@ -300,7 +415,7 @@ class SttService {
           elapsedMs: Date.now() - startedAt,
         };
       } catch (err) {
-        console.error('[SttService] transcribePcm failed:', err);
+        sttLog().error({ err }, 'SttService transcribePcm failed');
         return {
           ok: false,
           code: 'TRANSCRIBE_FAILED',
@@ -316,18 +431,7 @@ class SttService {
   async unload() {
     await this._acquireSlot();
     try {
-      if (this.idleTimer) {
-        clearTimeout(this.idleTimer);
-        this.idleTimer = null;
-      }
-      if (this.context && typeof this.context.release === 'function') {
-        try {
-          await this.context.release();
-        } catch {
-          // Ignore release error
-        }
-      }
-      this.context = null;
+      await this._releaseContextLocked();
     } finally {
       this._releaseSlot();
     }

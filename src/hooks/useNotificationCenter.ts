@@ -1,24 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../api/client';
+import { useCallback, useEffect, useRef } from 'react';
 import type { UiDictionary } from '../i18n/translations';
-import type {
-  AppSettings,
-  NotificationChannelMode,
-  NotificationChannelsMap,
-  NotificationEventType,
-  NotificationProfileId,
-  Todo,
-} from '../types';
+import { notificationStore } from '../store/notificationStore';
+import type { AppSettings, NotificationEventType, Todo } from '../types';
 import {
-  clampNotificationLeadMinutes,
-  DEFAULT_NOTIFICATION_CHANNELS,
-  DEFAULT_NOTIFICATION_LEAD_MINUTES,
-  detectMatchingNotificationProfile,
   evaluateTaskReminders,
-  NOTIFICATION_PROFILE_PRESETS,
-  sanitizeNotificationChannels,
+  isWithinQuietHours,
   shouldDeliverNotification,
 } from '../utils/notifications';
+import { isTodoScheduledForToday } from '../utils/todoLogic';
 
 const SENT_REMINDERS_STORAGE_KEY = 'agendamea-sent-reminders-v1';
 const MAX_PERSISTED_REMINDER_KEYS = 300;
@@ -57,65 +46,75 @@ export interface NotificationDispatchPayload {
   variant?: 'info' | 'error';
 }
 
+/**
+ * Store-backed notification runtime.
+ * Keeps ZERO React state inside App.tsx so changing notification profiles,
+ * channels, or lead times triggers 0 App.tsx re-renders.
+ */
 export function useNotificationCenter({
   todos,
   tRef,
   showInfoToast,
+  onFocusTodo,
 }: {
   todos: Todo[];
   tRef: React.MutableRefObject<UiDictionary>;
   showInfoToast: (message: string, variant?: 'info' | 'error') => void;
+  onFocusTodo?: (todoId: string) => void;
 }) {
-  const [notificationProfile, setNotificationProfile] =
-    useState<NotificationProfileId>('balanced');
-  const [notificationLeadMinutes, setNotificationLeadMinutesState] = useState<number>(
-    DEFAULT_NOTIFICATION_LEAD_MINUTES,
-  );
-  const [notificationChannels, setNotificationChannels] = useState<NotificationChannelsMap>({
-    ...DEFAULT_NOTIFICATION_CHANNELS,
-  });
-
-  const channelsRef = useRef(notificationChannels);
-  channelsRef.current = notificationChannels;
-  const leadMinutesRef = useRef(notificationLeadMinutes);
-  leadMinutesRef.current = notificationLeadMinutes;
   const todosRef = useRef(todos);
   todosRef.current = todos;
+  const onFocusTodoRef = useRef(onFocusTodo);
+  onFocusTodoRef.current = onFocusTodo;
   const sentKeysRef = useRef<Set<string>>(loadPersistedSentReminderKeys());
 
   const hydrateNotificationSettings = useCallback((settings: AppSettings) => {
-    const channels = sanitizeNotificationChannels(settings.notificationChannels);
-    setNotificationChannels(channels);
-    const detected =
-      settings.notificationProfile ?? detectMatchingNotificationProfile(channels);
-    setNotificationProfile(detected);
-    setNotificationLeadMinutesState(
-      clampNotificationLeadMinutes(settings.notificationLeadMinutes),
-    );
+    notificationStore.hydrate(settings);
   }, []);
 
   const dispatchNotification = useCallback(
     (eventType: NotificationEventType, payload: NotificationDispatchPayload) => {
-      const delivery = shouldDeliverNotification(channelsRef.current, eventType);
+      const notifState = notificationStore.getState();
+      const delivery = shouldDeliverNotification(notifState.channels, eventType);
+      const quietNow = isWithinQuietHours(
+        new Date(),
+        notifState.quietHoursEnabled,
+        notifState.quietHoursStart,
+        notifState.quietHoursEnd,
+      );
       if (delivery.inApp) {
         const message = payload.body ? `${payload.title}: ${payload.body}` : payload.title;
         showInfoToast(message, payload.variant ?? 'info');
       }
-      if (delivery.desktop) {
+      if (delivery.desktop && !quietNow) {
         if (window.agendameaWindow?.showDesktopNotification) {
           void window.agendameaWindow
             .showDesktopNotification({
               title: payload.title,
               body: payload.body || '',
               todoId: payload.todoId,
+              silent: !notifState.notificationSoundEnabled,
             })
-            .catch(() => {});
-        } else if (
-          typeof Notification !== 'undefined' &&
-          Notification.permission === 'granted'
-        ) {
+            .catch(() => {
+              /* ignore */
+            });
+        } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           try {
-            new Notification(payload.title, { body: payload.body || '' });
+            const browserNotif = new Notification(payload.title, {
+              body: payload.body || '',
+              silent: !notifState.notificationSoundEnabled,
+            });
+            browserNotif.onclick = () => {
+              try {
+                window.focus();
+              } catch {
+                // Ignore browser focus errors
+              }
+              if (payload.todoId) {
+                onFocusTodoRef.current?.(payload.todoId);
+              }
+              browserNotif.close();
+            };
           } catch {
             // Ignore browser Notification errors
           }
@@ -125,64 +124,11 @@ export function useNotificationCenter({
     [showInfoToast],
   );
 
-  const requestBrowserNotificationPermissionIfNeeded = useCallback((wantsDesktop: boolean) => {
-    if (!wantsDesktop) return;
-    if (window.agendameaWindow?.showDesktopNotification) return;
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      void Notification.requestPermission().catch(() => {});
-    }
-  }, []);
-
-  const applyNotificationProfile = useCallback(
-    (profile: Exclude<NotificationProfileId, 'custom'>) => {
-      const preset = { ...NOTIFICATION_PROFILE_PRESETS[profile] };
-      const wantsDesktop = Object.values(preset).some((m) => m === 'both' || m === 'desktop');
-      requestBrowserNotificationPermissionIfNeeded(wantsDesktop);
-      setNotificationProfile(profile);
-      setNotificationChannels(preset);
-      void api
-        .updateSettings({
-          notificationProfile: profile,
-          notificationChannels: preset,
-        })
-        .catch(() => {});
-    },
-    [requestBrowserNotificationPermissionIfNeeded],
-  );
-
-  const updateNotificationChannel = useCallback(
-    (eventType: NotificationEventType, mode: NotificationChannelMode) => {
-      requestBrowserNotificationPermissionIfNeeded(mode === 'both' || mode === 'desktop');
-      const next: NotificationChannelsMap = { ...channelsRef.current, [eventType]: mode };
-      const matched = detectMatchingNotificationProfile(next);
-      channelsRef.current = next;
-      setNotificationChannels(next);
-      setNotificationProfile(matched);
-      void api
-        .updateSettings({
-          notificationProfile: matched,
-          notificationChannels: next,
-        })
-        .catch(() => {});
-    },
-    [requestBrowserNotificationPermissionIfNeeded],
-  );
-
-  const updateNotificationLeadMinutes = useCallback((minutes: number) => {
-    const clamped = clampNotificationLeadMinutes(minutes);
-    setNotificationLeadMinutesState(clamped);
-    void api.updateSettings({ notificationLeadMinutes: clamped }).catch(() => {});
-  }, []);
-
   const sendTestNotification = useCallback(() => {
     const dict = tRef.current;
-    // Honor active channel selection; if all channels are silenced (Focus Mode), preview both so user can verify delivery
-    const anyDesktop = Object.values(channelsRef.current).some(
-      (m) => m === 'both' || m === 'desktop',
-    );
-    const anyInApp = Object.values(channelsRef.current).some(
-      (m) => m === 'both' || m === 'inApp',
-    );
+    const channels = notificationStore.getState().channels;
+    const anyDesktop = Object.values(channels).some((m) => m === 'both' || m === 'desktop');
+    const anyInApp = Object.values(channels).some((m) => m === 'both' || m === 'inApp');
     const allSilenced = !anyDesktop && !anyInApp;
     const sendInApp = anyInApp || allSilenced;
     const sendDesktop = anyDesktop || allSilenced;
@@ -197,27 +143,45 @@ export function useNotificationCenter({
             title: dict.notificationsTestTitle,
             body: dict.notificationsTestBody,
           })
-          .catch(() => {});
+          .catch(() => {
+            /* ignore */
+          });
       } else if (typeof Notification !== 'undefined') {
-        if (Notification.permission === 'granted') {
+        const openBrowserTestNotif = () => {
           try {
-            new Notification(dict.notificationsTestTitle, { body: dict.notificationsTestBody });
-          } catch {
-            // Ignore
-          }
-        } else if (Notification.permission === 'default') {
-          void Notification.requestPermission().then((perm) => {
-            if (perm === 'granted') {
+            const browserNotif = new Notification(dict.notificationsTestTitle, {
+              body: dict.notificationsTestBody,
+            });
+            browserNotif.onclick = () => {
               try {
-                new Notification(dict.notificationsTestTitle, {
-                  body: dict.notificationsTestBody,
-                });
+                window.focus();
               } catch {
                 // Ignore
               }
+              browserNotif.close();
+            };
+          } catch {
+            // Ignore
+          }
+        };
+        if (Notification.permission === 'granted') {
+          openBrowserTestNotif();
+        } else if (Notification.permission === 'default') {
+          void Notification.requestPermission().then((perm) => {
+            if (perm === 'granted') {
+              openBrowserTestNotif();
+            } else if (!sendInApp) {
+              showInfoToast(
+                `${dict.notificationsTestTitle}: ${dict.notificationsTestBody}`,
+                'info',
+              );
             }
           });
+        } else if (!sendInApp) {
+          showInfoToast(`${dict.notificationsTestTitle}: ${dict.notificationsTestBody}`, 'info');
         }
+      } else if (!sendInApp) {
+        showInfoToast(`${dict.notificationsTestTitle}: ${dict.notificationsTestBody}`, 'info');
       }
     }
   }, [showInfoToast, tRef]);
@@ -226,8 +190,9 @@ export function useNotificationCenter({
   useEffect(() => {
     const checkReminders = () => {
       const now = new Date();
-      const hits = evaluateTaskReminders(todosRef.current, now, leadMinutesRef.current);
-      if (hits.length === 0) return;
+      const notifState = notificationStore.getState();
+      const leadMinutes = notifState.leadMinutes;
+      const hits = evaluateTaskReminders(todosRef.current, now, leadMinutes);
       const dict = tRef.current;
       let addedAny = false;
       for (const hit of hits) {
@@ -238,16 +203,41 @@ export function useNotificationCenter({
           hit.kind === 'upcoming'
             ? dict.notificationTaskUpcomingTitle
             : dict.notificationTaskDueTitle;
-        const body = hit.todo.dueTime
-          ? `${hit.todo.title} (${hit.todo.dueTime})`
-          : hit.todo.title;
+        const body = hit.todo.dueTime ? `${hit.todo.title} (${hit.todo.dueTime})` : hit.todo.title;
         dispatchNotification(hit.kind === 'upcoming' ? 'taskUpcoming' : 'taskDue', {
           title,
           body,
           todoId: hit.todo.id,
         });
       }
-      // Keep dedup set bounded and persisted across restarts
+
+      // Daily Digest check (fires once per day at configured HH:mm)
+      if (notifState.dailyDigestEnabled) {
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${y}-${m}-${d}`;
+        const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const digestKey = `digest:${todayStr}:${notifState.dailyDigestTime}`;
+        if (hhmm >= notifState.dailyDigestTime && !sentKeysRef.current.has(digestKey)) {
+          sentKeysRef.current.add(digestKey);
+          addedAny = true;
+          const active = todosRef.current.filter((item) => !item.completed && !item.deletedAt);
+          const todayCount = active.filter((item) =>
+            isTodoScheduledForToday(item, todayStr),
+          ).length;
+          const overdueCount = active.filter(
+            (item) => item.dueDate && item.dueDate < todayStr,
+          ).length;
+          if (todayCount > 0 || overdueCount > 0) {
+            dispatchNotification('taskUpcoming', {
+              title: dict.notifDailyDigestLabel,
+              body: `${dict.today}: ${todayCount} · ${dict.overdueSuffix}: ${overdueCount}`,
+            });
+          }
+        }
+      }
+
       if (sentKeysRef.current.size > MAX_PERSISTED_REMINDER_KEYS) {
         const entries = Array.from(sentKeysRef.current).slice(-200);
         sentKeysRef.current = new Set(entries);
@@ -265,15 +255,19 @@ export function useNotificationCenter({
     };
   }, [dispatchNotification, tRef]);
 
+  const clearPersistedSentReminders = useCallback(() => {
+    sentKeysRef.current.clear();
+    try {
+      localStorage.removeItem(SENT_REMINDERS_STORAGE_KEY);
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
   return {
-    notificationProfile,
-    notificationLeadMinutes,
-    notificationChannels,
     hydrateNotificationSettings,
-    applyNotificationProfile,
-    updateNotificationChannel,
-    updateNotificationLeadMinutes,
     dispatchNotification,
     sendTestNotification,
+    clearPersistedSentReminders,
   };
 }

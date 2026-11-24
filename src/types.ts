@@ -26,6 +26,14 @@ export type ThemeId =
 export type AppIconId = 'match-theme' | 'obsidian-light' | ThemeId;
 
 export type CloseBehavior = 'ask' | 'tray' | 'quit';
+export type ListDensity = 'compact' | 'comfortable' | 'spacious';
+export type FontFamilyPreset = 'system' | 'sans' | 'mono' | 'dyslexic';
+export type WeekStartDay = 'monday' | 'sunday' | 'saturday';
+export type TimeFormatPreference = '24h' | '12h';
+export type DefaultStartupView = 'all' | 'today' | 'important';
+export type CompletedTaskBehavior = 'show' | 'bottom' | 'hide';
+export type CompletionSoundPreset = 'none' | 'pop' | 'chime' | 'soft';
+export type TrashAutoPurgeDays = 0 | 7 | 30 | 90;
 
 export type SettingsTabId =
   | 'appearance'
@@ -67,12 +75,7 @@ export interface PiperVoiceStatus {
   } | null;
 }
 
-export type NotificationProfileId =
-  | 'balanced'
-  | 'all'
-  | 'focus'
-  | 'silent_inapp'
-  | 'custom';
+export type NotificationProfileId = 'balanced' | 'all' | 'focus' | 'silent_inapp' | 'custom';
 
 export type NotificationChannelMode = 'both' | 'inApp' | 'desktop' | 'off';
 
@@ -95,9 +98,7 @@ export type AiTierId =
 
 export type SmartView = 'all' | 'today' | 'important' | 'completed';
 
-export type ActiveView =
-  | { type: 'smart'; id: SmartView }
-  | { type: 'category'; id: string };
+export type ActiveView = { type: 'smart'; id: SmartView } | { type: 'category'; id: string };
 
 export type StatusFilter = 'all' | 'active' | 'completed';
 
@@ -147,6 +148,15 @@ export interface Todo {
   subtasks: Subtask[];
 }
 
+export type WebhookFormat = 'auto' | 'generic' | 'discord' | 'slack';
+
+export interface WebhookEndpointOverride {
+  secret?: string;
+  events?: string;
+  format?: WebhookFormat;
+  enabled?: boolean;
+}
+
 export interface AppSettings {
   themeMode: ThemeMode;
   themeId: ThemeId;
@@ -171,6 +181,11 @@ export interface AppSettings {
   webhookUrl?: string;
   webhookSecret?: string;
   webhookEvents?: string;
+  webhookFormat?: WebhookFormat;
+  webhookIncomingEnabled?: boolean;
+  webhookIncomingSecret?: string;
+  webhookAllowLocalNetwork?: boolean;
+  webhookEndpointOverrides?: Record<string, WebhookEndpointOverride>;
   aiEnabled?: boolean;
   aiTier?: AiTierId;
   aiLlmModelId?: string;
@@ -192,6 +207,60 @@ export interface AppSettings {
   notificationProfile?: NotificationProfileId;
   notificationLeadMinutes?: number;
   notificationChannels?: NotificationChannelsMap;
+  listDensity?: ListDensity;
+  fontFamily?: FontFamilyPreset;
+  recentCustomColors?: string[];
+  colorBlindShapes?: boolean;
+  strongFocusRing?: boolean;
+  weekStartsOn?: WeekStartDay;
+  timeFormat?: TimeFormatPreference;
+  defaultStartupView?: DefaultStartupView;
+  defaultLayoutMode?: LayoutMode;
+  defaultPriority?: Priority;
+  completedTaskBehavior?: CompletedTaskBehavior;
+  completionSound?: CompletionSoundPreset;
+  confirmBeforeDelete?: boolean;
+  launchMinimizedToTray?: boolean;
+  trashAutoPurgeDays?: TrashAutoPurgeDays;
+  voiceShortcutEnabled?: boolean;
+  quietHoursEnabled?: boolean;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
+  notificationSoundEnabled?: boolean;
+  dailyDigestEnabled?: boolean;
+  dailyDigestTime?: string;
+  voiceDictationLanguage?: string;
+  aiExternalBaseUrl?: string;
+}
+
+export interface SystemInfoPayload {
+  appVersion: string;
+  schemaVersion: number;
+  dbSizeBytes: number;
+  modelsDiskBytes: number;
+  activeTodos: number;
+  completedTodos: number;
+  trashedTodos: number;
+  categoriesCount: number;
+  trashedCategories: number;
+  runtimePort: number;
+  uptimeSeconds: number;
+  crashReportCount: number;
+  dataDir: string;
+  logsDir: string;
+  modelsDir: string;
+  aiTier: string;
+  cloudConnected: boolean;
+  cloudProvider: string | null;
+}
+
+export interface CloudBackupFileEntry {
+  fileName: string;
+  kind: 'primary' | 'previous' | 'daily';
+  mtimeIso: string;
+  sizeBytes: number;
+  todoCount: number;
+  categoryCount: number;
 }
 
 export interface HardwareProfile {
@@ -290,6 +359,8 @@ export interface AiStatusPayload {
     voiceMicDeviceId: string;
     voiceNoiseSuppression: boolean;
     voiceSensitivity: VoiceSensitivityMode;
+    voiceDictationLanguage?: string;
+    aiExternalBaseUrl?: string;
   };
 }
 
@@ -353,10 +424,55 @@ export interface WebhookLogEntry {
   createdAt: string;
 }
 
+export interface WebhookOutboxEntry {
+  id: string;
+  eventId: string;
+  event: string;
+  targetUrl: string;
+  format: WebhookFormat;
+  status: 'pending' | 'delivered' | 'dead_letter';
+  attempts: number;
+  maxAttempts: number;
+  nextAttemptAt: string;
+  lastStatusCode: number | null;
+  lastError: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WebhookTestResult {
   ok: boolean;
   statusCode?: number;
   latencyMs?: number;
+  error?: string;
+  results?: Array<{ url: string; ok: boolean; statusCode?: number; error?: string }>;
+}
+
+export interface McpClientStatus {
+  id: string;
+  name: string;
+  configPath: string;
+  rootKey: string;
+  detected: boolean;
+  configExists: boolean;
+  configured: boolean;
+  usesLegacyCmd: boolean;
+  parseError: string | null;
+  requiresRestart: boolean;
+  command: string | null;
+}
+
+export interface McpProbeResult {
+  ok: boolean;
+  latencyMs: number;
+  protocolVersion?: string;
+  serverVersion?: string;
+  toolCount?: number;
+  resourceCount?: number;
+  promptCount?: number;
+  mode?: string;
+  activeTasks?: number | null;
+  command?: string;
   error?: string;
 }
 

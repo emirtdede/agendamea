@@ -17,6 +17,9 @@ const {
   decodeFloat32Blob,
   cosineSimilarity,
 } = require('../../shared/ragChunker.cjs');
+const { getAppLogger } = require('../../shared/logger.cjs');
+
+const embLog = () => getAppLogger('server');
 
 const DEFAULT_BATCH_SIZE = 5;
 const DEFAULT_YIELD_MS = 50;
@@ -65,7 +68,9 @@ class EmbeddingService {
 
   _enqueue(task) {
     const run = this._opChain.then(task, task);
-    this._opChain = run.catch(() => {});
+    this._opChain = run.catch(() => {
+      /* ignore */
+    });
     return run;
   }
 
@@ -245,6 +250,7 @@ class EmbeddingService {
       const deleteStaleChunks = db.prepare(
         'DELETE FROM todo_embedding_chunks WHERE todo_id = ? AND chunk_index >= ?',
       );
+      const checkTodoExists = db.prepare('SELECT 1 FROM todos WHERE id = ? AND deleted_at IS NULL');
 
       let batchCount = 0;
       for (const todo of list) {
@@ -254,6 +260,7 @@ class EmbeddingService {
 
         const existingRows = selectExisting.all(todo.id);
         const existingMap = new Map(existingRows.map((r) => [r.chunk_index, r]));
+        let todoDeletedMidSync = false;
 
         for (const ch of chunks) {
           const prev = existingMap.get(ch.chunkIndex);
@@ -262,7 +269,11 @@ class EmbeddingService {
             continue;
           }
           const vec = await this.embedText(ch.chunkText, 'passage');
-          if (vec.length > 0) {
+          if (vec && vec.length > 0) {
+            if (!checkTodoExists.get(todo.id)) {
+              todoDeletedMidSync = true;
+              break;
+            }
             upsertChunk.run(
               todo.id,
               ch.chunkIndex,
@@ -284,7 +295,9 @@ class EmbeddingService {
           }
         }
 
-        deleteStaleChunks.run(todo.id, chunks.length);
+        if (!todoDeletedMidSync && checkTodoExists.get(todo.id)) {
+          deleteStaleChunks.run(todo.id, chunks.length);
+        }
       }
 
       // Clean chunks for deleted/trashed todos
@@ -312,7 +325,7 @@ class EmbeddingService {
         totalChunks,
       };
     } catch (err) {
-      console.error('[EmbeddingService] syncTodosIndex failed:', err);
+      embLog().error({ err }, 'EmbeddingService syncTodosIndex failed');
       return {
         ok: false,
         mode: 'fts5-only',
@@ -352,7 +365,11 @@ class EmbeddingService {
       .get(this.modelId, queryVec.length);
     const cacheKey = `${this.modelId}:${queryVec.length}:${meta?.c || 0}:${meta?.last_upd || ''}`;
 
-    if (this._vectorCacheKey !== cacheKey || !Array.isArray(this._vectorCache) || this._vectorCacheDb !== db) {
+    if (
+      this._vectorCacheKey !== cacheKey ||
+      !Array.isArray(this._vectorCache) ||
+      this._vectorCacheDb !== db
+    ) {
       const rows = db
         .prepare(`
           SELECT c.todo_id, c.chunk_index, c.chunk_text, c.dims, c.vector_blob

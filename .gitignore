@@ -1,19 +1,30 @@
+# Dependencies
 node_modules/
+
+# Build & Bundle Outputs
 /build/
 /dist/
 /dist-server/
 /dev-dist/
+/server.js
+/cli/bin/
+/public/voice-assets/
+
+# Windows Packaging & .NET Installer Artifacts
 /release/
 /release-build/
 /release-verify/
+installer/**/bin/
+installer/**/obj/
+
+# Test, Coverage & Runtime Scratch Data
 /coverage/
 /data/
 /testsprite_tests/
 .playwright-cli/
+
+# Environment, Logs & OS Metadata
+.env*
+*.log
 .DS_Store
 Thumbs.db
-*.log
-.env*
-installer/**/bin/
-installer/**/obj/
-public/voice-assets/

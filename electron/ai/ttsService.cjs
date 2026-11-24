@@ -11,7 +11,9 @@ const MAX_SPOKEN_CHARS = 400;
 const WINDOWS_SPEECH_SETTINGS_URI = 'ms-settings:speech';
 
 function prepareSpokenSummary(rawText, maxChars = MAX_SPOKEN_CHARS) {
-  const fullText = String(rawText || '').replace(/\s+/g, ' ').trim();
+  const fullText = String(rawText || '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const limit = Math.max(40, Number(maxChars) || MAX_SPOKEN_CHARS);
   if (fullText.length <= limit) {
     return {
@@ -59,14 +61,20 @@ function selectPreferredVoice(voices, uiLang = 'tr', preferredVoiceUri = '') {
     };
   }
   if (preferredVoiceUri) {
-    const exact = list.find((v) => v?.voiceURI === preferredVoiceUri || v?.name === preferredVoiceUri);
+    const exact = list.find(
+      (v) => v?.voiceURI === preferredVoiceUri || v?.name === preferredVoiceUri,
+    );
     if (exact) {
       return { voice: exact, hasLanguageVoice: true, settingsUri: WINDOWS_SPEECH_SETTINGS_URI };
     }
   }
-  const baseLang = String(uiLang || 'tr').toLowerCase().split('-')[0];
+  const baseLang = String(uiLang || 'tr')
+    .toLowerCase()
+    .split('-')[0];
   const langMatches = list.filter((v) =>
-    String(v?.lang || '').toLowerCase().startsWith(baseLang),
+    String(v?.lang || '')
+      .toLowerCase()
+      .startsWith(baseLang),
   );
   if (langMatches.length === 0) {
     return {

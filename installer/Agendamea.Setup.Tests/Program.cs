@@ -38,11 +38,13 @@ var dashLeak = allLocales.Any(l =>
 Check(!dashLeak, "Zero em/en-dash leakage across all 73 installer locales");
 
 // 2. CLI Options Parsing (NSIS / Inno / Silent / Custom Dir / Uninstall flags)
-var cli1 = CliOptions.Parse(new[] { "/S", "/DIR=C:\\Temp\\AgendameaTest", "--lang=en", "--no-desktop", "--startup" });
+string[] cli1Args = ["/S", "/DIR=C:\\Temp\\AgendameaTest", "--lang=en", "--no-desktop", "--startup"];
+var cli1 = CliOptions.Parse(cli1Args);
 Check(cli1.Silent && !cli1.Uninstall && cli1.InstallDir.EndsWith("AgendameaTest") && cli1.LanguageCode == "en" && !cli1.CreateDesktopShortcut && cli1.LaunchAtStartup,
     "CLI parser handles /S, /DIR=..., --lang, --no-desktop, --startup");
 
-var cli2 = CliOptions.Parse(new[] { "/VERYSILENT", "--delete-data" }, @"C:\Temp\MyInstall\uninstall.exe");
+string[] cli2Args = ["/VERYSILENT", "--delete-data"];
+var cli2 = CliOptions.Parse(cli2Args, @"C:\Temp\MyInstall\uninstall.exe");
 Check(cli2.Silent && cli2.Uninstall && cli2.DeleteUserData && cli2.InstallDir.EndsWith("MyInstall"),
     "CLI parser auto-detects uninstall.exe mode and --delete-data");
 
@@ -113,6 +115,20 @@ try
     var readAumid = ShellIntegration.ReadShortcutAppUserModelId(testLnkPath);
     Check(readAumid == ShellIntegration.AppUserModelId,
         $"Shortcut embeds System.AppUserModel.ID ({ShellIntegration.AppUserModelId})");
+
+    // Verify ShellIntegration.InstallCliShims deploys native ag.exe + hardlinks + ag.target.json when bundled
+    var fakeShimSrcDir = Path.Combine(installDir, "resources", "app.asar.unpacked", "cli", "bin");
+    Directory.CreateDirectory(fakeShimSrcDir);
+    File.WriteAllBytes(Path.Combine(fakeShimSrcDir, "ag.exe"), Encoding.UTF8.GetBytes("MZ_FAKE_AG_EXE"));
+    var testBinDir = Path.Combine(tmpRoot, "test-cli-bin");
+    ShellIntegration.InstallCliShims(installDir, customBinDir: testBinDir, skipPathUpdate: true);
+    Check(
+        File.Exists(Path.Combine(testBinDir, "ag.exe")) &&
+        File.Exists(Path.Combine(testBinDir, "agenda.exe")) &&
+        File.Exists(Path.Combine(testBinDir, "agendamea.exe")) &&
+        File.Exists(Path.Combine(testBinDir, "ag.target.json")) &&
+        !File.Exists(Path.Combine(testBinDir, "ag.cmd")),
+        "ShellIntegration.InstallCliShims deploys native ag.exe/agenda.exe/agendamea.exe + ag.target.json");
 
     // Headless uninstall cleans up installed directory cleanly
     var uninstallOpts = new CliOptions

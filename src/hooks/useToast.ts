@@ -39,11 +39,14 @@ export function useToast() {
     setInfoToast(next);
     if (!next) return;
 
-    infoTimerRef.current = window.setTimeout(() => {
-      infoTimerRef.current = null;
-      const queued = infoQueueRef.current.shift() ?? null;
-      displayNextInfoToast(queued);
-    }, next.tone === 'error' ? 4500 : 3500);
+    infoTimerRef.current = window.setTimeout(
+      () => {
+        infoTimerRef.current = null;
+        const queued = infoQueueRef.current.shift() ?? null;
+        displayNextInfoToast(queued);
+      },
+      next.tone === 'error' ? 4500 : 3500,
+    );
   }, []);
 
   const clearInfoToast = useCallback(() => {
@@ -51,19 +54,16 @@ export function useToast() {
     displayNextInfoToast(queued);
   }, [displayNextInfoToast]);
 
-  const showUndoToast = useCallback(
-    (kind: 'todo' | 'category', id: string, label: string) => {
-      if (undoTimerRef.current !== null) {
-        window.clearTimeout(undoTimerRef.current);
-      }
-      setUndoToast({ kind, id, label });
-      undoTimerRef.current = window.setTimeout(() => {
-        undoTimerRef.current = null;
-        setUndoToast(null);
-      }, 12000);
-    },
-    [],
-  );
+  const showUndoToast = useCallback((kind: 'todo' | 'category', id: string, label: string) => {
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+    }
+    setUndoToast({ kind, id, label });
+    undoTimerRef.current = window.setTimeout(() => {
+      undoTimerRef.current = null;
+      setUndoToast(null);
+    }, 12000);
+  }, []);
 
   const pauseUndoToast = useCallback(() => {
     if (undoTimerRef.current !== null) {
@@ -87,8 +87,20 @@ export function useToast() {
       const next: InfoToastState = { message, tone };
       const current = activeInfoRef.current;
 
-      // Errors always surface immediately; identical active toast just refreshes its timer
+      // Errors always surface immediately; preserve displaced info toast at front of queue
       if (!current || tone === 'error' || current.message === message) {
+        if (
+          current &&
+          tone === 'error' &&
+          current.tone !== 'error' &&
+          current.message !== message &&
+          !infoQueueRef.current.some((item) => item.message === current.message)
+        ) {
+          infoQueueRef.current.unshift(current);
+          if (infoQueueRef.current.length > MAX_QUEUED_INFO_TOASTS) {
+            infoQueueRef.current.pop();
+          }
+        }
         displayNextInfoToast(next);
         return;
       }

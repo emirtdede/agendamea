@@ -1,11 +1,10 @@
-import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
+import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import './index.css';
 
-const isDesktopShell =
-  typeof window !== 'undefined' && Boolean(window.agendameaWindow);
+const isDesktopShell = typeof window !== 'undefined' && Boolean(window.agendameaWindow);
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   if (!isDesktopShell) {
@@ -19,12 +18,17 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
           void reg.unregister();
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Ignore service worker unregistration errors
+      });
   }
 }
 
-createRoot(document.getElementById('root')!).render(
-  <ErrorBoundary>
-    <App />
-  </ErrorBoundary>,
-);
+const rootEl = document.getElementById('root');
+if (rootEl) {
+  createRoot(rootEl).render(
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>,
+  );
+}

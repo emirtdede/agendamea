@@ -14,10 +14,11 @@ Before cutting a release tag (`vX.Y.Z`), confirm version parity across:
 Run all local checks before tagging:
 
 ```bash
+npm run clean       # Clean all previous build, installer, and generated asset outputs
 npm run lint        # Strict TypeScript type-check (tsc --noEmit)
-npm test            # 54 Node unit, AI, security, i18n zero-leakage & hygiene tests
-npm run test:setup  # 13 .NET 10 WPF modern setup & SFX engine tests
-npm run build       # Sync offline voice assets + Vite production bundle + esbuild server bundle
+npm test            # 84 Node unit, AI, MCP, CLI, webhook, security & 73-language i18n tests
+npm run test:setup  # 15 .NET 10 WPF modern setup, SFX, Zip-Slip & 73-locale tests
+npm run build       # Sync offline voice assets + build ag.exe shim + Vite bundle + esbuild server
 ```
 
 GitHub Actions executes the same gates automatically via `.github/workflows/ci.yml` on every push and pull request to `main`.
@@ -46,4 +47,4 @@ git push origin v1.1.0
 ## 5. Distribution Channel Update Behavior
 
 - **Microsoft Store (`process.windowsStore === true`)**: In-app self-updater downloads are disabled in compliance with Microsoft Store Policy 10.2.7; Windows Store manages automatic updates and package signatures natively.
-- **Direct GitHub NSIS / Portable Builds**: Settings -> Updates queries `https://api.github.com/repos/emirtdede/agendamea/releases/latest` (respecting the `autoUpdateCheck` preference), selects the matching channel asset (`.exe` Setup, `.exe` Portable, or `.msix`/`.appx`), downloads with progress streaming, and hands off safely to the installer.
+- **Direct GitHub Setup / Portable Builds**: Settings -> Updates queries `https://api.github.com/repos/emirtdede/agendamea/releases/latest` (respecting the `autoUpdateCheck` preference), selects the matching channel asset (`.exe` Setup, `.exe` Portable, or `.msix`/`.appx`), downloads with progress streaming, and hands off safely to the installer.

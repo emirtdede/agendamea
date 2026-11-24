@@ -11,14 +11,14 @@
 const path = require('node:path');
 
 function loadElectron() {
-  if (!process.versions || !process.versions.electron) {
+  if (!process.versions?.electron) {
     throw new Error('VoiceOverlayManager requires the Electron runtime.');
   }
   return require('electron');
 }
 
 const OVERLAY_WIDTH = 440;
-const OVERLAY_HEIGHT = 176;
+const OVERLAY_HEIGHT = 216;
 const TASKBAR_MARGIN_PX = 14;
 const IDLE_DESTROY_MS = 180_000;
 
@@ -88,7 +88,7 @@ class VoiceOverlayManager {
     if (this.window && !this.window.isDestroyed()) {
       return this.window;
     }
-    const { BrowserWindow } = loadElectron();
+    const { BrowserWindow, ipcMain } = loadElectron();
     const bounds = this._getTargetBounds();
     const win = new BrowserWindow({
       x: bounds.x,
@@ -125,18 +125,40 @@ class VoiceOverlayManager {
     });
 
     const overlayUrl = `http://127.0.0.1:${port}/overlay.html`;
-    await win.loadURL(overlayUrl);
-    if (!win.isDestroyed() && win.webContents.isLoading()) {
-      await new Promise((resolve) => {
-        const timer = setTimeout(resolve, 1500);
-        win.webContents.once('did-finish-load', () => {
-          clearTimeout(timer);
-          resolve();
-        });
-      });
+    let resolveReady = null;
+    const readyPromise = new Promise((resolve) => {
+      resolveReady = resolve;
+    });
+    const onOverlayReady = (event) => {
+      if (!win.isDestroyed() && event?.sender === win.webContents) {
+        resolveReady?.();
+      }
+    };
+    const readyTimeout = setTimeout(() => resolveReady?.(), 1500);
+    if (typeof readyTimeout.unref === 'function') readyTimeout.unref();
+    ipcMain.on('overlay:ready', onOverlayReady);
+    win.once('closed', () => resolveReady?.());
+
+    try {
+      await win.loadURL(overlayUrl);
+      if (!win.isDestroyed() && win.webContents.isLoading()) {
+        await new Promise(
+          /** @param {(v?: void) => void} resolve */ (resolve) => {
+            const timer = setTimeout(() => resolve(), 1500);
+            win.webContents.once('did-finish-load', () => {
+              clearTimeout(timer);
+              resolve();
+            });
+          },
+        );
+      }
+      if (!win.isDestroyed()) {
+        await readyPromise;
+      }
+    } finally {
+      clearTimeout(readyTimeout);
+      ipcMain.removeListener('overlay:ready', onOverlayReady);
     }
-    // Yield one macrotask so React root mount + useEffect IPC listeners register before initial command
-    await new Promise((r) => setTimeout(r, 35));
     if (win.isDestroyed()) {
       throw new Error('Overlay window closed during initialization.');
     }

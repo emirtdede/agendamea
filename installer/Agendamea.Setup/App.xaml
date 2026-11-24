@@ -198,8 +198,13 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="CheckBox">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <Grid VerticalAlignment="Center">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
               <Border x:Name="Box"
+                      Grid.Column="0"
                       Width="16"
                       Height="16"
                       CornerRadius="5"
@@ -216,8 +221,16 @@
                       StrokeLineJoin="Round"
                       Visibility="Collapsed" />
               </Border>
-              <ContentPresenter Margin="9,0,0,0" VerticalAlignment="Center" />
-            </StackPanel>
+              <ContentPresenter Grid.Column="1"
+                                Margin="9,0,0,0"
+                                VerticalAlignment="Center">
+                <ContentPresenter.Resources>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="TextWrapping" Value="Wrap" />
+                  </Style>
+                </ContentPresenter.Resources>
+              </ContentPresenter>
+            </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsChecked" Value="True">
                 <Setter TargetName="Box" Property="Background" Value="#FAFAFA" />

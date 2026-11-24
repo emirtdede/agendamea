@@ -24,6 +24,7 @@ export function BrandMark({
       }}
     >
       <svg
+        aria-hidden="true"
         viewBox="0 0 512 512"
         className="h-[76%] w-[76%]"
         fill="none"

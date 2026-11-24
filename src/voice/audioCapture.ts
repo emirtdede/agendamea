@@ -7,253 +7,38 @@
  */
 
 import type { VoiceChimePreset, VoiceSensitivityMode } from '../types';
-import { createRnnoiseNode, SileroVadEngine, type RnnoiseHandle } from './neuralAudio';
-
-export const TARGET_SAMPLE_RATE = 16000;
-export const DEFAULT_AUTO_STOP_MS = 1500;
-export const DEFAULT_NO_SPEECH_TIMEOUT_MS = 7000;
-export const MAX_RECORDING_MS = 30000;
-export const RING_BUFFER_MS = 300;
-export const SPEECH_RMS_THRESHOLD = 0.018;
-export const SPEECH_AMPLITUDE_THRESHOLD = 0.02;
-export const MIN_SPEECH_RATIO = 0.1;
+import { createRnnoiseNode, type RnnoiseHandle, SileroVadEngine } from './neuralAudio';
+import {
+  DEFAULT_AUTO_STOP_MS,
+  DEFAULT_NO_SPEECH_TIMEOUT_MS,
+  MAX_RECORDING_MS,
+  MIN_SPEECH_RATIO,
+  RING_BUFFER_MS,
+  SPEECH_AMPLITUDE_THRESHOLD,
+  SPEECH_RMS_THRESHOLD,
+  TARGET_SAMPLE_RATE,
+  type VadStateResult,
+  VoiceVadController,
+} from './voiceVadController';
 
 export type { VoiceChimePreset, VoiceSensitivityMode };
+export {
+  DEFAULT_AUTO_STOP_MS,
+  DEFAULT_NO_SPEECH_TIMEOUT_MS,
+  MAX_RECORDING_MS,
+  MIN_SPEECH_RATIO,
+  RING_BUFFER_MS,
+  SPEECH_AMPLITUDE_THRESHOLD,
+  SPEECH_RMS_THRESHOLD,
+  TARGET_SAMPLE_RATE,
+  type VadStateResult,
+  VoiceVadController,
+};
 
 export interface AudioInputDeviceInfo {
   deviceId: string;
   label: string;
   isDefault: boolean;
-}
-
-export interface VadStateResult {
-  action: 'continue' | 'auto_stop_silence' | 'auto_stop_max_duration' | 'auto_stop_no_speech';
-  hasSpoken: boolean;
-  silenceMs: number;
-  totalMs: number;
-  noiseFloor?: number;
-  threshold?: number;
-}
-
-const SENSITIVITY_CONFIG: Record<
-  VoiceSensitivityMode,
-  { multiplier: number; minThreshold: number; maxThreshold: number; neuralProbThreshold: number }
-> = {
-  auto: { multiplier: 2.5, minThreshold: 0.015, maxThreshold: 0.085, neuralProbThreshold: 0.5 },
-  low: { multiplier: 3.2, minThreshold: 0.024, maxThreshold: 0.11, neuralProbThreshold: 0.68 },
-  medium: { multiplier: 2.3, minThreshold: 0.014, maxThreshold: 0.075, neuralProbThreshold: 0.48 },
-  high: { multiplier: 1.75, minThreshold: 0.009, maxThreshold: 0.055, neuralProbThreshold: 0.32 },
-};
-
-/**
- * Pure, deterministic Voice Activity Detection controller (testable without hardware mic).
- */
-export class VoiceVadController {
-  private readonly sampleRate: number;
-  private readonly autoStopMs: number;
-  private readonly maxDurationMs: number;
-  private readonly noSpeechTimeoutMs: number;
-  private readonly adaptiveNoiseFloor: boolean;
-  private readonly sensitivity: VoiceSensitivityMode;
-  private rmsThreshold: number;
-  private readonly maxRingSamples: number;
-
-  private chunks: Float32Array[] = [];
-  private ringChunks: Float32Array[] = [];
-  private ringSampleCount = 0;
-  private totalSamples = 0;
-  private hasSpoken = false;
-  private trailingSilenceMs = 0;
-  private trailingSilenceChunks = 0;
-  private consecutiveSpeechFrames = 0;
-  private noiseFloor = 0;
-  private noiseSamplesCount = 0;
-
-  constructor(options?: {
-    sampleRate?: number;
-    autoStopMs?: number;
-    maxDurationMs?: number;
-    noSpeechTimeoutMs?: number;
-    rmsThreshold?: number;
-    adaptiveNoiseFloor?: boolean;
-    sensitivity?: VoiceSensitivityMode;
-  }) {
-    this.sampleRate = options?.sampleRate ?? TARGET_SAMPLE_RATE;
-    this.autoStopMs = Math.max(600, options?.autoStopMs ?? DEFAULT_AUTO_STOP_MS);
-    this.maxDurationMs = Math.max(3000, options?.maxDurationMs ?? MAX_RECORDING_MS);
-    this.adaptiveNoiseFloor = Boolean(options?.adaptiveNoiseFloor);
-    this.sensitivity = options?.sensitivity ?? 'auto';
-    // Only enable no-speech timeout when explicitly requested or in adaptive live mode
-    this.noSpeechTimeoutMs =
-      options?.noSpeechTimeoutMs !== undefined
-        ? Math.max(0, options.noSpeechTimeoutMs)
-        : this.adaptiveNoiseFloor
-          ? DEFAULT_NO_SPEECH_TIMEOUT_MS
-          : 0;
-    const cfg = SENSITIVITY_CONFIG[this.sensitivity] ?? SENSITIVITY_CONFIG.auto;
-    this.rmsThreshold = options?.rmsThreshold ?? (this.adaptiveNoiseFloor ? cfg.minThreshold : SPEECH_RMS_THRESHOLD);
-    this.maxRingSamples = Math.round((RING_BUFFER_MS / 1000) * this.sampleRate);
-  }
-
-  pushFrame(pcm: Float32Array, neuralSpeechProb?: number | null): VadStateResult {
-    const frameDurationMs = (pcm.length / this.sampleRate) * 1000;
-    let sumSq = 0;
-    for (let i = 0; i < pcm.length; i += 1) {
-      sumSq += pcm[i] * pcm[i];
-    }
-    const rms = pcm.length > 0 ? Math.sqrt(sumSq / pcm.length) : 0;
-
-    // Continuous EMA ambient noise-floor calibration so steady fan/AC/room noise
-    // never prevents dictation from detecting trailing silence and auto-stopping.
-    const cfg = SENSITIVITY_CONFIG[this.sensitivity] ?? SENSITIVITY_CONFIG.auto;
-    if (this.adaptiveNoiseFloor) {
-      if (this.noiseSamplesCount < 3 && !this.hasSpoken) {
-        this.noiseSamplesCount += 1;
-        this.noiseFloor =
-          this.noiseSamplesCount === 1
-            ? rms
-            : this.noiseFloor + (rms - this.noiseFloor) / this.noiseSamplesCount;
-        this.rmsThreshold = Math.max(
-          cfg.minThreshold,
-          Math.min(cfg.maxThreshold, this.noiseFloor * cfg.multiplier),
-        );
-      } else if (rms < this.rmsThreshold * 1.15) {
-        // Track gentle ambient drift even while recording so steady background noise settles
-        this.noiseFloor = this.noiseFloor * 0.92 + rms * 0.08;
-        this.rmsThreshold = Math.max(
-          cfg.minThreshold,
-          Math.min(cfg.maxThreshold, this.noiseFloor * cfg.multiplier),
-        );
-      }
-    }
-
-    // When Silero VAD v5 neural speech probability is available, trust the neural human-speech
-    // classifier (rejecting fan, keyboard, and TV noise) with a minimal non-zero RMS floor.
-    const isSpeech =
-      typeof neuralSpeechProb === 'number' && Number.isFinite(neuralSpeechProb)
-        ? neuralSpeechProb >= cfg.neuralProbThreshold && rms >= 0.003
-        : rms >= this.rmsThreshold;
-
-    if (!this.hasSpoken) {
-      if (isSpeech) {
-        this.consecutiveSpeechFrames += 1;
-        // Require 2 consecutive voiced frames in adaptive mode to reject single keyboard clicks
-        const requiredOnsetFrames = this.adaptiveNoiseFloor ? 2 : 1;
-        if (this.consecutiveSpeechFrames >= requiredOnsetFrames) {
-          this.hasSpoken = true;
-          this.trailingSilenceMs = 0;
-          this.trailingSilenceChunks = 0;
-          // Flush 300 ms pre-speech ring buffer so opening syllables are never clipped (R-09)
-          for (const pre of this.ringChunks) {
-            this.chunks.push(pre);
-          }
-          this.ringChunks = [];
-          this.ringSampleCount = 0;
-          this.chunks.push(pcm);
-          this.totalSamples += pcm.length;
-        } else {
-          this.ringChunks.push(pcm);
-          this.ringSampleCount += pcm.length;
-          while (this.ringSampleCount > this.maxRingSamples && this.ringChunks.length > 1) {
-            const dropped = this.ringChunks.shift();
-            if (dropped) this.ringSampleCount -= dropped.length;
-          }
-          this.totalSamples += pcm.length;
-        }
-      } else {
-        this.consecutiveSpeechFrames = 0;
-        this.ringChunks.push(pcm);
-        this.ringSampleCount += pcm.length;
-        while (this.ringSampleCount > this.maxRingSamples && this.ringChunks.length > 1) {
-          const dropped = this.ringChunks.shift();
-          if (dropped) this.ringSampleCount -= dropped.length;
-        }
-        this.totalSamples += pcm.length;
-      }
-    } else {
-      this.chunks.push(pcm);
-      this.totalSamples += pcm.length;
-      if (isSpeech) {
-        this.trailingSilenceMs = 0;
-        this.trailingSilenceChunks = 0;
-      } else {
-        this.trailingSilenceMs += frameDurationMs;
-        this.trailingSilenceChunks += 1;
-      }
-    }
-
-    const totalMs = (this.totalSamples / this.sampleRate) * 1000;
-
-    if (totalMs >= this.maxDurationMs) {
-      return {
-        action: 'auto_stop_max_duration',
-        hasSpoken: this.hasSpoken,
-        silenceMs: this.trailingSilenceMs,
-        totalMs,
-        noiseFloor: this.noiseFloor,
-        threshold: this.rmsThreshold,
-      };
-    }
-
-    if (this.hasSpoken && this.trailingSilenceMs >= this.autoStopMs) {
-      return {
-        action: 'auto_stop_silence',
-        hasSpoken: true,
-        silenceMs: this.trailingSilenceMs,
-        totalMs,
-        noiseFloor: this.noiseFloor,
-        threshold: this.rmsThreshold,
-      };
-    }
-
-    if (this.noSpeechTimeoutMs > 0 && !this.hasSpoken && totalMs >= this.noSpeechTimeoutMs) {
-      return {
-        action: 'auto_stop_no_speech',
-        hasSpoken: false,
-        silenceMs: totalMs,
-        totalMs,
-        noiseFloor: this.noiseFloor,
-        threshold: this.rmsThreshold,
-      };
-    }
-
-    return {
-      action: 'continue',
-      hasSpoken: this.hasSpoken,
-      silenceMs: this.trailingSilenceMs,
-      totalMs,
-      noiseFloor: this.noiseFloor,
-      threshold: this.rmsThreshold,
-    };
-  }
-
-  getMergedPcm(): Float32Array {
-    let source = this.chunks.length > 0 ? this.chunks : this.ringChunks;
-    // Trim excessive trailing silence (keep 300 ms tail so last syllable stays intact without feeding 1.5s dead air to Whisper)
-    if (this.hasSpoken && this.trailingSilenceChunks > 3 && source.length > this.trailingSilenceChunks) {
-      const keepUntil = Math.max(1, source.length - (this.trailingSilenceChunks - 3));
-      source = source.slice(0, keepUntil);
-    }
-    let totalLen = 0;
-    for (const c of source) totalLen += c.length;
-    const merged = new Float32Array(totalLen);
-    let offset = 0;
-    for (const c of source) {
-      merged.set(c, offset);
-      offset += c.length;
-    }
-    return merged;
-  }
-
-  static hasEnoughSpeech(pcm: Float32Array): { ok: boolean; speechRatio: number } {
-    if (!pcm || pcm.length === 0) return { ok: false, speechRatio: 0 };
-    let voiced = 0;
-    for (let i = 0; i < pcm.length; i += 1) {
-      if (Math.abs(pcm[i]) >= SPEECH_AMPLITUDE_THRESHOLD) voiced += 1;
-    }
-    const speechRatio = voiced / pcm.length;
-    return { ok: speechRatio >= MIN_SPEECH_RATIO, speechRatio };
-  }
 }
 
 /**
@@ -263,6 +48,7 @@ export class VoiceVadController {
  */
 export async function enumerateAudioInputDevices(
   requestPermission = false,
+  fallbackLabel = 'Microphone',
 ): Promise<AudioInputDeviceInfo[]> {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
     return [];
@@ -273,8 +59,13 @@ export async function enumerateAudioInputDevices(
     const missingLabels = inputs.length > 0 && inputs.every((d) => !d.label);
     if (requestPermission && missingLabels && navigator.mediaDevices.getUserMedia) {
       try {
-        const probeStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        probeStream.getTracks().forEach((t) => t.stop());
+        const probeStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+        for (const track of probeStream.getTracks()) {
+          track.stop();
+        }
         devices = await navigator.mediaDevices.enumerateDevices();
         inputs = devices.filter((d) => d.kind === 'audioinput');
       } catch {
@@ -290,7 +81,7 @@ export async function enumerateAudioInputDevices(
       const isDefault = dev.deviceId === 'default' || dev.deviceId === 'communications';
       out.push({
         deviceId: dev.deviceId,
-        label: dev.label?.trim() || `Microphone ${unnamedIndex++}`,
+        label: dev.label?.trim() || `${fallbackLabel} ${unnamedIndex++}`,
         isDefault,
       });
     }
@@ -306,6 +97,10 @@ export async function enumerateAudioInputDevices(
 export class MicLevelMonitor {
   private stream: MediaStream | null = null;
   private audioCtx: AudioContext | null = null;
+  private sourceNode: MediaStreamAudioSourceNode | null = null;
+  private highpassNode: BiquadFilterNode | null = null;
+  private lowpassNode: BiquadFilterNode | null = null;
+  private analyserNode: AnalyserNode | null = null;
   private rnnoiseHandle: RnnoiseHandle | null = null;
   private rafId: number | null = null;
   private active = false;
@@ -336,7 +131,9 @@ export class MicLevelMonitor {
         video: false,
       });
       if (seq !== this.startSeq) {
-        stream.getTracks().forEach((t) => t.stop());
+        for (const track of stream.getTracks()) {
+          track.stop();
+        }
         return false;
       }
       this.stream = stream;
@@ -352,6 +149,8 @@ export class MicLevelMonitor {
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
+      this.sourceNode = source;
+      this.analyserNode = analyser;
 
       if (useNoiseFilter) {
         const rnnoise = await createRnnoiseNode(audioCtx);
@@ -368,6 +167,8 @@ export class MicLevelMonitor {
         const lowpass = audioCtx.createBiquadFilter();
         lowpass.type = 'lowpass';
         lowpass.frequency.value = 7800;
+        this.highpassNode = highpass;
+        this.lowpassNode = lowpass;
 
         if (rnnoise) {
           source.connect(rnnoise.node);
@@ -388,7 +189,8 @@ export class MicLevelMonitor {
         analyser.getFloatTimeDomainData(data);
         let sumSq = 0;
         for (let i = 0; i < data.length; i += 1) {
-          sumSq += data[i] * data[i];
+          const sample = data[i] ?? 0;
+          sumSq += sample * sample;
         }
         const rms = Math.sqrt(sumSq / data.length);
         onLevel(Math.min(1, rms * 9));
@@ -410,13 +212,28 @@ export class MicLevelMonitor {
     }
     this.rnnoiseHandle?.destroy();
     this.rnnoiseHandle = null;
+    for (const node of [this.analyserNode, this.lowpassNode, this.highpassNode, this.sourceNode]) {
+      try {
+        node?.disconnect();
+      } catch {
+        // Ignore
+      }
+    }
+    this.analyserNode = null;
+    this.lowpassNode = null;
+    this.highpassNode = null;
+    this.sourceNode = null;
     try {
-      this.stream?.getTracks().forEach((t) => t.stop());
+      for (const track of this.stream?.getTracks() ?? []) {
+        track.stop();
+      }
     } catch {
       // Ignore
     }
     try {
-      void this.audioCtx?.close();
+      void this.audioCtx?.close().catch(() => {
+        /* ignore */
+      });
     } catch {
       // Ignore
     }
@@ -434,17 +251,18 @@ export class MicLevelMonitor {
  * Plays a crisp, selectable dictation ready chime on the first captured audio frame (R-09)
  * or during settings preview. Supports 5 presets: soft, crystal, studio, minimal, none.
  */
-export function playReadyChime(
-  ctx?: AudioContext | null,
-  preset: VoiceChimePreset = 'soft',
-): void {
+export function playReadyChime(ctx?: AudioContext | null, preset: VoiceChimePreset = 'soft'): void {
   if (preset === 'none') return;
+  let localAudioCtx: AudioContext | null = null;
   try {
     const AudioCtx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     const audioCtx = ctx ?? new AudioCtx();
+    if (!ctx) {
+      localAudioCtx = audioCtx;
+    }
     const now = audioCtx.currentTime;
     let closeAfterMs = 240;
 
@@ -514,12 +332,22 @@ export function playReadyChime(
       osc.stop(now + 0.125);
     }
 
-    if (!ctx) {
+    if (localAudioCtx) {
+      const ctxToClose = localAudioCtx;
+      localAudioCtx = null;
       window.setTimeout(() => {
-        void audioCtx.close().catch(() => {});
+        void ctxToClose.close().catch(() => {
+          // Ignore audio context close error
+        });
       }, closeAfterMs);
     }
   } catch {
+    if (localAudioCtx) {
+      void localAudioCtx.close().catch(() => {
+        // Ignore audio context close error
+      });
+      localAudioCtx = null;
+    }
     // Ignore chime audio restriction errors
   }
 }
@@ -549,6 +377,7 @@ export class VoiceAudioCapture {
   private vad: VoiceVadController | null = null;
   private sileroVad: SileroVadEngine | null = null;
   private frameQueue: Promise<void> = Promise.resolve();
+  private pendingFrames = 0;
   private active = false;
   private starting = false;
   private startSeq = 0;
@@ -580,7 +409,9 @@ export class VoiceAudioCapture {
         video: false,
       });
       if (seq !== this.startSeq) {
-        stream.getTracks().forEach((t) => t.stop());
+        for (const track of stream.getTracks()) {
+          track.stop();
+        }
         return false;
       }
       this.stream = stream;
@@ -644,20 +475,32 @@ export class VoiceAudioCapture {
           const pcmChunk = msg.pcm;
           callbacks.onLevel?.(Number(msg.rms) || 0);
 
+          // Cap queued VAD frames on constrained CPUs to prevent unbounded RAM growth
+          if (this.pendingFrames >= 16) {
+            return;
+          }
+          this.pendingFrames += 1;
+
           const evaluateAndPush = async () => {
-            if (!this.active || seq !== this.startSeq || !this.vad) return;
-            const neuralProb = this.sileroVad ? await this.sileroVad.evaluateChunk(pcmChunk) : null;
-            if (!this.active || seq !== this.startSeq || !this.vad) return;
-            const vadRes = this.vad.pushFrame(pcmChunk, neuralProb);
-            if (vadRes.action !== 'continue') {
-              const finalPcm = this.stop();
-              const reason =
-                vadRes.action === 'auto_stop_silence'
-                  ? 'silence'
-                  : vadRes.action === 'auto_stop_no_speech'
-                    ? 'no_speech'
-                    : 'max_duration';
-              callbacks.onAutoStop?.(finalPcm, reason);
+            try {
+              if (!this.active || seq !== this.startSeq || !this.vad) return;
+              const neuralProb = this.sileroVad
+                ? await this.sileroVad.evaluateChunk(pcmChunk)
+                : null;
+              if (!this.active || seq !== this.startSeq || !this.vad) return;
+              const vadRes = this.vad.pushFrame(pcmChunk, neuralProb);
+              if (vadRes.action !== 'continue') {
+                const finalPcm = this.stop();
+                const reason =
+                  vadRes.action === 'auto_stop_silence'
+                    ? 'silence'
+                    : vadRes.action === 'auto_stop_no_speech'
+                      ? 'no_speech'
+                      : 'max_duration';
+                callbacks.onAutoStop?.(finalPcm, reason);
+              }
+            } finally {
+              this.pendingFrames = Math.max(0, this.pendingFrames - 1);
             }
           };
 
@@ -705,7 +548,14 @@ export class VoiceAudioCapture {
           : name === 'NotFoundError'
             ? 'MIC_NOT_FOUND'
             : 'MIC_ERROR';
-      callbacks.onError?.(code, err instanceof Error ? err.message : 'Microphone unavailable.');
+      console.error('[VoiceAudioCapture] microphone start error:', err);
+      const safeMessage =
+        code === 'MIC_DENIED'
+          ? 'Microphone permission denied.'
+          : code === 'MIC_NOT_FOUND'
+            ? 'No microphone device found.'
+            : 'Microphone unavailable.';
+      callbacks.onError?.(code, safeMessage);
       return false;
     } finally {
       this.starting = false;
@@ -721,6 +571,7 @@ export class VoiceAudioCapture {
 
   private cleanup(): void {
     this.active = false;
+    this.pendingFrames = 0;
     this.rnnoiseHandle?.destroy();
     this.rnnoiseHandle = null;
     this.sileroVad?.dispose();
@@ -739,12 +590,16 @@ export class VoiceAudioCapture {
       }
     }
     try {
-      this.stream?.getTracks().forEach((t) => t.stop());
+      for (const track of this.stream?.getTracks() ?? []) {
+        track.stop();
+      }
     } catch {
       // Ignore
     }
     try {
-      void this.audioCtx?.close();
+      void this.audioCtx?.close().catch(() => {
+        /* ignore */
+      });
     } catch {
       // Ignore
     }

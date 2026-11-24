@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '../i18n/I18nContext';
 import { normalizeHexColor } from '../utils/themes';
 
 interface ColorSpectrumPickerProps {
@@ -73,6 +75,7 @@ export function ColorSpectrumPicker({
   paletteHeightClass,
   previewNode,
 }: ColorSpectrumPickerProps) {
+  const { t } = useI18n();
   const normalized = normalizeHexColor(value) ?? '#2563eb';
   const [hsv, setHsv] = useState<HsvColor>(() => hexToHsv(normalized));
   const [hexDraft, setHexDraft] = useState(normalized);
@@ -168,6 +171,7 @@ export function ColorSpectrumPicker({
       {/* 2D Saturation / Brightness Palette */}
       <div
         ref={svAreaRef}
+        dir="ltr"
         role="slider"
         tabIndex={0}
         aria-label={hexInputLabel}
@@ -230,9 +234,10 @@ export function ColorSpectrumPicker({
       {/* 360-degree Rainbow Hue Slider */}
       <div
         ref={hueBarRef}
+        dir="ltr"
         role="slider"
         tabIndex={0}
-        aria-label="Hue"
+        aria-label={t.colorHueLabel}
         aria-valuemin={0}
         aria-valuemax={360}
         aria-valuenow={hsv.h}

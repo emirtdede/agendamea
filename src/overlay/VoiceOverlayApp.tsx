@@ -1,20 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  AlertTriangle,
-  Check,
-  Keyboard,
-  Loader2,
-  Mic,
-  Send,
-  ShieldCheck,
-  Square,
-  Volume2,
-  VolumeX,
-  X,
-} from 'lucide-react';
+import { Mic } from 'lucide-react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
-import type { LanguageCode } from '../i18n/languages';
-import { getDictionary } from '../i18n/localesWorld';
+import { readInitialLanguage } from '../i18n/I18nContext';
+import { getLanguageMeta, type LanguageCode } from '../i18n/languages';
+import {
+  getCachedDictionary,
+  loadLocaleBundle,
+  useResolvedLocaleBundle,
+} from '../i18n/localeLoader';
 import { localizeErrorMessage } from '../i18n/translations';
 import type {
   NotificationChannelsMap,
@@ -30,18 +24,8 @@ import {
 } from '../utils/notifications';
 import { VoiceAudioCapture, VoiceVadController } from '../voice/audioCapture';
 import { speakLocalTextAsync, stopSpeaking } from '../voice/ttsPlayer';
-
-type OverlayPhase =
-  | 'idle'
-  | 'preparing'
-  | 'listening'
-  | 'processing'
-  | 'result'
-  | 'confirm'
-  | 'disambiguate'
-  | 'error';
-
-const WAVEFORM_WEIGHTS = [0.35, 0.65, 0.9, 1.0, 0.85, 0.6, 0.35] as const;
+import { OverlayResultPanels } from './components/OverlayResultPanels';
+import { type OverlayPhase, OverlayTopBar } from './components/OverlayTopBar';
 
 function float32ToBase64(pcm: Float32Array): string {
   const bytes = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
@@ -53,14 +37,9 @@ function float32ToBase64(pcm: Float32Array): string {
   return btoa(binary);
 }
 
-function formatElapsed(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${String(secs).padStart(2, '0')}`;
-}
-
 export function VoiceOverlayApp() {
-  const [language, setLanguage] = useState<LanguageCode>('tr');
+  const [language, setLanguage] = useState<LanguageCode>(() => readInitialLanguage().code);
+  const [dictationLanguage, setDictationLanguage] = useState<string>('auto');
   const [autoStopMs, setAutoStopMs] = useState<number>(1500);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
   const [ttsVoice, setTtsVoice] = useState<string>('');
@@ -89,20 +68,26 @@ export function VoiceOverlayApp() {
   const hoveredRef = useRef<boolean>(false);
   const keyboardModeRef = useRef<boolean>(false);
   keyboardModeRef.current = isKeyboardMode;
+  const settingsRef = useRef({ language, dictationLanguage, ttsEnabled, ttsVoice, ttsStyle });
+  settingsRef.current = { language, dictationLanguage, ttsEnabled, ttsVoice, ttsStyle };
   const notificationChannelsRef = useRef<NotificationChannelsMap>({
     ...DEFAULT_NOTIFICATION_CHANNELS,
   });
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const t = useMemo(() => getDictionary(language), [language]);
+  const { dict: t } = useResolvedLocaleBundle(language);
 
-  // Strip trailing ellipsis on active listening pill so waveform bars never look like duplicated dots
+  useEffect(() => {
+    const meta = getLanguageMeta(language);
+    document.documentElement.lang = meta.code;
+    document.documentElement.dir = meta.dir;
+  }, [language]);
+
   const activeListeningTitle = useMemo(
     () => t.overlayListeningLabel.replace(/\.+$/, '').trim(),
     [t.overlayListeningLabel],
   );
 
-  // Live elapsed timer while listening
   useEffect(() => {
     if (phase !== 'listening') {
       setElapsedSec(0);
@@ -125,9 +110,7 @@ export function VoiceOverlayApp() {
   const openKeyboardFallback = useCallback(() => {
     setIsKeyboardMode(true);
     void window.agendameaWindow?.setOverlayFocusable?.(true);
-    if (focusTimerRef.current !== null) {
-      window.clearTimeout(focusTimerRef.current);
-    }
+    if (focusTimerRef.current !== null) window.clearTimeout(focusTimerRef.current);
     focusTimerRef.current = window.setTimeout(() => {
       focusTimerRef.current = null;
       inputRef.current?.focus();
@@ -160,7 +143,6 @@ export function VoiceOverlayApp() {
     [clearAutoHide],
   );
 
-  // Unmount cleanup: release microphone tracks, AudioContext, TTS and pending timers
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -180,31 +162,35 @@ export function VoiceOverlayApp() {
     try {
       const settings = await api.getSettings();
       if (!isMountedRef.current) return null;
-      if (settings.language) setLanguage(settings.language);
-      if (typeof settings.voiceAutoStopMs === 'number') {
-        setAutoStopMs(settings.voiceAutoStopMs);
+      if (settings.language) {
+        setLanguage(settings.language);
+        settingsRef.current.language = settings.language;
+        void loadLocaleBundle(settings.language);
       }
+      if (typeof settings.voiceDictationLanguage === 'string' && settings.voiceDictationLanguage) {
+        setDictationLanguage(settings.voiceDictationLanguage);
+        settingsRef.current.dictationLanguage = settings.voiceDictationLanguage;
+      }
+      if (typeof settings.voiceAutoStopMs === 'number') setAutoStopMs(settings.voiceAutoStopMs);
       if (typeof settings.voiceTtsEnabled === 'boolean') {
         setTtsEnabled(settings.voiceTtsEnabled);
+        settingsRef.current.ttsEnabled = settings.voiceTtsEnabled;
       }
       if (settings.voiceTtsVoice !== undefined) {
-        setTtsVoice(settings.voiceTtsVoice || '');
+        const nextVoice = settings.voiceTtsVoice || '';
+        setTtsVoice(nextVoice);
+        settingsRef.current.ttsVoice = nextVoice;
       }
       if (settings.voiceTtsStyle) {
         setTtsStyle(settings.voiceTtsStyle);
+        settingsRef.current.ttsStyle = settings.voiceTtsStyle;
       }
-      if (settings.voiceChimePreset) {
-        setChimePreset(settings.voiceChimePreset);
-      }
-      if (settings.voiceMicDeviceId !== undefined) {
-        setMicDeviceId(settings.voiceMicDeviceId || '');
-      }
+      if (settings.voiceChimePreset) setChimePreset(settings.voiceChimePreset);
+      if (settings.voiceMicDeviceId !== undefined) setMicDeviceId(settings.voiceMicDeviceId || '');
       if (typeof settings.voiceNoiseSuppression === 'boolean') {
         setNoiseSuppression(settings.voiceNoiseSuppression);
       }
-      if (settings.voiceSensitivity) {
-        setSensitivity(settings.voiceSensitivity);
-      }
+      if (settings.voiceSensitivity) setSensitivity(settings.voiceSensitivity);
       if (settings.notificationChannels) {
         notificationChannelsRef.current = sanitizeNotificationChannels(
           settings.notificationChannels,
@@ -230,36 +216,43 @@ export function VoiceOverlayApp() {
         clearAutoHide();
         return;
       }
-      if (res.status === 'disambiguation' && Array.isArray(res.candidates) && res.candidates.length > 0) {
+      if (
+        res.status === 'disambiguation' &&
+        Array.isArray(res.candidates) &&
+        res.candidates.length > 0
+      ) {
         setPhase('disambiguate');
         clearAutoHide();
         return;
       }
 
       setPhase('result');
+      const liveSettings = settingsRef.current;
       if (res.status === 'executed' && res.mutated) {
         const delivery = shouldDeliverNotification(
           notificationChannelsRef.current,
           'voiceAssistant',
         );
         if (delivery.desktop && window.agendameaWindow?.showDesktopNotification) {
-          const activeDict = getDictionary(language);
+          const activeDict = getCachedDictionary(liveSettings.language);
           void window.agendameaWindow
             .showDesktopNotification({
               title: activeDict.notificationsEventVoice,
               body: res.displayText || res.spokenText || res.todo?.title || '',
               todoId: res.todo?.id,
             })
-            .catch(() => {});
+            .catch(() => {
+              /* ignore */
+            });
         }
       }
-      if (ttsEnabled && res.spokenText) {
+      if (liveSettings.ttsEnabled && res.spokenText) {
         setIsSpeaking(true);
         clearAutoHide();
         void speakLocalTextAsync(res.spokenText, {
-          language,
-          preferredVoice: ttsVoice,
-          style: ttsStyle,
+          language: liveSettings.language,
+          preferredVoice: liveSettings.ttsVoice,
+          style: liveSettings.ttsStyle,
           onEnd: () => {
             if (!isMountedRef.current) return;
             setIsSpeaking(false);
@@ -269,9 +262,7 @@ export function VoiceOverlayApp() {
           if (!isMountedRef.current) return;
           if (!tts.spoken) {
             setIsSpeaking(false);
-            if (tts.reason === 'NO_LANGUAGE_VOICE') {
-              setMissingVoicePack(true);
-            }
+            if (tts.reason === 'NO_LANGUAGE_VOICE') setMissingVoicePack(true);
             scheduleAutoHide(3500);
           }
         });
@@ -279,7 +270,7 @@ export function VoiceOverlayApp() {
         scheduleAutoHide(3000);
       }
     },
-    [clearAutoHide, language, scheduleAutoHide, ttsEnabled, ttsStyle, ttsVoice],
+    [clearAutoHide, scheduleAutoHide],
   );
 
   const runUtterance = useCallback(
@@ -288,8 +279,8 @@ export function VoiceOverlayApp() {
       extra?: { confirmToken?: string; selectedTodoId?: string; languageOverride?: LanguageCode },
     ) => {
       const seq = ++requestSeqRef.current;
-      const activeLang = extra?.languageOverride ?? language;
-      const activeDict = activeLang === language ? t : getDictionary(activeLang);
+      const activeLang = extra?.languageOverride ?? settingsRef.current.language;
+      const activeDict = getCachedDictionary(activeLang);
       clearAutoHide();
       stopSpeaking();
       setIsSpeaking(false);
@@ -314,14 +305,17 @@ export function VoiceOverlayApp() {
         openKeyboardFallback();
       }
     },
-    [clearAutoHide, handleAskResult, language, openKeyboardFallback, t],
+    [clearAutoHide, handleAskResult, openKeyboardFallback],
   );
 
   const processRecordedPcm = useCallback(
     async (pcm: Float32Array, languageOverride?: LanguageCode) => {
       const seq = ++requestSeqRef.current;
-      const activeLang = languageOverride ?? language;
-      const activeDict = activeLang === language ? t : getDictionary(activeLang);
+      const activeLang = languageOverride ?? settingsRef.current.language;
+      const configuredDictation = settingsRef.current.dictationLanguage;
+      const sttLang =
+        configuredDictation && configuredDictation !== 'auto' ? configuredDictation : activeLang;
+      const activeDict = getCachedDictionary(activeLang);
       void window.agendameaWindow?.notifyOverlayListening?.(false);
 
       const check = VoiceVadController.hasEnoughSpeech(pcm);
@@ -333,11 +327,20 @@ export function VoiceOverlayApp() {
       }
       setPhase('processing');
       try {
-        const stt = await api.transcribeAudio(float32ToBase64(pcm), activeLang);
+        const stt = await api.transcribeAudio(float32ToBase64(pcm), sttLang);
         if (!isMountedRef.current || seq !== requestSeqRef.current) return;
         if (!stt.ok || !stt.text) {
+          const sttErrorMap: Record<string, string> = {
+            INVALID_AUDIO: activeDict.sttErrorInvalidAudio,
+            TOO_SHORT: activeDict.sttErrorTooShort,
+            SILENCE: activeDict.overlayNoSpeechHint,
+            HALLUCINATION_FILTERED: activeDict.overlayNoSpeechHint,
+            STT_MODEL_MISSING: activeDict.sttErrorModelMissing,
+            STT_UNAVAILABLE: activeDict.sttErrorUnavailable,
+            TRANSCRIBE_FAILED: activeDict.sttErrorFailed,
+          };
           setPhase('error');
-          setErrorMessage(stt.message || activeDict.overlayNoSpeechHint);
+          setErrorMessage((stt.code && sttErrorMap[stt.code]) || activeDict.overlayNoSpeechHint);
           openKeyboardFallback();
           return;
         }
@@ -352,7 +355,7 @@ export function VoiceOverlayApp() {
         openKeyboardFallback();
       }
     },
-    [language, openKeyboardFallback, runUtterance, t],
+    [openKeyboardFallback, runUtterance],
   );
 
   const startListening = useCallback(
@@ -376,16 +379,16 @@ export function VoiceOverlayApp() {
 
       const effectiveAutoStop = overrides?.autoStopMs ?? autoStopMs;
       const effectiveLanguage = overrides?.language ?? language;
-      const effectiveDeviceId = overrides?.deviceId !== undefined ? overrides.deviceId : micDeviceId;
+      const effectiveDeviceId =
+        overrides?.deviceId !== undefined ? overrides.deviceId : micDeviceId;
       const effectiveNoise =
         overrides?.noiseSuppression !== undefined ? overrides.noiseSuppression : noiseSuppression;
       const effectiveSensitivity = overrides?.sensitivity ?? sensitivity;
       const effectiveChime = overrides?.chimePreset ?? chimePreset;
-      const activeDict = effectiveLanguage === language ? t : getDictionary(effectiveLanguage);
+      const activeDict =
+        effectiveLanguage === language ? t : getCachedDictionary(effectiveLanguage);
 
-      if (!captureRef.current) {
-        captureRef.current = new VoiceAudioCapture();
-      }
+      if (!captureRef.current) captureRef.current = new VoiceAudioCapture();
       let handledError = false;
       const ok = await captureRef.current.start({
         autoStopMs: effectiveAutoStop,
@@ -413,12 +416,16 @@ export function VoiceOverlayApp() {
           }
           void processRecordedPcm(pcm, effectiveLanguage);
         },
-        onError: (_code, message) => {
+        onError: (code, message) => {
           handledError = true;
           if (!isMountedRef.current) return;
           setRmsLevel(0);
           setPhase('error');
-          setErrorMessage(message);
+          setErrorMessage(
+            code === 'MIC_DENIED' || code === 'MIC_NOT_FOUND' || code === 'MIC_ERROR'
+              ? activeDict.operationFailedToast
+              : message || activeDict.operationFailedToast,
+          );
           void window.agendameaWindow?.notifyOverlayListening?.(false);
           openKeyboardFallback();
         },
@@ -448,11 +455,8 @@ export function VoiceOverlayApp() {
     if (!captureRef.current) return;
     const pcm = captureRef.current.stop();
     setRmsLevel(0);
-    if (pcm.length > 0) {
-      void processRecordedPcm(pcm);
-    } else {
-      setPhase('idle');
-    }
+    if (pcm.length > 0) void processRecordedPcm(pcm);
+    else setPhase('idle');
   }, [processRecordedPcm]);
 
   const dismissOverlay = useCallback(() => {
@@ -477,15 +481,26 @@ export function VoiceOverlayApp() {
     }
   }, [clearAutoHide]);
 
-  // Listen to Electron global shortcut toggle IPC ('start' | 'stop')
+  const overlayHandlersRef = useRef({
+    refreshSettings,
+    startListening,
+    stopListeningAndProcess,
+  });
+  overlayHandlersRef.current = {
+    refreshSettings,
+    startListening,
+    stopListeningAndProcess,
+  };
+
   useEffect(() => {
     const unsub = window.agendameaWindow?.onOverlayCommand?.((payload) => {
       if (payload?.action === 'start') {
         void (async () => {
-          const fresh = await refreshSettings();
+          const fresh = await overlayHandlersRef.current.refreshSettings();
           if (!isMountedRef.current) return;
-          await startListening({
-            autoStopMs: typeof fresh?.voiceAutoStopMs === 'number' ? fresh.voiceAutoStopMs : undefined,
+          await overlayHandlersRef.current.startListening({
+            autoStopMs:
+              typeof fresh?.voiceAutoStopMs === 'number' ? fresh.voiceAutoStopMs : undefined,
             language: fresh?.language,
             deviceId: fresh?.voiceMicDeviceId,
             noiseSuppression: fresh?.voiceNoiseSuppression,
@@ -494,23 +509,21 @@ export function VoiceOverlayApp() {
           });
         })();
       } else if (payload?.action === 'stop') {
-        stopListeningAndProcess();
+        overlayHandlersRef.current.stopListeningAndProcess();
       }
     });
+    window.agendameaWindow?.notifyOverlayReady?.();
     return () => {
       if (typeof unsub === 'function') unsub();
     };
-  }, [refreshSettings, startListening, stopListeningAndProcess]);
+  }, []);
 
-  // Escape stops speech immediately (< 100 ms) and hides overlay
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur();
-        }
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         stopSpeaking();
         setIsSpeaking(false);
         dismissOverlay();
@@ -538,7 +551,10 @@ export function VoiceOverlayApp() {
 
   if (isDismissed) {
     return (
-      <div className="flex h-full w-full items-end justify-center p-2" data-testid="voice-overlay-dismissed">
+      <div
+        className="flex h-full w-full items-end justify-center p-2"
+        data-testid="voice-overlay-dismissed"
+      >
         <button
           type="button"
           data-testid="overlay-reopen-btn"
@@ -553,6 +569,7 @@ export function VoiceOverlayApp() {
   }
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: Auto-hide hover pause wrapper; controls exposed via inner buttons
     <div
       data-testid="voice-overlay-pill"
       data-phase={phase}
@@ -562,259 +579,50 @@ export function VoiceOverlayApp() {
       }}
       onMouseLeave={() => {
         hoveredRef.current = false;
-        if (phase === 'result' && !isSpeaking) {
-          scheduleAutoHide(2500);
-        }
+        if (phase === 'result' && !isSpeaking) scheduleAutoHide(2500);
       }}
       className="flex h-full w-full items-end justify-center p-2"
     >
-      <div className="w-full max-w-[428px] rounded-2xl border border-zinc-700/80 bg-zinc-950/95 px-4 py-3 text-zinc-100 shadow-2xl backdrop-blur-xl transition-all duration-200">
-        {/* Top Control Row */}
-        <div className="flex items-center justify-between gap-2.5">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              data-testid="overlay-mic-btn"
-              onClick={() =>
-                phase === 'listening' || phase === 'preparing'
-                  ? stopListeningAndProcess()
-                  : void startListening()
-              }
-              aria-label={t.overlayListeningLabel}
-              className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all ${
-                phase === 'listening'
-                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/35 ring-4 ring-rose-500/20'
-                  : phase === 'preparing' || phase === 'processing'
-                    ? 'bg-amber-500/20 text-amber-300'
-                    : 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700'
-              }`}
-            >
-              {phase === 'processing' || phase === 'preparing' ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : phase === 'listening' ? (
-                <Square className="h-3.5 w-3.5 fill-current" />
-              ) : (
-                <Mic className="h-4 w-4" />
-              )}
-            </button>
+      <div className="w-full max-w-[428px] max-h-[calc(100vh-16px)] flex flex-col overflow-hidden rounded-2xl border border-zinc-700/80 bg-zinc-950/95 px-4 py-3 text-zinc-100 shadow-2xl backdrop-blur-xl transition-all duration-200">
+        <OverlayTopBar
+          t={t}
+          phase={phase}
+          activeListeningTitle={activeListeningTitle}
+          isSpeaking={isSpeaking}
+          rmsLevel={rmsLevel}
+          elapsedSec={elapsedSec}
+          noiseSuppression={noiseSuppression}
+          transcript={transcript}
+          isKeyboardMode={isKeyboardMode}
+          onMicClick={() =>
+            phase === 'listening' || phase === 'preparing'
+              ? stopListeningAndProcess()
+              : void startListening()
+          }
+          onStopTts={() => {
+            stopSpeaking();
+            setIsSpeaking(false);
+          }}
+          onEnableKeyboardMode={enableKeyboardMode}
+          onDismiss={dismissOverlay}
+        />
 
-            <div className="min-w-0">
-              <div className="flex items-center gap-2.5">
-                <span
-                  data-testid="overlay-status-label"
-                  className="text-xs font-semibold tracking-tight text-zinc-100 whitespace-nowrap"
-                >
-                  {phase === 'preparing'
-                    ? t.overlayPreparingLabel
-                    : phase === 'listening'
-                      ? activeListeningTitle
-                      : phase === 'processing'
-                        ? t.overlayProcessingLabel
-                        : isSpeaking
-                          ? t.overlaySpeakingLabel
-                          : t.settingsTabAi}
-                </span>
-
-                {phase === 'listening' && (
-                  <>
-                    <div
-                      data-testid="overlay-waveform"
-                      className="flex h-4 items-center gap-[3px]"
-                      aria-hidden="true"
-                    >
-                      {WAVEFORM_WEIGHTS.map((weight, idx) => {
-                        const pct = Math.max(
-                          28,
-                          Math.min(100, Math.round((0.24 + rmsLevel * weight * 0.95) * 100)),
-                        );
-                        return (
-                          <span
-                            key={idx}
-                            className="w-[3px] rounded-full bg-rose-400 transition-all duration-75"
-                            style={{ height: `${pct}%` }}
-                          />
-                        );
-                      })}
-                    </div>
-                    <span
-                      data-testid="overlay-elapsed"
-                      className="font-mono-tabular text-[11px] font-medium text-zinc-400"
-                    >
-                      {formatElapsed(elapsedSec)}
-                    </span>
-                    {noiseSuppression && (
-                      <span
-                        title={t.aiVoiceNoiseSuppressionLabel}
-                        className="inline-flex items-center text-emerald-400/90"
-                      >
-                        <ShieldCheck className="h-3 w-3" />
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {transcript && (
-                <p className="truncate text-[11px] text-zinc-400" data-testid="overlay-transcript">
-                  {transcript}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1">
-            {isSpeaking && (
-              <button
-                type="button"
-                data-testid="overlay-stop-tts-btn"
-                onClick={() => {
-                  stopSpeaking();
-                  setIsSpeaking(false);
-                }}
-                title={t.overlayStopButton}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-300 hover:bg-zinc-800 hover:text-white"
-              >
-                <VolumeX className="h-3.5 w-3.5" />
-              </button>
-            )}
-            <button
-              type="button"
-              data-testid="overlay-keyboard-toggle-btn"
-              onClick={enableKeyboardMode}
-              title={t.overlayKeyboardPlaceholder}
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
-                isKeyboardMode
-                  ? 'bg-zinc-800 text-white'
-                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-              }`}
-            >
-              <Keyboard className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              data-testid="overlay-close-btn"
-              onClick={dismissOverlay}
-              aria-label={t.windowClose}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Result Card */}
-        {phase === 'result' && response && (
-          <div
-            data-testid="overlay-result-card"
-            className="mt-2.5 rounded-xl border border-zinc-800 bg-zinc-900/90 px-3 py-2 text-xs leading-relaxed text-zinc-200 max-h-[84px] overflow-y-auto"
-          >
-            <div className="flex items-start gap-2">
-              {isSpeaking ? (
-                <Volume2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
-              ) : (
-                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
-              )}
-              <div className="min-w-0 flex-1 space-y-1">
-                <p data-testid="overlay-result-text">{response.displayText}</p>
-                {missingVoicePack && (
-                  <button
-                    type="button"
-                    data-testid="overlay-speech-settings-link"
-                    onClick={() => void window.agendameaWindow?.openWindowsSpeechSettings?.()}
-                    className="text-[11px] font-medium text-sky-400 underline hover:text-sky-300"
-                  >
-                    {t.overlaySpeechPackHint}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Destructive Action Confirmation Lock (R-14) */}
-        {phase === 'confirm' && response?.confirmationToken && (
-          <div
-            data-testid="overlay-confirm-panel"
-            className="mt-2.5 flex items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2"
-          >
-            <div className="flex min-w-0 items-center gap-2 text-xs text-amber-200">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
-              <span className="truncate">{response.displayText}</span>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                data-testid="overlay-confirm-yes-btn"
-                onClick={() =>
-                  void runUtterance('', { confirmToken: response.confirmationToken })
-                }
-                className="rounded-lg bg-rose-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-rose-500"
-              >
-                {t.overlayConfirmButton}
-              </button>
-              <button
-                type="button"
-                data-testid="overlay-confirm-no-btn"
-                onClick={dismissOverlay}
-                className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-300 hover:bg-zinc-800"
-              >
-                {t.overlayCancelButton}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Multi-Match Disambiguation Chips (R-15) */}
-        {phase === 'disambiguate' && response?.candidates && (
-          <div data-testid="overlay-disambiguate-panel" className="mt-2.5 space-y-1.5">
-            <p className="text-[11px] text-zinc-400">{response.displayText}</p>
-            <div className="flex flex-wrap gap-1.5">
-              {response.candidates.map((cand) => (
-                <button
-                  key={cand.todoId}
-                  type="button"
-                  data-testid={`overlay-candidate-${cand.index}`}
-                  onClick={() => void runUtterance('', { selectedTodoId: cand.todoId })}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs font-medium text-zinc-100 hover:border-zinc-500 hover:bg-zinc-800"
-                >
-                  <span className="font-mono text-[10px] text-emerald-400">{cand.index}</span>
-                  <span className="truncate">{cand.title}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Error Message */}
-        {phase === 'error' && errorMessage && (
-          <p data-testid="overlay-error-text" className="mt-2 text-[11px] text-amber-300">
-            {errorMessage}
-          </p>
-        )}
-
-        {/* Keyboard Text Command Fallback Input */}
-        {(isKeyboardMode || phase === 'idle' || phase === 'error') && (
-          <form onSubmit={handleKeyboardSubmit} className="mt-2.5 flex items-center gap-1.5">
-            <input
-              ref={inputRef}
-              type="text"
-              data-testid="overlay-text-input"
-              value={keyboardInput}
-              onChange={(e) => setKeyboardInput(e.target.value)}
-              placeholder={t.overlayKeyboardPlaceholder}
-              className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none"
-            />
-            <button
-              type="submit"
-              data-testid="overlay-text-submit-btn"
-              disabled={!keyboardInput.trim()}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs font-semibold text-zinc-950 hover:bg-white disabled:opacity-40"
-            >
-              <Send className="h-3 w-3" />
-              <span>{t.overlaySendButton}</span>
-            </button>
-          </form>
-        )}
+        <OverlayResultPanels
+          t={t}
+          phase={phase}
+          response={response}
+          errorMessage={errorMessage}
+          isSpeaking={isSpeaking}
+          missingVoicePack={missingVoicePack}
+          isKeyboardMode={isKeyboardMode}
+          keyboardInput={keyboardInput}
+          inputRef={inputRef}
+          onChangeKeyboardInput={setKeyboardInput}
+          onKeyboardSubmit={handleKeyboardSubmit}
+          onDismiss={dismissOverlay}
+          onConfirmAction={(confirmToken) => void runUtterance('', { confirmToken })}
+          onSelectCandidate={(selectedTodoId) => void runUtterance('', { selectedTodoId })}
+        />
       </div>
     </div>
   );

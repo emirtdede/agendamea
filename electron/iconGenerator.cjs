@@ -230,16 +230,19 @@ function buildMultiSizeIcoBuffer(bgHex, fgHex) {
     icoBuffer: Buffer.concat([header, ...frames.map((f) => f.png)]),
     trayPngBuffer: frames.find((f) => f.size === 32).png,
     windowPngBuffer: frames.find((f) => f.size === 64).png,
+    notifPngBuffer: frames.find((f) => f.size === 256).png,
   };
 }
 
 function ensureDynamicIconFiles(userDataDir, bgHex, fgHex) {
-  const normBg = typeof bgHex === 'string' && /^#[0-9a-fA-F]{6}$/.test(bgHex.trim())
-    ? bgHex.trim().toLowerCase()
-    : '#18181b';
-  const normFg = typeof fgHex === 'string' && /^#[0-9a-fA-F]{6}$/.test(fgHex.trim())
-    ? fgHex.trim().toLowerCase()
-    : '#ffffff';
+  const normBg =
+    typeof bgHex === 'string' && /^#[0-9a-fA-F]{6}$/.test(bgHex.trim())
+      ? bgHex.trim().toLowerCase()
+      : '#18181b';
+  const normFg =
+    typeof fgHex === 'string' && /^#[0-9a-fA-F]{6}$/.test(fgHex.trim())
+      ? fgHex.trim().toLowerCase()
+      : '#ffffff';
 
   const hash = crypto
     .createHash('sha1')
@@ -252,15 +255,19 @@ function ensureDynamicIconFiles(userDataDir, bgHex, fgHex) {
 
   const icoPath = path.join(iconsDir, `agendamea-${hash}.ico`);
   const trayPngPath = path.join(iconsDir, `agendamea-${hash}-32.png`);
+  const notifPngPath = path.join(iconsDir, `agendamea-${hash}-256.png`);
 
-  if (!fs.existsSync(icoPath) || !fs.existsSync(trayPngPath)) {
-    const { icoBuffer, trayPngBuffer } = buildMultiSizeIcoBuffer(normBg, normFg);
+  if (!fs.existsSync(icoPath) || !fs.existsSync(trayPngPath) || !fs.existsSync(notifPngPath)) {
+    const { icoBuffer, trayPngBuffer, notifPngBuffer } = buildMultiSizeIcoBuffer(normBg, normFg);
     const tmpIco = `${icoPath}.tmp`;
     const tmpPng = `${trayPngPath}.tmp`;
+    const tmpNotifPng = `${notifPngPath}.tmp`;
     fs.writeFileSync(tmpIco, icoBuffer);
     fs.renameSync(tmpIco, icoPath);
     fs.writeFileSync(tmpPng, trayPngBuffer);
     fs.renameSync(tmpPng, trayPngPath);
+    fs.writeFileSync(tmpNotifPng, notifPngBuffer);
+    fs.renameSync(tmpNotifPng, notifPngPath);
   }
 
   // Persist active icon metadata so startup restores the exact icon synchronously before window creation
@@ -268,7 +275,7 @@ function ensureDynamicIconFiles(userDataDir, bgHex, fgHex) {
   try {
     fs.writeFileSync(
       metaPath,
-      JSON.stringify({ bg: normBg, fg: normFg, icoPath, trayPngPath }, null, 2),
+      JSON.stringify({ bg: normBg, fg: normFg, icoPath, trayPngPath, notifPngPath }, null, 2),
       'utf8',
     );
   } catch {
@@ -277,7 +284,11 @@ function ensureDynamicIconFiles(userDataDir, bgHex, fgHex) {
 
   // Clean up old stale dynamic icons (keep active hash files only)
   try {
-    const keep = new Set([path.basename(icoPath), path.basename(trayPngPath)]);
+    const keep = new Set([
+      path.basename(icoPath),
+      path.basename(trayPngPath),
+      path.basename(notifPngPath),
+    ]);
     for (const file of fs.readdirSync(iconsDir)) {
       if (file.startsWith('agendamea-') && !keep.has(file)) {
         try {
@@ -291,7 +302,7 @@ function ensureDynamicIconFiles(userDataDir, bgHex, fgHex) {
     // Ignore cleanup errors
   }
 
-  return { bg: normBg, fg: normFg, icoPath, trayPngPath };
+  return { bg: normBg, fg: normFg, icoPath, trayPngPath, notifPngPath };
 }
 
 function readSavedActiveIcon(userDataDir) {
@@ -376,14 +387,21 @@ function getWindowsShortcutDirs(app) {
   if (process.env.USERPROFILE) {
     pushUnique(desktopDirs, path.join(process.env.USERPROFILE, 'Desktop'));
   }
-  for (const od of [process.env.OneDrive, process.env.OneDriveConsumer, process.env.OneDriveCommercial]) {
+  for (const od of [
+    process.env.OneDrive,
+    process.env.OneDriveConsumer,
+    process.env.OneDriveCommercial,
+  ]) {
     if (od) pushUnique(desktopDirs, path.join(od, 'Desktop'));
   }
   if (process.env.PUBLIC) {
     pushUnique(desktopDirs, path.join(process.env.PUBLIC, 'Desktop'));
   }
   if (process.env.APPDATA) {
-    pushUnique(startMenuDirs, path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs'));
+    pushUnique(
+      startMenuDirs,
+      path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+    );
     const pinned = path.join(
       process.env.APPDATA,
       'Microsoft',
@@ -395,25 +413,42 @@ function getWindowsShortcutDirs(app) {
     pushUnique(taskbarDirs, path.join(pinned, 'ImplicitAppShortcuts'));
   }
   if (process.env.ProgramData) {
-    pushUnique(startMenuDirs, path.join(process.env.ProgramData, 'Microsoft', 'Windows', 'Start Menu', 'Programs'));
+    pushUnique(
+      startMenuDirs,
+      path.join(process.env.ProgramData, 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
+    );
   }
 
   return { desktopDirs, startMenuDirs, taskbarDirs };
 }
 
+let shellRefreshInFlight = false;
+let lastShellRefreshAt = 0;
+const SHELL_REFRESH_COOLDOWN_MS = 2000;
+
 function notifyWindowsShellIconRefresh() {
   if (process.platform !== 'win32') return;
+  const now = Date.now();
+  if (shellRefreshInFlight || now - lastShellRefreshAt < SHELL_REFRESH_COOLDOWN_MS) {
+    return;
+  }
+  shellRefreshInFlight = true;
+  lastShellRefreshAt = now;
   try {
     const psScript =
-      "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class ShNotify { [DllImport(\"shell32.dll\")] public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2); }'; [ShNotify]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)";
+      'Add-Type -TypeDefinition \'using System; using System.Runtime.InteropServices; public class ShNotify { [DllImport("shell32.dll")] public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2); }\'; [ShNotify]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)';
     const child = execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript],
       { windowsHide: true, timeout: 4000 },
-      () => {},
+      () => {
+        shellRefreshInFlight = false;
+        lastShellRefreshAt = Date.now();
+      },
     );
     child.unref();
   } catch {
+    shellRefreshInFlight = false;
     // Best-effort Explorer shell refresh
   }
 }

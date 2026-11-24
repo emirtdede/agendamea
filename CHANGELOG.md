@@ -5,6 +5,7 @@ All notable changes to **Agendamea** are documented in this file.
 ## [1.1.0] - 2026-11-22
 
 ### Added
+
 - **On-Device Local AI, Hybrid RAG & Neural Voice Dictation:**
   - Hardware auto-profiling (64-bit VRAM detection, RAM, CPU cores, free disk) with 3 local model tiers (Light / Medium / Strong - 100% Apache 2.0 / MIT: Whisper.cpp, Qwen3, Multilingual-E5) plus zero-download **External Local Engine (Ollama / LM Studio)** model picker and automatic runtime server detection.
   - Upgraded 100% offline neural audio pipeline: **Mozilla RNNoise WASM** deep-learning noise suppression (`48 kHz` AudioWorklet), **Silero VAD v5 ONNX** neural speech detector with continuous EMA adaptive noise-floor fallback (`Auto`, `Low`, `Medium`, `High`), selectable microphone device + live level meter, 5 selectable ready chimes (`Soft`, `Crystal`, `Studio`, `Minimal`, `None`), and automatic no-speech timeout.
@@ -30,6 +31,7 @@ All notable changes to **Agendamea** are documented in this file.
 ## [1.0.0] - 2026-11-22
 
 ### Added
+
 - **4-Way Workspace Views:** Flat List (with automatic Date Range search filtering), Kanban Board (grouped by Priority or Status with drag-and-drop), Calendar Planner (scheduled tasks sorted chronologically by `HH:mm` + collapsible Undated Tasks drawer with drag-to-schedule), and Eisenhower Matrix (4 quadrants I-IV with automatic classification and drag-and-drop).
 - **100% Headless Terminal CLI (`ag` / `agenda` / `agendamea`):** Short quote-free natural commands (`@today`, `@tomorrow`, `@start..due`, `14:30`, `!`, `*`, `^`, `#tag`, `/Category`, `--note`, `--sub`), 1-2-3 numbered lists, batch multi-selection (`ag ok 1 2 3`, `ag rm 1 2`), stdin piping (`ag import -`, `ag +`), terminal views (`ag cal`, `ag kanban`, `ag matris`), zero-GUI PATH installer (`ag install` / `ag uninstall`), OS preference bridge, and Windows interactive console stdout wrapper (`run-cli.ps1`).
 - **Built-in 20-Tool MCP Server (`ag mcp`):** JSON-RPC 2.0 stdio server supporting Claude Desktop, Cursor, Antigravity, Windsurf, and VS Code with zero external Node.js dependency, full Live API and Cold-Start Offline SQLite parity across tasks, subtasks, categories, trash, views, Eisenhower matrix, settings, backups, cloud sync, updates, webhooks, and headless server control.

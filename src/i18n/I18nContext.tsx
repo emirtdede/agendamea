@@ -1,20 +1,21 @@
-import React, { createContext, useContext, useEffect, useMemo } from 'react';
+import type React from 'react';
+import { createContext, useContext, useEffect, useMemo } from 'react';
 import {
   getLanguageMeta,
   isValidLanguageCode,
-  resolveSystemLanguage,
-  SUPPORTED_LANGUAGES,
   type LanguageCode,
   type LanguageMeta,
+  resolveSystemLanguage,
+  SUPPORTED_LANGUAGES,
 } from './languages';
-import { getDictionary, getLegalDocumentsForLanguage } from './localesWorld';
+import { useResolvedLocaleBundle } from './localeLoader';
 import {
+  type LegalDocId,
+  type LegalDocumentContent,
   resolveCategoryColorName,
   resolveThemeColorName,
   TR_DICTIONARY,
   TR_LEGAL_DOCUMENTS,
-  type LegalDocId,
-  type LegalDocumentContent,
   type UiDictionary,
 } from './translations';
 
@@ -36,8 +37,11 @@ const I18nContext = createContext<I18nContextValue>({
   meta: DEFAULT_META,
   t: TR_DICTIONARY,
   languages: SUPPORTED_LANGUAGES,
-  onChangeLanguage: () => {},
-  getThemeDisplayName: (themeId, fallback) => resolveThemeColorName(themeId, fallback, TR_DICTIONARY),
+  onChangeLanguage: () => {
+    /* noop */
+  },
+  getThemeDisplayName: (themeId, fallback) =>
+    resolveThemeColorName(themeId, fallback, TR_DICTIONARY),
   getCategoryColorDisplayName: (hex, fallback) =>
     resolveCategoryColorName(hex, fallback, TR_DICTIONARY),
   legalDocs: TR_LEGAL_DOCUMENTS,
@@ -82,8 +86,7 @@ export function I18nProvider({
   children: React.ReactNode;
 }) {
   const meta = useMemo(() => getLanguageMeta(lang), [lang]);
-  const dict = useMemo(() => getDictionary(lang), [lang]);
-  const legalDocs = useMemo(() => getLegalDocumentsForLanguage(lang, dict), [lang, dict]);
+  const { dict, legalDocs } = useResolvedLocaleBundle(lang);
 
   useEffect(() => {
     const nextTitle = `Agendamea - ${dict.appTitleSuffix}`;

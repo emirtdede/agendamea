@@ -1,346 +1,295 @@
-import React, { useMemo, useState } from 'react';
 import {
-  Check,
+  AlertCircle,
   CheckCircle2,
   Download,
   ExternalLink,
-  Globe,
   RefreshCw,
-  RotateCw,
-  Search,
+  RotateCcw,
+  Sparkles,
+  Store,
+  X,
 } from 'lucide-react';
+import React, { useMemo } from 'react';
 import { useI18n } from '../i18n/I18nContext';
-import type { LanguageCode } from '../i18n/languages';
 import type { UpdateCheckResult } from '../types';
-import { APP_VERSION } from '../utils/appVersion';
+import { getCachedDateTimeFormatter } from '../utils/intlCache';
 
 export interface AppUpdateState {
-  status:
-    | 'idle'
-    | 'checking'
-    | 'up-to-date'
-    | 'available'
-    | 'downloading'
-    | 'downloaded'
-    | 'error';
+  status: 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'downloaded' | 'error';
   result: UpdateCheckResult | null;
   downloadPercent: number | null;
+  errorMessage: string | null;
 }
 
-export const LanguageSelectorSection = React.memo(function LanguageSelectorSection() {
-  const { lang, meta, t, languages, onChangeLanguage } = useI18n();
-  const [langQuery, setLangQuery] = useState('');
-  const [isLangListOpen, setIsLangListOpen] = useState(false);
-
-  const filteredLanguages = useMemo(() => {
-    const q = langQuery.trim().toLowerCase();
-    if (!q) return languages;
-    return languages.filter(
-      (l) =>
-        l.nativeName.toLowerCase().includes(q) ||
-        l.englishName.toLowerCase().includes(q) ||
-        l.code.toLowerCase().includes(q),
-    );
-  }, [languages, langQuery]);
-
-  return (
-    <section aria-label={t.languageSectionTitle} className="space-y-2.5">
-      <div className="flex items-center justify-between">
-        <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-          {t.languageSectionTitle}
-        </h3>
-        <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-          {meta.nativeName} ({meta.code})
-        </span>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <button
-          type="button"
-          data-testid="settings-language-toggle-btn"
-          onClick={() => setIsLangListOpen((prev) => !prev)}
-          aria-expanded={isLangListOpen}
-          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-hover)]/60 transition-colors"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Globe className="h-4 w-4 text-[var(--accent)] shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                {meta.nativeName}
-              </p>
-              <p className="text-xs text-[var(--text-muted)] truncate">
-                {meta.englishName} · 73
-              </p>
-            </div>
-          </div>
-          <span className="rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)]">
-            {meta.code.toUpperCase()}
-          </span>
-        </button>
-
-        {isLangListOpen && (
-          <div className="animate-tab-enter border-t border-[var(--border)] p-3.5 space-y-2.5 bg-[var(--surface-subtle)]/50">
-            <div className="relative flex items-center">
-              <Search className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
-              <input
-                type="text"
-                value={langQuery}
-                onChange={(e) => setLangQuery(e.target.value)}
-                placeholder={t.languageSearchPlaceholder}
-                aria-label={t.languageSearchPlaceholder}
-                className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] ps-8 pe-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
-              />
-            </div>
-
-            <div
-              role="listbox"
-              aria-label={t.languageSectionTitle}
-              className="grid max-h-56 grid-cols-1 sm:grid-cols-2 gap-1.5 overflow-y-auto pr-1"
-            >
-              {filteredLanguages.map((item) => {
-                const selected = item.code === lang;
-                return (
-                  <button
-                    key={item.code}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => {
-                      onChangeLanguage(item.code as LanguageCode);
-                      setIsLangListOpen(false);
-                      setLangQuery('');
-                    }}
-                    className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors ${
-                      selected
-                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
-                        : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <span className="min-w-0 truncate">
-                      <span className="text-[var(--text-primary)]">{item.nativeName}</span>{' '}
-                      <span className="text-[11px] text-[var(--text-muted)]">
-                        ({item.englishName})
-                      </span>
-                    </span>
-                    {selected && (
-                      <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-});
-
-interface UpdatesSectionProps {
+interface UpdateSettingsSectionProps {
+  currentVersion: string;
   autoUpdateCheck: boolean;
-  onToggleAutoUpdateCheck: (enabled: boolean) => void;
   updateState: AppUpdateState;
-  onCheckForUpdates: () => Promise<void>;
+  onToggleAutoUpdateCheck: (enabled: boolean) => void;
+  onCheckNow: () => Promise<void>;
   onDownloadAndInstall: () => Promise<void>;
+  onCancelDownload?: () => Promise<void>;
   onQuitAndInstall?: () => Promise<void>;
 }
 
-const CHECKED_AT_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
-
-function getCheckedAtFormatter(intlLocale: string): Intl.DateTimeFormat {
-  let fmt = CHECKED_AT_FORMATTER_CACHE.get(intlLocale);
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat(intlLocale, {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    CHECKED_AT_FORMATTER_CACHE.set(intlLocale, fmt);
-  }
-  return fmt;
-}
-
-export const UpdatesSection = React.memo(function UpdatesSection({
+export const UpdateSettingsSection = React.memo(function UpdateSettingsSection({
+  currentVersion,
   autoUpdateCheck,
-  onToggleAutoUpdateCheck,
   updateState,
-  onCheckForUpdates,
+  onToggleAutoUpdateCheck,
+  onCheckNow,
   onDownloadAndInstall,
+  onCancelDownload,
   onQuitAndInstall,
-}: UpdatesSectionProps) {
-  const { meta, t } = useI18n();
+}: UpdateSettingsSectionProps) {
+  const { t, meta } = useI18n();
+  const isWindowsStore =
+    typeof window !== 'undefined' && Boolean(window.agendameaWindow?.isWindowsStore);
 
-  const formattedCheckedAt = useMemo(() => {
+  const formattedLastChecked = useMemo(() => {
     const iso = updateState.result?.checkedAt;
     if (!iso) return null;
     try {
       const dt = new Date(iso);
       if (Number.isNaN(dt.getTime())) return null;
-      return getCheckedAtFormatter(meta.intlLocale).format(dt);
+      return getCachedDateTimeFormatter(meta.intlLocale, 'update-last-checked-full', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(dt);
     } catch {
       return null;
     }
   }, [updateState.result?.checkedAt, meta.intlLocale]);
 
-  if (window.agendameaWindow?.isWindowsStore) {
-    return null;
+  if (isWindowsStore) {
+    return (
+      <section
+        aria-label={t.updatesSectionTitle}
+        data-setting-id="about-updates"
+        className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <Store className="h-4 w-4 text-[var(--accent)] shrink-0" />
+              <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+                {t.updateStoreManagedTitle}
+              </h3>
+              <span className="font-mono-tabular rounded-full border border-[var(--border)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10.5px] font-medium text-[var(--text-secondary)]">
+                v{currentVersion}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">
+              {t.updateStoreManagedDesc}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void window.agendameaWindow?.openMicrosoftStorePage?.();
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] shrink-0"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-[var(--accent)]" />
+            <span>{t.updateOpenStoreButton}</span>
+          </button>
+        </div>
+      </section>
+    );
   }
 
-  const currentVersion = updateState.result?.currentVersion ?? APP_VERSION;
+  const isChecking = updateState.status === 'checking';
+  const isDownloading = updateState.status === 'downloading';
+  const isDownloaded = updateState.status === 'downloaded';
+  const isAvailable =
+    updateState.status === 'available' ||
+    isDownloading ||
+    isDownloaded ||
+    Boolean(updateState.result?.updateAvailable);
 
   return (
-    <section aria-label={t.updatesSectionTitle} className="space-y-2.5">
-      <div className="flex items-center justify-between">
-        <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-          {t.updatesSectionTitle}
-        </h3>
-        <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-          v{currentVersion}
-        </span>
+    <section
+      aria-label={t.updatesSectionTitle}
+      data-setting-id="about-updates"
+      className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
+    >
+      {/* Header Row */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 border-b border-[var(--border)]">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+              {t.updatesSectionTitle}
+            </h3>
+            <span className="font-mono-tabular rounded-full border border-[var(--border)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10.5px] font-medium text-[var(--text-secondary)]">
+              v{currentVersion}
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.autoUpdateToggleDesc}</p>
+        </div>
+
+        <button
+          type="button"
+          data-testid="update-check-now-btn"
+          onClick={() => void onCheckNow()}
+          disabled={isChecking || isDownloading}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-50 shrink-0"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isChecking ? 'animate-spin' : ''}`} />
+          <span>{isChecking ? t.checkingUpdatesLabel : t.checkForUpdatesButton}</span>
+        </button>
       </div>
 
-      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        {/* Manual Version Query & Silent Delta Update Row */}
-        <div className="p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0 space-y-0.5">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  {t.currentVersionLabel}:{' '}
-                  <span className="font-mono-tabular">v{currentVersion}</span>
-                </p>
-                {(updateState.status === 'up-to-date' || updateState.status === 'downloaded') && (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                )}
+      {/* Status Body */}
+      <div className="px-4 py-3.5 space-y-3">
+        {isDownloaded && updateState.result ? (
+          <div className="rounded-lg border border-emerald-500/35 bg-emerald-500/10 p-3 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  {t.updateReadyToInstallLabel}:{' '}
+                  <span className="font-mono-tabular">v{updateState.result.latestVersion}</span>
+                </span>
               </div>
-              <p className="text-xs text-[var(--text-muted)]">
-                {updateState.status === 'checking'
-                  ? t.checkingUpdatesLabel
-                  : updateState.status === 'up-to-date'
-                    ? t.upToDateLabel
-                    : updateState.status === 'downloaded'
-                      ? t.updateReadyToInstallLabel
-                      : updateState.status === 'available' && updateState.result
-                        ? `${t.updateAvailableLabel}: v${updateState.result.latestVersion}`
-                        : updateState.status === 'downloading'
-                          ? `${t.downloadingUpdateLabel} ${
-                              updateState.downloadPercent !== null
-                                ? `(${updateState.downloadPercent}%)`
-                                : ''
-                            }`
-                          : updateState.status === 'error'
-                            ? t.updateErrorOfflineLabel
-                            : formattedCheckedAt
-                              ? `${t.lastCheckedPrefix}: ${formattedCheckedAt}`
-                              : t.upToDateLabel}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              {updateState.status === 'downloaded' && onQuitAndInstall && (
+              {onQuitAndInstall && (
                 <button
                   type="button"
-                  data-testid="restart-and-update-btn"
                   onClick={() => void onQuitAndInstall()}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity whitespace-nowrap"
-                  style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90"
+                  style={{
+                    backgroundColor: 'var(--accent)',
+                    color: 'var(--accent-fg)',
+                  }}
                 >
-                  <RotateCw className="h-3.5 w-3.5" />
+                  <RotateCcw className="h-3.5 w-3.5" />
                   <span>{t.restartAndUpdateButton}</span>
                 </button>
               )}
-
-              {updateState.status === 'available' && updateState.result && (
-                <button
-                  type="button"
-                  data-testid="download-update-btn"
-                  onClick={() => void onDownloadAndInstall()}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity whitespace-nowrap"
-                  style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>{t.downloadAndInstallButton}</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                data-testid="check-updates-btn"
-                disabled={
-                  updateState.status === 'checking' || updateState.status === 'downloading'
-                }
-                onClick={() => void onCheckForUpdates()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-45 transition-colors whitespace-nowrap"
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 ${
-                    updateState.status === 'checking' ? 'animate-spin text-[var(--accent)]' : ''
-                  }`}
-                />
-                <span>{t.checkForUpdatesButton}</span>
-              </button>
             </div>
           </div>
-
-          {updateState.status === 'downloading' && (
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
-              {updateState.downloadPercent !== null ? (
-                <div
-                  className="h-full rounded-full transition-all duration-150"
-                  style={{
-                    width: `${Math.min(100, Math.max(5, updateState.downloadPercent))}%`,
-                    backgroundColor: 'var(--accent)',
-                  }}
-                />
-              ) : (
-                <div
-                  className="h-full w-2/5 rounded-full animate-indeterminate"
-                  style={{ backgroundColor: 'var(--accent)' }}
-                />
-              )}
-            </div>
-          )}
-
-          {(updateState.status === 'available' || updateState.status === 'downloaded') &&
-            updateState.result?.releaseUrl && (
-              <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-2 text-xs">
-                <span className="font-medium text-[var(--text-primary)] truncate">
-                  {updateState.result.releaseName ||
-                    `Agendamea v${updateState.result.latestVersion}`}
+        ) : isAvailable && updateState.result ? (
+          <div className="rounded-lg border border-[var(--accent)]/35 bg-[var(--accent-soft)] p-3 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="h-4 w-4 text-[var(--accent)] shrink-0" />
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  {t.updateAvailableLabel}:{' '}
+                  <span className="font-mono-tabular">v{updateState.result.latestVersion}</span>
                 </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {isDownloading && onCancelDownload && (
+                  <button
+                    type="button"
+                    data-testid="update-cancel-download-btn"
+                    onClick={() => void onCancelDownload()}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    <span>{t.cancelButton}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void onDownloadAndInstall()}
+                  disabled={isDownloading}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-60"
+                  style={{
+                    backgroundColor: 'var(--accent)',
+                    color: 'var(--accent-fg)',
+                  }}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>
+                    {isDownloading
+                      ? `${t.downloadingUpdateLabel} ${updateState.downloadPercent ?? 0}%`
+                      : t.downloadAndInstallButton}
+                  </span>
+                </button>
                 <a
                   href={updateState.result.releaseUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 font-medium text-[var(--accent)] hover:underline shrink-0"
+                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   <span>{t.viewReleaseNotes}</span>
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
-            )}
-        </div>
+            </div>
 
-        {/* Automatic Background Update Check Toggle */}
-        <div className="flex items-center justify-between gap-4 px-4 py-3">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--text-primary)]">
-              {t.autoUpdateToggleTitle}
-            </p>
-            <p className="text-xs text-[var(--text-muted)]">{t.autoUpdateToggleDesc}</p>
+            {isDownloading && (
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
+                <div
+                  className="h-full rounded-full transition-all duration-150"
+                  style={{
+                    width: `${Math.max(4, updateState.downloadPercent ?? 0)}%`,
+                    backgroundColor: 'var(--accent)',
+                  }}
+                />
+              </div>
+            )}
+
+            {updateState.result.releaseNotes && (
+              <p className="text-xs leading-relaxed text-[var(--text-secondary)] whitespace-pre-line line-clamp-4">
+                {updateState.result.releaseNotes}
+              </p>
+            )}
           </div>
+        ) : updateState.status === 'error' ? (
+          <div className="flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{updateState.errorMessage || t.updateErrorOfflineLabel}</span>
+          </div>
+        ) : updateState.status === 'up-to-date' ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+              <span>{t.upToDateLabel}</span>
+            </span>
+            {formattedLastChecked && (
+              <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                {t.lastCheckedPrefix}: {formattedLastChecked}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
+            <span data-testid="update-status-idle">
+              {isChecking ? t.checkingUpdatesLabel : t.updateNotCheckedYetLabel}
+            </span>
+            {formattedLastChecked && (
+              <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                {t.lastCheckedPrefix}: {formattedLastChecked}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Auto-check toggle */}
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-[var(--border)]">
+          <span className="text-xs text-[var(--text-secondary)]">{t.autoUpdateToggleTitle}</span>
           <button
             type="button"
             role="switch"
             aria-checked={autoUpdateCheck}
             aria-label={t.autoUpdateToggleTitle}
             onClick={() => onToggleAutoUpdateCheck(!autoUpdateCheck)}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-              autoUpdateCheck
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+              autoUpdateCheck ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
             }`}
           >
-            <span>{autoUpdateCheck ? t.enabledBadge : t.disabledBadge}</span>
+            <span
+              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
+                autoUpdateCheck
+                  ? 'translate-x-4.5 rtl:-translate-x-4.5'
+                  : 'translate-x-0.5 rtl:-translate-x-0.5'
+              }`}
+            />
           </button>
         </div>
       </div>

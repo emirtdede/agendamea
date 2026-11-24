@@ -2,9 +2,12 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', 'Nirmala UI', 'Leelawadee UI', 'Myanmar Text', 'Ebrima', 'Malgun Gothic', 'Yu Gothic UI', 'Microsoft YaHei UI', 'Microsoft JhengHei UI', sans-serif;
-  --font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', 'Nirmala UI', 'Leelawadee UI', 'Myanmar Text', 'Ebrima', 'Malgun Gothic', 'Yu Gothic UI', 'Microsoft YaHei UI', 'Microsoft JhengHei UI', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  color-scheme: light;
+  --font-display:
+    "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", "Nirmala UI", "Leelawadee UI", "Myanmar Text", "Ebrima", "Malgun Gothic", "Yu Gothic UI", "Microsoft YaHei UI", "Microsoft JhengHei UI", sans-serif;
+  --font-body:
+    "DM Sans", system-ui, -apple-system, "Segoe UI", "Nirmala UI", "Leelawadee UI", "Myanmar Text", "Ebrima", "Malgun Gothic", "Yu Gothic UI", "Microsoft YaHei UI", "Microsoft JhengHei UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   /* Default Light Theme (Obsidian) tokens before JS hydration */
   --canvas: #fafafa;
@@ -26,6 +29,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --canvas: #09090b;
   --surface: #111114;
   --surface-subtle: #17171b;
@@ -54,7 +58,8 @@
     margin: 0;
     padding: 0;
     overflow-x: hidden;
-    transition: background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    transition:
+      background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
       color 180ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
@@ -64,11 +69,11 @@
 
   /* Complex-shaping & cursive scripts (Arabic, Persian, Urdu, Indic, Thai, Lao, Khmer, Burmese)
      must never receive artificial letter-spacing, which cracks cursive letter joins and ligatures. */
-  html[dir='rtl'] body,
-  html[dir='rtl'] h1,
-  html[dir='rtl'] h2,
-  html[dir='rtl'] h3,
-  html[dir='rtl'] h4,
+  html[dir="rtl"] body,
+  html[dir="rtl"] h1,
+  html[dir="rtl"] h2,
+  html[dir="rtl"] h3,
+  html[dir="rtl"] h4,
   html:is(
       :lang(ar),
       :lang(fa),
@@ -109,6 +114,13 @@
   textarea,
   select {
     outline: none;
+  }
+
+  /* Guarantee dark/custom theme legibility inside native Windows Chromium <select> dropdown menus */
+  select option,
+  select optgroup {
+    background-color: var(--surface);
+    color: var(--text-primary);
   }
 
   button,
@@ -215,6 +227,72 @@ html.high-contrast a:focus-visible,
 html.high-contrast input:focus-visible,
 html.high-contrast select:focus-visible {
   box-shadow: 0 0 0 3px var(--accent) !important;
+}
+
+html.high-contrast [role="alert"],
+html.high-contrast [role="alertdialog"],
+html.high-contrast [role="status"] {
+  border-width: 2px !important;
+}
+
+/* Accessibility: Strong Focus Ring */
+html.strong-focus-ring button:focus-visible,
+html.strong-focus-ring a:focus-visible,
+html.strong-focus-ring input:focus-visible,
+html.strong-focus-ring select:focus-visible,
+html.strong-focus-ring textarea:focus-visible {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: 2px !important;
+}
+
+/* Personalization: Font Family Presets */
+html[data-font="sans"] {
+  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+html[data-font="mono"] {
+  --font-body: "JetBrains Mono", "Cascadia Code", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "JetBrains Mono", "Cascadia Code", ui-monospace, SFMono-Regular, monospace;
+}
+
+html[data-font="dyslexic"] {
+  --font-body: "OpenDyslexic", "Atkinson Hyperlegible", "Verdana", "Tahoma", sans-serif;
+  --font-display: "OpenDyslexic", "Atkinson Hyperlegible", "Verdana", "Tahoma", sans-serif;
+}
+
+html[data-font="dyslexic"] body {
+  letter-spacing: 0.03em;
+  word-spacing: 0.12em;
+  line-height: 1.65;
+}
+
+/* Personalization: List Density */
+html[data-density="compact"] .ag-todo-row {
+  padding-top: 0.45rem !important;
+  padding-bottom: 0.45rem !important;
+}
+
+html[data-density="spacious"] .ag-todo-row {
+  padding-top: 1.05rem !important;
+  padding-bottom: 1.05rem !important;
+}
+
+@keyframes agSettingPulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent);
+  }
+  35% {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.ag-setting-highlight {
+  animation: agSettingPulse 1.8s ease-out 1;
+  border-color: var(--accent) !important;
 }
 
 /* Smooth GPU-accelerated micro-transitions (automatically disabled by .reduce-motion & prefers-reduced-motion) */
@@ -348,6 +426,18 @@ html.high-contrast select:focus-visible {
 .animate-context-menu {
   animation: agContextMenuPop 130ms cubic-bezier(0.16, 1, 0.3, 1) both;
   transform-origin: top left;
+}
+
+[dir="rtl"] .animate-slide-in-right {
+  animation-name: agSlideInLeft;
+}
+
+[dir="rtl"] .animate-slide-in-left {
+  animation-name: agSlideInRight;
+}
+
+[dir="rtl"] .animate-context-menu {
+  transform-origin: top right;
 }
 
 .animate-accordion {

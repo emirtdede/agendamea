@@ -71,8 +71,11 @@ function escapeUntrustedNoteText(text) {
     .trim();
 }
 
-function buildReadOnlyRagPrompts({ query, chunks, language = 'tr' }) {
-  const isTr = String(language || 'tr').toLowerCase().startsWith('tr');
+function buildReadOnlyRagPrompts({ query, chunks, language = 'en' }) {
+  const normLang = String(language || 'en').trim() || 'en';
+  const lowerLang = normLang.toLowerCase();
+  const isTr = lowerLang.startsWith('tr');
+  const isEn = lowerLang.startsWith('en');
   const systemPrompt = isTr
     ? [
         '/no_think',
@@ -104,13 +107,17 @@ function buildReadOnlyRagPrompts({ query, chunks, language = 'tr' }) {
     '<untrusted_note_data>',
     formattedChunks,
     '</untrusted_note_data>',
-    isTr ? 'Kisa ve net Turkce yanit ver (en fazla 3 cumle).' : 'Reply concisely (at most 3 sentences).',
+    isTr
+      ? 'Kisa ve net Turkce yanit ver (en fazla 3 cumle).'
+      : isEn
+        ? 'Reply concisely (at most 3 sentences).'
+        : `Reply concisely in language "${normLang}" (at most 3 sentences).`,
   ].join('\n');
 
   return { systemPrompt, userPrompt };
 }
 
-function buildActionExtractionPrompts({ utterance, language = 'tr', todayDate }) {
+function buildActionExtractionPrompts({ utterance, language = 'en', todayDate }) {
   const systemPrompt = [
     '/no_think',
     'You convert a voice command into ONE strict JSON object for Agendamea task manager.',
@@ -130,7 +137,7 @@ class LlmService {
     this.externalKind = options.externalKind || 'ollama'; // 'ollama' | 'lmstudio'
     this.externalModel = options.externalModel || '';
     this.importer = options.importer || (() => import('node-llama-cpp'));
-    this.fetchFn = options.fetchFn || ((...args) => globalThis.fetch(...args));
+    this.fetchFn = options.fetchFn || ((input, init) => globalThis.fetch(input, init));
     this.customCompleteFn = typeof options.completeFn === 'function' ? options.completeFn : null;
     this.idleUnloadMs =
       typeof options.idleUnloadMs === 'number' ? options.idleUnloadMs : DEFAULT_IDLE_UNLOAD_MS;
@@ -143,6 +150,7 @@ class LlmService {
     this.llamaModule = null;
     this.model = null;
     this.context = null;
+    this._loadedModelPath = null;
     this.gpuFallbackUsed = false;
     this.idleTimer = null;
     this.slotBusy = false;
@@ -155,12 +163,54 @@ class LlmService {
     if ('modelPath' in cfg) this.modelPath = cfg.modelPath || null;
     if ('modelId' in cfg) this.modelId = cfg.modelId || null;
     if ('useExternalOllama' in cfg) this.useExternalOllama = Boolean(cfg.useExternalOllama);
-    if ('externalBaseUrl' in cfg && cfg.externalBaseUrl) this.externalBaseUrl = cfg.externalBaseUrl;
+    if ('externalBaseUrl' in cfg && cfg.externalBaseUrl) {
+      this.externalBaseUrl = String(cfg.externalBaseUrl)
+        .trim()
+        .replace(/\/+$/, '')
+        .replace(/\/v1$/i, '');
+    }
     if ('externalKind' in cfg && cfg.externalKind) this.externalKind = cfg.externalKind;
     if ('externalModel' in cfg) this.externalModel = String(cfg.externalModel || '');
-    if (prevPath !== this.modelPath) {
-      void this.unload();
+    if ((prevPath !== this.modelPath || this.useExternalOllama) && (this.model || this.context)) {
+      void this._unloadIfStale();
     }
+  }
+
+  async _unloadIfStale() {
+    await this._acquireSlot();
+    try {
+      if (!this.model && !this.context) return;
+      if (!this.useExternalOllama && this._loadedModelPath === this.modelPath) {
+        return;
+      }
+      await this._disposeLocalModelLocked();
+    } finally {
+      this._releaseSlot();
+    }
+  }
+
+  async _disposeLocalModelLocked() {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    if (this.context && typeof this.context.dispose === 'function') {
+      try {
+        await this.context.dispose();
+      } catch {
+        // Ignore
+      }
+    }
+    if (this.model && typeof this.model.dispose === 'function') {
+      try {
+        await this.model.dispose();
+      } catch {
+        // Ignore
+      }
+    }
+    this.context = null;
+    this.model = null;
+    this._loadedModelPath = null;
   }
 
   isAvailable() {
@@ -213,9 +263,12 @@ class LlmService {
   }
 
   async ensureLocalModel() {
-    if (this.model && this.context) {
+    if (this.model && this.context && this._loadedModelPath === this.modelPath) {
       this.touch();
       return;
+    }
+    if ((this.model || this.context) && this._loadedModelPath !== this.modelPath) {
+      await this._disposeLocalModelLocked();
     }
     if (!this._loadingPromise) {
       this._loadingPromise = this._loadLocalModelInternal().finally(() => {
@@ -226,11 +279,12 @@ class LlmService {
   }
 
   async _loadLocalModelInternal() {
-    if (this.model && this.context) {
+    if (this.model && this.context && this._loadedModelPath === this.modelPath) {
       this.touch();
       return;
     }
-    if (!this.modelPath || !fs.existsSync(this.modelPath)) {
+    const targetPath = this.modelPath;
+    if (!targetPath || !fs.existsSync(targetPath)) {
       throw new Error('LLM_MODEL_MISSING');
     }
     const mod = this.llamaModule || (await this.importer());
@@ -252,10 +306,11 @@ class LlmService {
     let model = null;
     let context = null;
     try {
-      model = await this.llama.loadModel({ modelPath: this.modelPath });
+      model = await this.llama.loadModel({ modelPath: targetPath });
       context = await model.createContext(CONTEXT_OPTIONS);
       this.model = model;
       this.context = context;
+      this._loadedModelPath = targetPath;
       this.touch();
     } catch (err) {
       try {
@@ -421,26 +476,7 @@ class LlmService {
   async unload() {
     await this._acquireSlot();
     try {
-      if (this.idleTimer) {
-        clearTimeout(this.idleTimer);
-        this.idleTimer = null;
-      }
-      if (this.context && typeof this.context.dispose === 'function') {
-        try {
-          await this.context.dispose();
-        } catch {
-          // Ignore
-        }
-      }
-      if (this.model && typeof this.model.dispose === 'function') {
-        try {
-          await this.model.dispose();
-        } catch {
-          // Ignore
-        }
-      }
-      this.context = null;
-      this.model = null;
+      await this._disposeLocalModelLocked();
     } finally {
       this._releaseSlot();
     }

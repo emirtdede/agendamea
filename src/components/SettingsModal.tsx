@@ -1,749 +1,470 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Accessibility,
   ArrowLeft,
   Bell,
-  Cloud,
+  BookOpen,
+  Compass,
+  Database,
   Info,
   Keyboard,
   Menu,
   Mic,
   Palette,
   Scale,
-  Settings,
-  SlidersHorizontal,
-  Sparkles,
-  Terminal,
+  Search,
+  Sliders,
   Trash2,
   Webhook,
-  ZoomIn,
+  X,
 } from 'lucide-react';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useI18n } from '../i18n/I18nContext';
 import type { LegalDocId } from '../i18n/translations';
-import type {
-  AppIconId,
-  BootstrapPayload,
-  Category,
-  CloseBehavior,
-  NotificationChannelMode,
-  NotificationChannelsMap,
-  NotificationEventType,
-  NotificationProfileId,
-  OneDriveStatus,
-  SettingsTabId,
-  ThemeId,
-  ThemeMode,
-  Todo,
-} from '../types';
-import {
-  DEFAULT_CUSTOM_SHORTCUTS,
-  type CustomShortcutsMap,
-  type ShortcutActionId,
-} from '../utils/shortcuts';
-import { DocsSettingsSection } from './DocsSettingsSection';
+import { useUpdaterSelector } from '../store/updaterStore';
+import { useWorkspaceSnapshotSelector } from '../store/workspaceSnapshotStore';
+import type { OneDriveStatus, SettingsTabId } from '../types';
+import { getCachedDateTimeFormatter } from '../utils/intlCache';
+import { matchesLocaleQuery } from '../utils/todoLogic';
 import { LegalDocumentView } from './LegalDocumentView';
-import type { AppUpdateState } from './UpdateSettingsSection';
-import { AboutLegalSettingsTab } from './settings/AboutLegalSettingsTab';
-import { AccessibilitySettingsTab } from './settings/AccessibilitySettingsTab';
-import { AiVoiceSettingsTab } from './settings/AiVoiceSettingsTab';
-import { AppearanceSettingsTab } from './settings/AppearanceSettingsTab';
-import {
-  DataBackupSettingsTab,
-  type PendingImportState,
-} from './settings/DataBackupSettingsTab';
-import { GeneralSettingsTab } from './settings/GeneralSettingsTab';
-import { LegalSettingsTab } from './settings/LegalSettingsTab';
-import { NotificationsSettingsTab } from './settings/NotificationsSettingsTab';
-import { ShortcutsSettingsTab } from './settings/ShortcutsSettingsTab';
-import { TrashSettingsTab } from './settings/TrashSettingsTab';
-import { WebhooksSettingsTab } from './settings/WebhooksSettingsTab';
+import type { PendingImportState } from './settings/DataBackupSettingsTab';
+import { type SettingsRuntimeActions, SettingsTabOutlet } from './settings/SettingsTabOutlet';
+import { SETTINGS_SEARCH_INDEX } from './settings/settingsSearchIndex';
 
 interface SettingsModalProps {
   onClose: () => void;
   initialTab?: SettingsTabId;
   onOpenMobileSidebar?: () => void;
-  themeMode: ThemeMode;
-  themeId: ThemeId;
-  customThemeColor: string;
-  appIconId: AppIconId;
-  customIconColor: string;
-  zoomPercent: number;
-  highContrast: boolean;
-  reducedMotion: boolean;
-  closeBehavior: CloseBehavior;
-  launchAtStartup?: boolean;
-  globalQuickAddShortcut?: boolean;
-  globalQuickAddShortcutKey?: string;
-  voiceShortcut?: string;
-  customShortcuts?: CustomShortcutsMap;
-  onChangeGlobalQuickAddShortcutKey?: (shortcut: string) => void;
-  onVoiceShortcutChange?: (shortcut: string) => void;
-  onChangeCustomShortcut?: (action: ShortcutActionId, shortcut: string) => void;
-  onResetAllShortcuts?: () => void;
-  notificationProfile?: NotificationProfileId;
-  notificationLeadMinutes?: number;
-  notificationChannels?: NotificationChannelsMap;
-  onApplyNotificationProfile?: (profile: Exclude<NotificationProfileId, 'custom'>) => void;
-  onChangeNotificationChannel?: (
-    eventType: NotificationEventType,
-    mode: NotificationChannelMode,
-  ) => void;
-  onChangeNotificationLeadMinutes?: (minutes: number) => void;
-  onSendTestNotification?: () => void;
-  onNotifyVoice?: (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => void;
-  onNotifyCloudSync?: (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => void;
-  dragLocked: boolean;
-  onChangeMode: (mode: ThemeMode) => void;
-  onChangeTheme: (id: ThemeId) => void;
-  onChangeCustomThemeColor: (hex: string) => void;
-  onChangeAppIcon: (id: AppIconId) => void;
-  onChangeCustomIconColor: (hex: string) => void;
-  onChangeZoomPercent: (zoom: number) => void;
-  onToggleHighContrast: (enabled: boolean) => void;
-  onToggleReducedMotion: (enabled: boolean) => void;
-  onChangeCloseBehavior: (behavior: CloseBehavior) => void;
-  onToggleLaunchAtStartup?: (enabled: boolean) => void;
-  onToggleGlobalQuickAddShortcut?: (enabled: boolean) => void;
-  onToggleDragLock: (locked: boolean) => void;
-  autoUpdateCheck: boolean;
-  onToggleAutoUpdateCheck: (enabled: boolean) => void;
-  updateState: AppUpdateState;
-  onCheckForUpdates: () => Promise<void>;
-  onDownloadAndInstall: () => Promise<void>;
-  onQuitAndInstallUpdate?: () => Promise<void>;
-  totalTodoCount: number;
-  completedTodoCount: number;
-  onClearAllCompleted: () => Promise<void>;
-  onImportBackup: (payload: unknown) => Promise<void>;
-  onApplyRestoredBootstrap?: (restored: BootstrapPayload) => void;
-  onResetAllData?: (resetSettings: boolean) => Promise<void>;
-  trashedCategories: Category[];
-  trashedTodos: Todo[];
-  onRestoreTodo: (id: string) => Promise<void>;
-  onPermanentDeleteTodo: (id: string) => Promise<void>;
-  onRestoreCategory: (id: string) => Promise<void>;
-  onPermanentDeleteCategory: (id: string) => Promise<void>;
-  onEmptyTrash: () => Promise<void>;
   onOpenWelcomeGuide?: () => void;
-  webhookEnabled?: boolean;
-  webhookUrl?: string;
-  webhookSecret?: string;
-  onSaveWebhook?: (patch: {
-    webhookEnabled: boolean;
-    webhookUrl: string;
-    webhookSecret: string;
-  }) => Promise<void>;
-}
-
-const TIMESTAMP_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
-
-function getTimestampFormatter(intlLocale: string): Intl.DateTimeFormat {
-  let fmt = TIMESTAMP_FORMATTER_CACHE.get(intlLocale);
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat(intlLocale, {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    TIMESTAMP_FORMATTER_CACHE.set(intlLocale, fmt);
-  }
-  return fmt;
-}
-
-function formatTimestampForLocale(iso: string | null, intlLocale: string): string {
-  if (!iso) return '';
-  try {
-    const dt = new Date(iso);
-    if (Number.isNaN(dt.getTime())) return '';
-    return getTimestampFormatter(intlLocale).format(dt);
-  } catch {
-    return '';
-  }
+  actions: SettingsRuntimeActions;
 }
 
 export function SettingsModal({
   onClose,
   initialTab = 'appearance',
   onOpenMobileSidebar,
-  themeMode,
-  themeId,
-  customThemeColor,
-  appIconId,
-  customIconColor,
-  zoomPercent,
-  highContrast,
-  reducedMotion,
-  closeBehavior,
-  launchAtStartup = false,
-  globalQuickAddShortcut = true,
-  globalQuickAddShortcutKey = 'CommandOrControl+Alt+N',
-  voiceShortcut = 'CommandOrControl+Alt+Space',
-  customShortcuts = DEFAULT_CUSTOM_SHORTCUTS,
-  onChangeGlobalQuickAddShortcutKey,
-  onVoiceShortcutChange,
-  onChangeCustomShortcut,
-  onResetAllShortcuts,
-  notificationProfile = 'balanced',
-  notificationLeadMinutes = 15,
-  notificationChannels,
-  onApplyNotificationProfile,
-  onChangeNotificationChannel,
-  onChangeNotificationLeadMinutes,
-  onSendTestNotification,
-  onNotifyVoice,
-  onNotifyCloudSync,
-  dragLocked,
-  onChangeMode,
-  onChangeTheme,
-  onChangeCustomThemeColor,
-  onChangeAppIcon,
-  onChangeCustomIconColor,
-  onChangeZoomPercent,
-  onToggleHighContrast,
-  onToggleReducedMotion,
-  onChangeCloseBehavior,
-  onToggleLaunchAtStartup,
-  onToggleGlobalQuickAddShortcut,
-  onToggleDragLock,
-  autoUpdateCheck,
-  onToggleAutoUpdateCheck,
-  updateState,
-  onCheckForUpdates,
-  onDownloadAndInstall,
-  onQuitAndInstallUpdate,
-  totalTodoCount,
-  completedTodoCount,
-  onClearAllCompleted,
-  onImportBackup,
-  onApplyRestoredBootstrap,
-  onResetAllData,
-  trashedCategories,
-  trashedTodos,
-  onRestoreTodo,
-  onPermanentDeleteTodo,
-  onRestoreCategory,
-  onPermanentDeleteCategory,
-  onEmptyTrash,
   onOpenWelcomeGuide,
-  webhookEnabled = false,
-  webhookUrl = '',
-  webhookSecret = '',
-  onSaveWebhook,
+  actions,
 }: SettingsModalProps) {
-  const { t, meta, legalDocs } = useI18n();
+  const { t, meta } = useI18n();
+  const trashCount = useWorkspaceSnapshotSelector(
+    (s) => s.trashedTodos.length + s.trashedCategories.length,
+    Object.is,
+  );
+  const hasAppUpdate = useUpdaterSelector(
+    (s) => s.updateState.status === 'available' || s.updateState.status === 'downloaded',
+    Object.is,
+  );
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab);
   const [activeLegalDoc, setActiveLegalDoc] = useState<LegalDocId | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [pendingImport, setPendingImport] = useState<PendingImportState | null>(null);
   const [oneDriveStatus, setOneDriveStatus] = useState<OneDriveStatus | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [settingsSearch, setSettingsSearch] = useState('');
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<{
+    id: string;
+    seq: number;
+  } | null>(null);
+  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+    return window.matchMedia('(min-width: 1024px)').matches;
+  });
+  const contentScrollRef = useRef<HTMLDivElement>(null);
+  const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mql = window.matchMedia('(min-width: 1024px)');
+    setIsDesktopViewport(mql.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsDesktopViewport(e.matches);
+    mql.addEventListener?.('change', onChange);
+    return () => mql.removeEventListener?.('change', onChange);
+  }, []);
 
   useEffect(() => {
     setActiveTab(initialTab);
+    setActiveLegalDoc(null);
   }, [initialTab]);
 
   useEffect(() => {
+    if (activeTab !== 'data' && activeTab !== 'about') return;
     let active = true;
     void api
       .getOneDriveStatus()
-      .then((st) => {
-        if (active) setOneDriveStatus(st);
+      .then((status) => {
+        if (active) setOneDriveStatus(status);
       })
-      .catch(() => {});
+      .catch(() => {
+        /* ignore */
+      });
     return () => {
       active = false;
     };
-  }, []);
-
-  useEffect(() => {
-    if (activeLegalDoc && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-    }
-  }, [activeLegalDoc]);
-
-  const handleSelectTab = useCallback((nextTab: SettingsTabId) => {
-    setActiveTab(nextTab);
-    setActiveLegalDoc(null);
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-    }
-  }, []);
-
-  const safeClose = useCallback(() => {
-    if (isImporting) return;
-    onClose();
-  }, [isImporting, onClose]);
+  }, [activeTab]);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      if (isImporting) return;
-      if (activeLegalDoc) {
-        setActiveLegalDoc(null);
-        return;
+      if (e.key === 'Escape') {
+        if (settingsSearch) {
+          setSettingsSearch('');
+        } else if (activeLegalDoc) {
+          setActiveLegalDoc(null);
+        } else {
+          onClose();
+        }
       }
-      if (pendingImport) {
-        setPendingImport(null);
-        return;
-      }
-      onClose();
     };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [isImporting, activeLegalDoc, pendingImport, onClose]);
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose, activeLegalDoc, settingsSearch]);
 
-  const trashCount = trashedCategories.length + trashedTodos.length;
+  // Smooth scroll & pulse highlight when jumping from Deep Settings Search
+  useEffect(() => {
+    if (!pendingScrollTarget) return;
+    const targetId = pendingScrollTarget.id;
+    let highlightTimer: number | null = null;
+    const timer = window.setTimeout(() => {
+      const container = contentScrollRef.current;
+      const el = container?.querySelector<HTMLElement>(`[data-setting-id="${targetId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('ag-setting-highlight');
+        void el.offsetWidth;
+        el.classList.add('ag-setting-highlight');
+        highlightTimer = window.setTimeout(() => {
+          el.classList.remove('ag-setting-highlight');
+          highlightTimer = null;
+        }, 2000);
+      }
+      setPendingScrollTarget(null);
+    }, 60);
+    return () => {
+      window.clearTimeout(timer);
+      if (highlightTimer !== null) window.clearTimeout(highlightTimer);
+    };
+  }, [pendingScrollTarget]);
 
   const formatTimestamp = useCallback(
-    (iso: string | null) => formatTimestampForLocale(iso, meta.intlLocale),
+    (iso: string | null) => {
+      if (!iso) return '';
+      try {
+        return getCachedDateTimeFormatter(meta.intlLocale, 'settings-timestamp', {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(new Date(iso));
+      } catch {
+        return iso;
+      }
+    },
     [meta.intlLocale],
   );
 
-  const navGroups = useMemo<
-    Array<{
-      groupTitle: string;
-      items: Array<{
-        id: SettingsTabId;
-        label: string;
-        Icon: React.ComponentType<{ className?: string }>;
-        badge?: number;
-        hasDot?: boolean;
-      }>;
-    }>
-  >(
+  const navItems: Array<{
+    id: SettingsTabId;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number;
+  }> = useMemo(
     () => [
+      { id: 'appearance', label: t.settingsTabAppearance, icon: Palette },
+      { id: 'accessibility', label: t.accessibilitySectionTitle, icon: Accessibility },
+      { id: 'general', label: t.settingsTabGeneral, icon: Sliders },
+      { id: 'shortcuts', label: t.keyboardShortcutsTitle, icon: Keyboard },
+      { id: 'notifications', label: t.settingsTabNotifications, icon: Bell },
+      { id: 'ai', label: t.settingsTabAi, icon: Mic },
+      { id: 'data', label: t.dataAndBackupTitle, icon: Database },
       {
-        groupTitle: t.settingsNavGroupPersonalization,
-        items: [
-          { id: 'appearance', label: t.settingsTabAppearance, Icon: Palette },
-          { id: 'accessibility', label: t.accessibilitySectionTitle, Icon: ZoomIn },
-        ],
+        id: 'trash',
+        label: t.tabTrash,
+        icon: Trash2,
+        badge: trashCount > 0 ? trashCount : undefined,
       },
+      { id: 'docs', label: t.settingsTabDocs, icon: BookOpen },
+      { id: 'webhooks', label: t.settingsTabWebhooks, icon: Webhook },
+      { id: 'legal', label: t.settingsTabLegal, icon: Scale },
       {
-        groupTitle: t.settingsNavGroupWorkspace,
-        items: [
-          { id: 'general', label: t.settingsTabGeneral, Icon: SlidersHorizontal },
-          { id: 'shortcuts', label: t.keyboardShortcutsTitle, Icon: Keyboard },
-          { id: 'notifications', label: t.settingsTabNotifications, Icon: Bell },
-          { id: 'ai', label: t.settingsTabAi, Icon: Mic },
-          { id: 'data', label: t.dataAndBackupTitle, Icon: Cloud },
-          {
-            id: 'trash',
-            label: t.tabTrash,
-            Icon: Trash2,
-            badge: trashCount > 0 ? trashCount : undefined,
-          },
-        ],
-      },
-      {
-        groupTitle: t.settingsNavGroupSystem,
-        items: [
-          { id: 'docs', label: t.settingsTabDocs, Icon: Terminal },
-          { id: 'webhooks', label: t.settingsTabWebhooks, Icon: Webhook },
-          { id: 'legal', label: t.settingsTabLegal, Icon: Scale },
-          {
-            id: 'about',
-            label: t.settingsTabAbout,
-            Icon: Info,
-            hasDot: updateState.status === 'available' || updateState.status === 'downloaded',
-          },
-        ],
+        id: 'about',
+        label: t.settingsTabAbout,
+        icon: Info,
+        badge: hasAppUpdate ? 1 : undefined,
       },
     ],
     [
-      t.settingsNavGroupPersonalization,
       t.settingsTabAppearance,
       t.accessibilitySectionTitle,
-      t.settingsNavGroupWorkspace,
       t.settingsTabGeneral,
       t.keyboardShortcutsTitle,
       t.settingsTabNotifications,
       t.settingsTabAi,
       t.dataAndBackupTitle,
       t.tabTrash,
-      t.settingsNavGroupSystem,
       t.settingsTabDocs,
       t.settingsTabWebhooks,
       t.settingsTabLegal,
       t.settingsTabAbout,
       trashCount,
-      updateState.status,
+      hasAppUpdate,
     ],
   );
 
-  const allNavItems = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
-  const currentTabMeta = allNavItems.find((item) => item.id === activeTab) ?? allNavItems[0];
-  const CurrentTabIcon = currentTabMeta.Icon;
+  const tabLabelById = useMemo(
+    () => new Map(navItems.map((item) => [item.id, item.label])),
+    [navItems],
+  );
+
+  const searchResults = useMemo(() => {
+    const q = settingsSearch.trim();
+    if (!q) return [];
+    return SETTINGS_SEARCH_INDEX.filter((entry) => {
+      const label = String(t[entry.labelKey] ?? '');
+      const tabName = tabLabelById.get(entry.tab) ?? '';
+      return (
+        matchesLocaleQuery(label, q) ||
+        matchesLocaleQuery(tabName, q) ||
+        matchesLocaleQuery(entry.keywords, q)
+      );
+    }).slice(0, 8);
+  }, [settingsSearch, t, tabLabelById]);
+
+  const handleSelectSearchResult = (tab: SettingsTabId, settingId: string) => {
+    setActiveTab(tab);
+    setActiveLegalDoc(null);
+    setSettingsSearch('');
+    setPendingScrollTarget({ id: settingId, seq: Date.now() });
+  };
+
+  const handleTabListKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const idx = navItems.findIndex((item) => item.id === activeTab);
+    if (idx < 0) return;
+    let nextIdx = -1;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      nextIdx = (idx + 1) % navItems.length;
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      nextIdx = (idx - 1 + navItems.length) % navItems.length;
+    } else if (e.key === 'Home') {
+      nextIdx = 0;
+    } else if (e.key === 'End') {
+      nextIdx = navItems.length - 1;
+    }
+    if (nextIdx >= 0) {
+      e.preventDefault();
+      const target = navItems[nextIdx];
+      if (target) {
+        setActiveTab(target.id);
+        setActiveLegalDoc(null);
+        tabButtonRefs.current[target.id]?.focus();
+      }
+    }
+  };
+
+  const activeNavMeta = navItems.find((item) => item.id === activeTab) ?? navItems[0];
 
   return (
     <section
-      data-testid="settings-page"
-      aria-labelledby="settings-page-title"
-      className="flex flex-1 min-h-0 min-w-0 flex-col lg:flex-row bg-[var(--canvas)] overflow-hidden"
+      aria-label={t.settings}
+      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[var(--canvas)]"
     >
-      {/* Left Split Navigation Rail (Desktop >= 1024px) */}
-      <aside
-        aria-label={t.settings}
-        className="hidden lg:flex w-[244px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] select-none"
-      >
-        <div className="app-drag-region flex h-14 shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-4">
-          <div
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-            style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </div>
-          <h2
-            id="settings-page-title"
-            className="font-display text-[14.5px] font-bold tracking-tight text-[var(--text-primary)] truncate"
-          >
-            {t.settings}
-          </h2>
-        </div>
-
-        <nav
-          role="tablist"
-          aria-orientation="vertical"
-          aria-label={t.settings}
-          className="flex-1 overflow-y-auto px-3 py-3 space-y-3.5"
-        >
-          {navGroups.map((group, groupIdx) => (
-            <div key={group.groupTitle} className="space-y-0.5">
-              <p className="px-2.5 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[var(--text-muted)]">
-                {group.groupTitle}
-              </p>
-              {group.items.map(({ id, label, Icon, badge, hasDot }) => {
-                const isSelected = activeTab === id && !activeLegalDoc;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    data-testid={`settings-tab-${id}`}
-                    aria-selected={isSelected}
-                    onClick={() => handleSelectTab(id)}
-                    className={`group flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-[7px] text-start text-[13px] font-medium transition-colors ${
-                      isSelected
-                        ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <span className="flex items-center gap-2.5 min-w-0">
-                      <Icon
-                        className={`h-4 w-4 shrink-0 ${
-                          isSelected
-                            ? 'text-[var(--accent)]'
-                            : 'text-[var(--text-muted)] group-hover:text-[var(--text-secondary)]'
-                        }`}
-                      />
-                      <span className="truncate">{label}</span>
-                    </span>
-                    {badge !== undefined && (
-                      <span
-                        className={`rounded-md px-1.5 py-0.5 font-mono-tabular text-[11px] shrink-0 ${
-                          isSelected
-                            ? 'bg-[var(--surface)] text-[var(--accent)] font-semibold'
-                            : 'bg-[var(--surface-subtle)] text-[var(--text-muted)]'
-                        }`}
-                      >
-                        {badge}
-                      </span>
-                    )}
-                    {hasDot && (
-                      <span
-                        aria-hidden="true"
-                        className="h-2 w-2 rounded-full shrink-0"
-                        style={{ backgroundColor: 'var(--accent)' }}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-
-              {groupIdx === navGroups.length - 1 && onOpenWelcomeGuide && (
-                <button
-                  type="button"
-                  data-testid="settings-sidebar-welcome-guide"
-                  onClick={onOpenWelcomeGuide}
-                  className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-start text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
-                >
-                  <Sparkles className="h-4 w-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors" />
-                  <span className="truncate">{t.welcomeReplayButton}</span>
-                </button>
-              )}
-            </div>
-          ))}
-        </nav>
-
-        {/* Back to All Tasks (Unified sidebar nav button style) */}
-        <div className="border-t border-[var(--border)] px-3 py-2.5">
-          <button
-            type="button"
-            data-testid="settings-back-button"
-            disabled={isImporting}
-            onClick={safeClose}
-            className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
-          >
-            <ArrowLeft className="h-4 w-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--text-primary)] rtl:rotate-180 transition-colors" />
-            <span className="truncate">{t.settingsBackToTasks}</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Compact / Responsive Top Bar + Horizontal Pill Tabs (< 1024px) */}
-      <div className="lg:hidden shrink-0 border-b border-[var(--border)] bg-[var(--surface)] select-none">
-        <div className="app-drag-region flex items-center justify-between gap-2 ps-4 pe-32 pt-3 pb-2">
-          <div className="app-no-drag flex items-center gap-2 min-w-0">
-            {onOpenMobileSidebar && (
-              <button
-                type="button"
-                onClick={onOpenMobileSidebar}
-                aria-label={t.openMenu}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] md:hidden shrink-0"
-              >
-                <Menu className="h-4 w-4" />
-              </button>
-            )}
+      {/* Top Integrated Page Header (Draggable on Electron) */}
+      <header className="app-drag-region flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--canvas)] px-4 sm:px-8 py-4 pe-32 sm:pe-36">
+        <div className="app-no-drag flex items-center gap-3 min-w-0">
+          {onOpenMobileSidebar && (
             <button
               type="button"
-              data-testid="settings-back-button-compact"
-              disabled={isImporting}
-              onClick={safeClose}
-              aria-label={t.settingsBackToTasks}
-              title={t.settingsBackToTasks}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 shrink-0 transition-colors"
+              onClick={onOpenMobileSidebar}
+              aria-label={t.openMenu}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] md:hidden hover:bg-[var(--surface-hover)] shrink-0"
             >
-              <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            </button>
-            <h2 className="font-display text-sm font-bold tracking-tight text-[var(--text-primary)] truncate">
-              {t.settings}
-            </h2>
-          </div>
-        </div>
-
-        <div
-          role="tablist"
-          aria-label={t.settings}
-          className="flex flex-wrap items-center gap-1.5 px-4 pb-3"
-        >
-          {allNavItems.map(({ id, label, Icon, badge, hasDot }) => {
-            const isSelected = activeTab === id && !activeLegalDoc;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                data-testid={`settings-compact-tab-${id}`}
-                aria-selected={isSelected}
-                onClick={() => handleSelectTab(id)}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-                  isSelected
-                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
-                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <Icon
-                  className={`h-3.5 w-3.5 shrink-0 ${
-                    isSelected ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
-                  }`}
-                />
-                <span>{label}</span>
-                {badge !== undefined && (
-                  <span className="font-mono-tabular text-[10.5px] opacity-80">({badge})</span>
-                )}
-                {hasDot && (
-                  <span
-                    aria-hidden="true"
-                    className="h-1.5 w-1.5 rounded-full shrink-0"
-                    style={{ backgroundColor: 'var(--accent)' }}
-                  />
-                )}
-              </button>
-            );
-          })}
-          {onOpenWelcomeGuide && (
-            <button
-              type="button"
-              onClick={onOpenWelcomeGuide}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap shrink-0"
-            >
-              <Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-              <span>{t.welcomeReplayButton}</span>
+              <Menu className="h-4 w-4" />
             </button>
           )}
-        </div>
-      </div>
-
-      {/* Right Scrollable Settings Content Pane */}
-      <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--canvas)]">
-        <header className="hidden lg:flex app-drag-region h-14 shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)]/75 ps-8 pe-36 select-none">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <CurrentTabIcon className="h-4 w-4 text-[var(--accent)] shrink-0" />
-            <h1 className="font-display text-[15px] font-bold tracking-tight text-[var(--text-primary)] whitespace-nowrap shrink-0">
-              {activeLegalDoc ? legalDocs[activeLegalDoc].title : currentTabMeta.label}
-            </h1>
-            <span className="hidden xl:inline min-w-0 text-xs text-[var(--text-muted)] truncate">
-              ·{' '}
-              {activeLegalDoc
-                ? legalDocs[activeLegalDoc].subtitle
-                : activeTab === 'docs'
-                  ? t.docsSubtitle
-                  : activeTab === 'webhooks'
-                    ? t.docsWebhookDesc
-                    : activeTab === 'shortcuts'
-                      ? t.shortcutsSubtitle
-                      : activeTab === 'legal'
-                        ? t.legalSectionSubtitle
-                        : activeTab === 'ai'
-                          ? t.aiSectionSubtitle
-                          : activeTab === 'notifications'
-                            ? t.notificationsSubtitle
-                            : t.settingsSubtitle}
-            </span>
-          </div>
-        </header>
-
-        <div
-          ref={scrollContainerRef}
-          className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-7"
-        >
-          <div
-            key={activeLegalDoc ? `legal-${activeLegalDoc}` : `tab-${activeTab}`}
-            className="animate-tab-enter mx-auto w-full max-w-[700px] space-y-6"
+          <button
+            type="button"
+            onClick={activeLegalDoc ? () => setActiveLegalDoc(null) : onClose}
+            aria-label={activeLegalDoc ? t.backToSettingsButton : t.settingsBackToTasks}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0"
           >
+            <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" />
+            <span className="hidden sm:inline">
+              {activeLegalDoc ? t.backToSettingsButton : t.settingsBackToTasks}
+            </span>
+          </button>
+          <div className="min-w-0">
+            <h1 className="font-display text-lg sm:text-xl font-bold tracking-tight text-[var(--text-primary)] truncate">
+              {t.settings}
+            </h1>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Split Body: Left Settings Navigation Rail + Right Spacious Content */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row overflow-hidden">
+        {/* Sub-navigation Rail */}
+        <nav
+          aria-label={t.settings}
+          className="shrink-0 border-b lg:border-b-0 lg:border-e border-[var(--border)] bg-[var(--canvas)] px-4 sm:px-6 lg:px-4 py-3 lg:py-6 lg:w-64 overflow-x-auto lg:overflow-y-auto"
+        >
+          {/* Deep Settings Search Input */}
+          <div className="relative mb-3">
+            <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
+            <input
+              type="text"
+              data-testid="settings-deep-search-input"
+              value={settingsSearch}
+              onChange={(e) => setSettingsSearch(e.target.value)}
+              placeholder={t.settingsSearchPlaceholder}
+              aria-label={t.settingsSearchPlaceholder}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 ps-8 pe-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
+            />
+            {settingsSearch && (
+              <button
+                type="button"
+                onClick={() => setSettingsSearch('')}
+                aria-label={t.clearSearch}
+                className="absolute end-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          {settingsSearch.trim().length > 0 ? (
+            <div
+              data-testid="settings-search-results"
+              className="space-y-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1.5"
+            >
+              {searchResults.length === 0 ? (
+                <p className="px-2 py-2 text-xs text-[var(--text-muted)]">
+                  {t.settingsSearchNoResults}
+                </p>
+              ) : (
+                searchResults.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    data-testid={`settings-search-hit-${entry.id}`}
+                    onClick={() => handleSelectSearchResult(entry.tab, entry.settingId)}
+                    className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-start hover:bg-[var(--surface-hover)] transition-colors"
+                  >
+                    <span className="text-xs font-medium text-[var(--text-primary)]">
+                      {String(t[entry.labelKey] ?? '')}
+                    </span>
+                    <span className="text-[10.5px] text-[var(--text-muted)]">
+                      {tabLabelById.get(entry.tab)}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          ) : (
+            <>
+              <div
+                role="tablist"
+                aria-orientation={isDesktopViewport ? 'vertical' : 'horizontal'}
+                onKeyDown={handleTabListKeyDown}
+                className="flex lg:flex-col gap-1"
+              >
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const active = activeTab === item.id && !activeLegalDoc;
+                  return (
+                    <button
+                      key={item.id}
+                      ref={(el) => {
+                        tabButtonRefs.current[item.id] = el;
+                      }}
+                      type="button"
+                      role="tab"
+                      id={`settings-tab-${item.id}`}
+                      aria-selected={active}
+                      tabIndex={active ? 0 : -1}
+                      data-testid={
+                        isDesktopViewport
+                          ? `settings-tab-${item.id}`
+                          : `settings-compact-tab-${item.id}`
+                      }
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setActiveLegalDoc(null);
+                      }}
+                      className={`flex items-center justify-between gap-2.5 rounded-lg px-3 py-2 text-[13px] transition-colors whitespace-nowrap shrink-0 lg:w-full ${
+                        active
+                          ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
+                          : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        <Icon
+                          className={`h-4 w-4 shrink-0 ${
+                            active ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
+                          }`}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </span>
+                      {item.badge !== undefined && (
+                        <span className="font-mono-tabular rounded-full bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[10.5px] font-medium text-[var(--text-secondary)]">
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {onOpenWelcomeGuide && (
+                <div className="hidden lg:block mt-6 pt-4 border-t border-[var(--border)]">
+                  <button
+                    type="button"
+                    onClick={onOpenWelcomeGuide}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[12.5px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    <Compass className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{t.welcomeReplayButton}</span>
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </nav>
+
+        {/* Scrollable Content Pane */}
+        <div
+          ref={contentScrollRef}
+          className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-8 lg:px-10 py-6 sm:py-8"
+        >
+          <div className="mx-auto w-full max-w-3xl">
             {activeLegalDoc ? (
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 sm:p-6">
-                <LegalDocumentView
-                  doc={legalDocs[activeLegalDoc]}
-                  backLabel={t.backToSettingsButton}
-                  onBack={() => setActiveLegalDoc(null)}
+              <LegalDocumentView docId={activeLegalDoc} onBack={() => setActiveLegalDoc(null)} />
+            ) : (
+              <div
+                role="tabpanel"
+                aria-labelledby={`settings-tab-${activeTab}`}
+                className="space-y-6"
+              >
+                <div className="border-b border-[var(--border)] pb-4">
+                  <h2 className="font-display text-lg font-bold tracking-tight text-[var(--text-primary)]">
+                    {activeNavMeta?.label}
+                  </h2>
+                </div>
+
+                <SettingsTabOutlet
+                  activeTab={activeTab}
+                  oneDriveStatus={oneDriveStatus}
+                  onOneDriveStatusChange={setOneDriveStatus}
+                  isImporting={isImporting}
+                  onImportingChange={setIsImporting}
+                  pendingImport={pendingImport}
+                  onPendingImportChange={setPendingImport}
+                  formatTimestamp={formatTimestamp}
+                  onOpenLegalDoc={(doc) => {
+                    setActiveTab('legal');
+                    setActiveLegalDoc(doc);
+                  }}
+                  actions={actions}
                 />
               </div>
-            ) : activeTab === 'appearance' ? (
-              <AppearanceSettingsTab
-                themeMode={themeMode}
-                themeId={themeId}
-                customThemeColor={customThemeColor}
-                appIconId={appIconId}
-                customIconColor={customIconColor}
-                onChangeMode={onChangeMode}
-                onChangeTheme={onChangeTheme}
-                onChangeCustomThemeColor={onChangeCustomThemeColor}
-                onChangeAppIcon={onChangeAppIcon}
-                onChangeCustomIconColor={onChangeCustomIconColor}
-              />
-            ) : activeTab === 'accessibility' ? (
-              <AccessibilitySettingsTab
-                zoomPercent={zoomPercent}
-                highContrast={highContrast}
-                reducedMotion={reducedMotion}
-                onChangeZoomPercent={onChangeZoomPercent}
-                onToggleHighContrast={onToggleHighContrast}
-                onToggleReducedMotion={onToggleReducedMotion}
-              />
-            ) : activeTab === 'general' ? (
-              <GeneralSettingsTab
-                closeBehavior={closeBehavior}
-                launchAtStartup={launchAtStartup}
-                dragLocked={dragLocked}
-                onChangeCloseBehavior={onChangeCloseBehavior}
-                onToggleLaunchAtStartup={onToggleLaunchAtStartup}
-                onToggleDragLock={onToggleDragLock}
-              />
-            ) : activeTab === 'shortcuts' ? (
-              <ShortcutsSettingsTab
-                globalQuickAddShortcut={globalQuickAddShortcut}
-                globalQuickAddShortcutKey={globalQuickAddShortcutKey}
-                voiceShortcut={voiceShortcut}
-                customShortcuts={customShortcuts}
-                onToggleGlobalQuickAddShortcut={onToggleGlobalQuickAddShortcut}
-                onChangeGlobalQuickAddShortcutKey={onChangeGlobalQuickAddShortcutKey}
-                onVoiceShortcutChange={onVoiceShortcutChange}
-                onChangeCustomShortcut={onChangeCustomShortcut}
-                onResetAllShortcuts={onResetAllShortcuts}
-              />
-            ) : activeTab === 'notifications' && notificationChannels ? (
-              <NotificationsSettingsTab
-                profile={notificationProfile}
-                leadMinutes={notificationLeadMinutes}
-                channels={notificationChannels}
-                onApplyProfile={(p) => onApplyNotificationProfile?.(p)}
-                onChangeChannel={(ev, mode) => onChangeNotificationChannel?.(ev, mode)}
-                onChangeLeadMinutes={(m) => onChangeNotificationLeadMinutes?.(m)}
-                onSendTest={() => onSendTestNotification?.()}
-              />
-            ) : activeTab === 'ai' ? (
-              <AiVoiceSettingsTab onNotifyVoice={onNotifyVoice} />
-            ) : activeTab === 'data' ? (
-              <DataBackupSettingsTab
-                totalTodoCount={totalTodoCount}
-                completedTodoCount={completedTodoCount}
-                oneDriveStatus={oneDriveStatus}
-                onOneDriveStatusChange={setOneDriveStatus}
-                isImporting={isImporting}
-                onImportingChange={setIsImporting}
-                pendingImport={pendingImport}
-                onPendingImportChange={setPendingImport}
-                onClearAllCompleted={onClearAllCompleted}
-                onImportBackup={onImportBackup}
-                onApplyRestoredBootstrap={onApplyRestoredBootstrap}
-                onResetAllData={onResetAllData}
-                onNotifyCloudSync={onNotifyCloudSync}
-                formatTimestamp={formatTimestamp}
-              />
-            ) : activeTab === 'trash' ? (
-              <TrashSettingsTab
-                trashedCategories={trashedCategories}
-                trashedTodos={trashedTodos}
-                onRestoreTodo={onRestoreTodo}
-                onPermanentDeleteTodo={onPermanentDeleteTodo}
-                onRestoreCategory={onRestoreCategory}
-                onPermanentDeleteCategory={onPermanentDeleteCategory}
-                onEmptyTrash={onEmptyTrash}
-                formatTimestamp={formatTimestamp}
-              />
-            ) : activeTab === 'docs' ? (
-              <DocsSettingsSection />
-            ) : activeTab === 'webhooks' ? (
-              <WebhooksSettingsTab
-                webhookEnabled={webhookEnabled}
-                webhookUrl={webhookUrl}
-                webhookSecret={webhookSecret}
-                onSaveWebhook={
-                  onSaveWebhook ??
-                  (async (patch) => {
-                    await api.updateSettings(patch);
-                  })
-                }
-              />
-            ) : activeTab === 'legal' ? (
-              <LegalSettingsTab onOpenLegalDoc={setActiveLegalDoc} />
-            ) : (
-              <AboutLegalSettingsTab
-                themeMode={themeMode}
-                themeId={themeId}
-                customThemeColor={customThemeColor}
-                appIconId={appIconId}
-                customIconColor={customIconColor}
-                zoomPercent={zoomPercent}
-                highContrast={highContrast}
-                reducedMotion={reducedMotion}
-                closeBehavior={closeBehavior}
-                launchAtStartup={launchAtStartup}
-                globalQuickAddShortcut={globalQuickAddShortcut}
-                oneDriveStatus={oneDriveStatus}
-                totalTodoCount={totalTodoCount}
-                completedTodoCount={completedTodoCount}
-                trashCount={trashCount}
-                autoUpdateCheck={autoUpdateCheck}
-                onToggleAutoUpdateCheck={onToggleAutoUpdateCheck}
-                updateState={updateState}
-                onCheckForUpdates={onCheckForUpdates}
-                onDownloadAndInstall={onDownloadAndInstall}
-                onQuitAndInstallUpdate={onQuitAndInstallUpdate}
-              />
             )}
           </div>
         </div>
@@ -751,5 +472,3 @@ export function SettingsModal({
     </section>
   );
 }
-
-export default SettingsModal;

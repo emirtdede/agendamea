@@ -195,7 +195,7 @@ const TIER_BUNDLES = Object.freeze({
 });
 
 function buildDownloadUrl(model) {
-  if (!model || !model.repo || !model.commit || !model.file) {
+  if (!model?.repo || !model.commit || !model.file) {
     throw new Error('Invalid model catalog specification.');
   }
   return `https://huggingface.co/${model.repo}/resolve/${model.commit}/${model.file}?download=true`;
@@ -207,10 +207,14 @@ function assertAllowedModelLicense(model) {
   }
   const lic = String(model.license || '').toLowerCase();
   if (!ALLOWED_LICENSES.has(lic)) {
-    throw new Error(`DISALLOWED_LICENSE: Model "${model.id || 'unknown'}" has disallowed license "${model.license}".`);
+    throw new Error(
+      `DISALLOWED_LICENSE: Model "${model.id || 'unknown'}" has disallowed license "${model.license}".`,
+    );
   }
   if (model.split === true) {
-    throw new Error(`SPLIT_MODEL_NOT_ALLOWED: Model "${model.id || 'unknown'}" must be a single file.`);
+    throw new Error(
+      `SPLIT_MODEL_NOT_ALLOWED: Model "${model.id || 'unknown'}" must be a single file.`,
+    );
   }
   if (!/^[a-f0-9]{40}$/i.test(String(model.commit || ''))) {
     throw new Error(`INVALID_COMMIT_PIN: Model "${model.id || 'unknown'}" commit must be 40-hex.`);
@@ -286,7 +290,7 @@ async function probeJsonUrl(url, fetchFn, timeoutMs = 1200) {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
     });
-    if (!res || !res.ok) return null;
+    if (!res?.ok) return null;
     return await res.json();
   } catch {
     return null;
@@ -296,9 +300,14 @@ async function probeJsonUrl(url, fetchFn, timeoutMs = 1200) {
 }
 
 async function detectExternalBackends(options = {}) {
-  const ollamaBase = String(options.ollamaBaseUrl || process.env.AGENDAMEA_OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/+$/, '');
-  const lmStudioBase = String(options.lmStudioBaseUrl || process.env.AGENDAMEA_LMSTUDIO_URL || 'http://127.0.0.1:1234').replace(/\/+$/, '');
-  const timeoutMs = typeof options.timeoutMs === 'number' && options.timeoutMs > 0 ? options.timeoutMs : 1200;
+  const ollamaBase = String(
+    options.ollamaBaseUrl || process.env.AGENDAMEA_OLLAMA_URL || 'http://127.0.0.1:11434',
+  ).replace(/\/+$/, '');
+  const lmStudioBase = String(
+    options.lmStudioBaseUrl || process.env.AGENDAMEA_LMSTUDIO_URL || 'http://127.0.0.1:1234',
+  ).replace(/\/+$/, '');
+  const timeoutMs =
+    typeof options.timeoutMs === 'number' && options.timeoutMs > 0 ? options.timeoutMs : 1200;
 
   const [ollamaJson, lmJson] = await Promise.all([
     probeJsonUrl(`${ollamaBase}/api/tags`, options.fetchFn, timeoutMs),
@@ -306,14 +315,10 @@ async function detectExternalBackends(options = {}) {
   ]);
 
   const ollamaModels = Array.isArray(ollamaJson?.models)
-    ? ollamaJson.models
-        .map((m) => String(m?.name || m?.model || '').trim())
-        .filter(Boolean)
+    ? ollamaJson.models.map((m) => String(m?.name || m?.model || '').trim()).filter(Boolean)
     : [];
   const lmStudioModels = Array.isArray(lmJson?.data)
-    ? lmJson.data
-        .map((m) => String(m?.id || '').trim())
-        .filter(Boolean)
+    ? lmJson.data.map((m) => String(m?.id || '').trim()).filter(Boolean)
     : [];
 
   return {

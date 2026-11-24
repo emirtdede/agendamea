@@ -8,9 +8,12 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   verify:
-    name: Typecheck, Unit & Integration Tests, Production Build
+    name: Enterprise Lint, Security, Tests, Coverage, Build & Smoke
     runs-on: windows-latest
 
     steps:
@@ -21,26 +24,46 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Setup .NET 10 SDK (Modern WPF Setup)
+      - name: Setup .NET 10 SDK (Modern WPF Setup & Native CLI)
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies (frozen lockfile)
+        run: npm ci
 
-      - name: TypeScript type-check
+      - name: Biome lint & format check
+        run: npm run check:biome
+
+      - name: Strict TypeScript + CJS checkJs type-check
         run: npm run lint
 
-      - name: Run full QA, AI & i18n test suite
-        run: npm test
+      - name: Production license compliance & high-severity audit
+        run: |
+          npm run check:licenses
+          npm audit --omit=dev --audit-level=high
 
-      - name: Run modern WPF Setup engine tests
-        run: npm run test:setup
+      - name: Run full Node unit & integration suite with coverage gates
+        run: npm run test:coverage
 
-      - name: Build production client & server
-        run: npm run build
+      - name: Run React 19 UI suite (Vitest + RTL) with coverage gates
+        run: npm run test:ui:coverage
+
+      - name: Run modern WPF Setup engine tests & strict C# analyzer builds
+        run: |
+          npm run test:setup
+          dotnet build installer/Agendamea.Setup/Agendamea.Setup.csproj -c Release --nologo
+          dotnet build installer/Agendamea.Cli/Agendamea.Cli.csproj -c Release --nologo
+
+      - name: Build production client & server + verify bundle budgets
+        run: |
+          npm run build
+          npm run check:budget
+
+      - name: Real Electron BrowserWindow E2E smoke test (Playwright)
+        run: npm run test:e2e
 
       - name: Packaged Windows directory smoke check
         run: npm run dist:win:dir

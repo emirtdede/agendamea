@@ -1,7 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import fs from 'fs';
-import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -223,8 +223,8 @@ export default defineConfig(() => {
                 priority: 25,
               },
               {
-                name: 'i18n-locales',
-                test: /src[\\/]i18n[\\/]/,
+                name: 'i18n-core',
+                test: /src[\\/]i18n[\\/](?!locales[\\/])/,
                 priority: 20,
               },
             ],

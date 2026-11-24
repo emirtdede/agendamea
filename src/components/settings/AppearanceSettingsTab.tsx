@@ -1,485 +1,598 @@
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Monitor,
+  Moon,
+  Pipette,
+  RotateCcw,
+  Sparkles,
+  Star,
+  Sun,
+  Type,
+} from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, Copy, Monitor, Moon, Palette, Sun } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
-import type { AppIconId, ThemeId, ThemeMode } from '../../types';
+import type { AppIconId, FontFamilyPreset, ListDensity, ThemeId, ThemeMode } from '../../types';
 import {
   COLOR_THEMES,
+  getContrastingForeground,
+  normalizeHexColor,
   resolveAppIconColors,
   resolveEffectiveThemeMode,
 } from '../../utils/themes';
 import { BrandMark } from '../BrandMark';
-import { ColorSpectrumPicker } from '../ColorSpectrumPicker';
 
-export interface AppearanceSettingsTabProps {
+interface AppearanceSettingsTabProps {
   themeMode: ThemeMode;
   themeId: ThemeId;
   customThemeColor: string;
+  recentCustomColors: string[];
   appIconId: AppIconId;
   customIconColor: string;
+  listDensity: ListDensity;
+  fontFamily: FontFamilyPreset;
   onChangeMode: (mode: ThemeMode) => void;
   onChangeTheme: (id: ThemeId) => void;
   onChangeCustomThemeColor: (hex: string) => void;
   onChangeAppIcon: (id: AppIconId) => void;
   onChangeCustomIconColor: (hex: string) => void;
+  onChangeListDensity: (density: ListDensity) => void;
+  onChangeFontFamily: (font: FontFamilyPreset) => void;
+  onResetAppearance: () => void;
 }
 
 export const AppearanceSettingsTab = React.memo(function AppearanceSettingsTab({
   themeMode,
   themeId,
   customThemeColor,
+  recentCustomColors,
   appIconId,
   customIconColor,
+  listDensity,
+  fontFamily,
   onChangeMode,
   onChangeTheme,
   onChangeCustomThemeColor,
   onChangeAppIcon,
   onChangeCustomIconColor,
+  onChangeListDensity,
+  onChangeFontFamily,
+  onResetAppearance,
 }: AppearanceSettingsTabProps) {
-  const { t, getThemeDisplayName } = useI18n();
-  const [isAppIconOpen, setIsAppIconOpen] = useState(true);
-  const [copiedHexTarget, setCopiedHexTarget] = useState<'theme' | 'icon' | null>(null);
+  const { t } = useI18n();
+  const [customThemeHexInput, setCustomThemeHexInput] = useState(customThemeColor);
+  const [customIconHexInput, setCustomIconHexInput] = useState(customIconColor);
+  const [iconsExpanded, setIconsExpanded] = useState(true);
+  const [copiedHex, setCopiedHex] = useState<'theme' | 'icon' | null>(null);
   const copyTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    setCustomThemeHexInput(customThemeColor);
+  }, [customThemeColor]);
+
+  useEffect(() => {
+    setCustomIconHexInput(customIconColor);
+  }, [customIconColor]);
+
+  useEffect(() => {
     return () => {
-      if (copyTimerRef.current !== null) {
-        window.clearTimeout(copyTimerRef.current);
-      }
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
     };
   }, []);
 
   const effectiveMode = resolveEffectiveThemeMode(themeMode);
-  const activeThemeItem = COLOR_THEMES.find((item) => item.id === themeId);
-  const activeThemeHex = (
-    themeId === 'custom'
-      ? customThemeColor
-      : effectiveMode === 'dark'
-        ? activeThemeItem?.swatchDark ?? '#fafafa'
-        : activeThemeItem?.swatch ?? '#18181b'
-  ).toUpperCase();
 
-  const activeIconColors = resolveAppIconColors(
-    appIconId,
-    themeId,
-    themeMode,
-    customThemeColor,
-    customIconColor,
-  );
-  const activeIconHex = activeIconColors.bg.toUpperCase();
-
-  const handleCopyHex = async (target: 'theme' | 'icon', hex: string) => {
+  const handleCopyHex = async (kind: 'theme' | 'icon', value: string) => {
+    const clean = (normalizeHexColor(value) ?? value).toUpperCase();
     try {
-      await navigator.clipboard.writeText(hex);
-      if (copyTimerRef.current !== null) {
-        window.clearTimeout(copyTimerRef.current);
-      }
-      setCopiedHexTarget(target);
+      await navigator.clipboard.writeText(clean);
+      setCopiedHex(kind);
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
       copyTimerRef.current = window.setTimeout(() => {
+        setCopiedHex(null);
         copyTimerRef.current = null;
-        setCopiedHexTarget((prev) => (prev === target ? null : prev));
-      }, 1800);
+      }, 1500);
     } catch {
-      // Ignore clipboard restrictions
+      // Ignore clipboard restriction
     }
   };
-  const activeIconLabel =
-    appIconId === 'match-theme'
-      ? t.appIconMatchTheme
-      : appIconId === 'obsidian'
-        ? t.appIconDarkMono
-        : appIconId === 'obsidian-light'
-          ? t.appIconLightMono
-          : appIconId === 'custom'
-            ? `${t.appIconCustom} (${customIconColor.toUpperCase()})`
-            : (() => {
-                const matched = COLOR_THEMES.find((item) => item.id === appIconId);
-                return matched
-                  ? getThemeDisplayName(matched.id, matched.name)
-                  : t.appIconMatchTheme;
-              })();
+
+  const themeNames: Record<ThemeId, string> = {
+    obsidian: t.colorObsidian,
+    slate: t.colorSlate,
+    navy: t.colorNavy,
+    blue: t.colorBlue,
+    cyan: t.colorCyan,
+    indigo: t.colorIndigo,
+    purple: t.colorPurple,
+    pink: t.colorPink,
+    red: t.colorRed,
+    orange: t.colorOrange,
+    yellow: t.colorYellow,
+    emerald: t.colorEmerald,
+    grass: t.colorGrass,
+    lime: t.colorLime,
+    custom: t.customThemeButton,
+  };
+
+  const iconChoices: Array<{ id: AppIconId; label: string; bg: string; fg: string }> = [
+    {
+      id: 'match-theme',
+      label: t.appIconMatchTheme,
+      ...resolveAppIconColors('match-theme', themeId, themeMode, customThemeColor, customIconColor),
+    },
+    { id: 'obsidian', label: t.appIconDarkMono, bg: '#111114', fg: '#fafafa' },
+    { id: 'obsidian-light', label: t.appIconLightMono, bg: '#fafafa', fg: '#111114' },
+    ...COLOR_THEMES.filter((ct) => ct.id !== 'obsidian').map((ct) => ({
+      id: ct.id as AppIconId,
+      label: themeNames[ct.id],
+      bg: ct.swatch,
+      fg: getContrastingForeground(ct.swatch),
+    })),
+    {
+      id: 'custom',
+      label: t.appIconCustom,
+      bg: normalizeHexColor(customIconColor) ?? '#2563eb',
+      fg: getContrastingForeground(normalizeHexColor(customIconColor) ?? '#2563eb'),
+    },
+  ];
+
+  const previewPadding =
+    listDensity === 'compact' ? 'py-1.5' : listDensity === 'spacious' ? 'py-3.5' : 'py-2.5';
 
   return (
-    <>
-      {/* Appearance Mode (Light / Dark / System Auto-Follow) */}
-      <section aria-label={t.appearanceModeTitle} className="space-y-2.5">
-        <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-          {t.appearanceModeTitle}
-        </h3>
-        <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1.5">
+    <div className="space-y-8">
+      {/* Live Mini Task Preview */}
+      <section
+        aria-label={t.appearancePreviewTitle}
+        data-testid="appearance-live-preview"
+        className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-2">
+          <span className="text-[11px] font-semibold text-[var(--text-muted)]">
+            {t.appearancePreviewTitle}
+          </span>
           <button
             type="button"
-            data-testid="theme-mode-light"
-            onClick={() => onChangeMode('light')}
-            aria-pressed={themeMode === 'light'}
-            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
-              themeMode === 'light'
-                ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] border border-[var(--accent)]/40'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-            }`}
+            data-testid="appearance-reset-btn"
+            onClick={onResetAppearance}
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
           >
-            <Sun className="h-4 w-4" />
-            <span>{t.lightMode}</span>
-          </button>
-          <button
-            type="button"
-            data-testid="theme-mode-dark"
-            onClick={() => onChangeMode('dark')}
-            aria-pressed={themeMode === 'dark'}
-            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
-              themeMode === 'dark'
-                ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] border border-[var(--accent)]/40'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <Moon className="h-4 w-4" />
-            <span>{t.darkMode}</span>
-          </button>
-          <button
-            type="button"
-            data-testid="theme-mode-system"
-            onClick={() => onChangeMode('system')}
-            aria-pressed={themeMode === 'system'}
-            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
-              themeMode === 'system'
-                ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] border border-[var(--accent)]/40'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <Monitor className="h-4 w-4" />
-            <span>{t.systemMode}</span>
+            <RotateCcw className="h-3 w-3" />
+            <span>{t.resetTabDefaultsButton}</span>
           </button>
         </div>
-      </section>
-
-      {/* 14 Built-in Color Themes + Custom HEX Theme */}
-      <section aria-label={t.colorThemeTitle} className="space-y-2.5">
-        <div className="flex items-center justify-between">
-          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-            {t.colorThemeTitle}
-          </h3>
-          <button
-            type="button"
-            data-testid="copy-theme-hex-btn"
-            onClick={() => void handleCopyHex('theme', activeThemeHex)}
-            title={`${t.docsCopyButton}: ${activeThemeHex}`}
-            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono-tabular text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-          >
-            {copiedHexTarget === 'theme' ? (
-              <>
-                <Check className="h-3 w-3 text-emerald-500" />
-                <span className="text-emerald-500 font-sans text-[11px] font-medium">
-                  {t.docsCopiedLabel}
-                </span>
-              </>
-            ) : (
-              <>
-                <span dir="ltr">{activeThemeHex}</span>
-                <Copy className="h-3 w-3 opacity-65" />
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {COLOR_THEMES.map((theme) => {
-              const isSelected = theme.id === themeId;
-              const swatch = effectiveMode === 'dark' ? theme.swatchDark : theme.swatch;
-              return (
-                <button
-                  key={theme.id}
-                  type="button"
-                  onClick={() => onChangeTheme(theme.id)}
-                  aria-pressed={isSelected}
-                  className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
-                    isSelected
-                      ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                      : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span
-                      aria-hidden="true"
-                      className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
-                      style={{ backgroundColor: swatch }}
-                    />
-                    <span className="truncate whitespace-nowrap">
-                      {getThemeDisplayName(theme.id, theme.name)}
-                    </span>
-                  </span>
-                  {isSelected && <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />}
-                </button>
-              );
-            })}
-
-            {/* Custom HEX Color Theme Slot */}
-            <button
-              type="button"
-              data-testid="custom-theme-button"
-              onClick={() => onChangeTheme('custom')}
-              aria-pressed={themeId === 'custom'}
-              className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
-                themeId === 'custom'
-                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                  : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <span className="flex items-center gap-2 min-w-0">
-                {themeId === 'custom' ? (
-                  <span
-                    aria-hidden="true"
-                    className="h-3.5 w-3.5 shrink-0 rounded-full border border-black/15"
-                    style={{ backgroundColor: customThemeColor }}
-                  />
-                ) : (
-                  <span
-                    aria-hidden="true"
-                    className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--accent)]"
-                  >
-                    <Palette className="h-3.5 w-3.5" />
-                  </span>
-                )}
-                <span className="truncate whitespace-nowrap">
-                  {themeId === 'custom' ? customThemeColor.toUpperCase() : t.customThemeButton}
-                </span>
-              </span>
-              {themeId === 'custom' && (
-                <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-              )}
-            </button>
-          </div>
-
-          {themeId === 'custom' && (
-            <div
-              data-testid="custom-theme-editor"
-              className="animate-tab-enter rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
-            >
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-[var(--text-primary)]">
-                  {t.customThemeHexTitle}
-                </p>
-                <p className="text-[11px] text-[var(--text-muted)]">{t.customThemeHexHint}</p>
-              </div>
-              <ColorSpectrumPicker
-                value={customThemeColor}
-                onChange={onChangeCustomThemeColor}
-                hexInputLabel={t.customColorHexLabel}
-                hexInputTestId="custom-theme-hex-input"
-              />
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Unified Dynamic System-Wide App Icon Selector (Expanded by Default) */}
-      <section aria-label={t.appIconSectionTitle} className="space-y-2.5">
-        <div className="flex items-center justify-between">
-          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-            {t.appIconSectionTitle}
-          </h3>
-          <button
-            type="button"
-            data-testid="copy-icon-hex-btn"
-            onClick={() => void handleCopyHex('icon', activeIconHex)}
-            title={`${t.docsCopyButton}: ${activeIconHex}`}
-            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono-tabular text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
-          >
-            {copiedHexTarget === 'icon' ? (
-              <>
-                <Check className="h-3 w-3 text-emerald-500" />
-                <span className="text-emerald-500 font-sans text-[11px] font-medium">
-                  {t.docsCopiedLabel}
-                </span>
-              </>
-            ) : (
-              <>
-                <span dir="ltr">{activeIconHex}</span>
-                <Copy className="h-3 w-3 opacity-65" />
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-          <button
-            type="button"
-            data-testid="app-icon-toggle-btn"
-            onClick={() => setIsAppIconOpen((prev) => !prev)}
-            aria-expanded={isAppIconOpen}
-            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-start hover:bg-[var(--surface-hover)]/60 transition-colors"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <BrandMark
-                className="h-8 w-8 shrink-0"
-                bgColor={activeIconColors.bg}
-                fgColor={activeIconColors.fg}
-                borderColor={activeIconColors.border}
+        <div className="divide-y divide-[var(--border)]">
+          <div className={`flex items-center justify-between gap-3 px-4 ${previewPadding}`}>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span
+                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
+                style={{ borderColor: 'var(--border-strong)' }}
               />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                  {activeIconLabel}
+                  {t.appearancePreviewTaskActive}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] truncate">{t.appIconSectionDesc}</p>
+                <p className="text-[11px] text-[var(--accent)] font-medium">
+                  {t.today} · 14:30 · #design
+                </p>
               </div>
             </div>
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] shrink-0">
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform ${isAppIconOpen ? 'rotate-180' : ''}`}
-              />
-            </span>
-          </button>
-
-          {isAppIconOpen && (
-            <div
-              data-testid="app-icon-panel"
-              className="animate-tab-enter border-t border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5"
+            <Star className="h-3.5 w-3.5 text-amber-500 fill-current shrink-0" />
+          </div>
+          <div className={`flex items-center gap-2.5 px-4 ${previewPadding}`}>
+            <span
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+              style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {(
-                  [
-                    { id: 'match-theme' as AppIconId, label: t.appIconMatchTheme },
-                    { id: 'obsidian-light' as AppIconId, label: t.appIconLightMono },
-                  ] as const
-                ).map((opt) => {
-                  const selected = appIconId === opt.id;
-                  const previewColors = resolveAppIconColors(
-                    opt.id,
-                    themeId,
-                    themeMode,
-                    customThemeColor,
-                    customIconColor,
-                  );
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      data-testid={`app-icon-${opt.id}`}
-                      aria-pressed={selected}
-                      onClick={() => onChangeAppIcon(opt.id)}
-                      className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
-                        selected
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <BrandMark
-                          className="h-4 w-4 rounded-[5px] shrink-0"
-                          bgColor={previewColors.bg}
-                          fgColor={previewColors.fg}
-                          borderColor={previewColors.border}
-                        />
-                        <span className="truncate whitespace-nowrap">{opt.label}</span>
-                      </span>
-                      {selected && <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />}
-                    </button>
-                  );
-                })}
-              </div>
+              <Check className="h-2.5 w-2.5 stroke-[3]" />
+            </span>
+            <p className="text-sm line-through text-[var(--text-muted)] truncate">
+              {t.appearancePreviewTaskDone}
+            </p>
+          </div>
+        </div>
+      </section>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {COLOR_THEMES.map((item) => {
-                  const selected = appIconId === item.id;
-                  const previewColors = resolveAppIconColors(
-                    item.id,
-                    themeId,
-                    themeMode,
-                    customThemeColor,
-                    customIconColor,
-                  );
-                  const label = getThemeDisplayName(item.id, item.name);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      data-testid={`app-icon-${item.id}`}
-                      aria-pressed={selected}
-                      onClick={() => onChangeAppIcon(item.id)}
-                      className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
-                        selected
-                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                          : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <BrandMark
-                          className="h-4 w-4 rounded-[5px] shrink-0"
-                          bgColor={previewColors.bg}
-                          fgColor={previewColors.fg}
-                          borderColor={previewColors.border}
-                        />
-                        <span className="truncate whitespace-nowrap">{label}</span>
-                      </span>
-                      {selected && <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />}
-                    </button>
-                  );
-                })}
+      {/* Light / Dark / System Mode */}
+      <section aria-label={t.appearanceModeTitle} data-setting-id="appearance-mode">
+        <div className="mb-3">
+          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+            {t.appearanceModeTitle}
+          </h3>
+        </div>
+        <div className="grid grid-cols-3 gap-2.5">
+          {(
+            [
+              ['light', Sun, t.lightMode],
+              ['dark', Moon, t.darkMode],
+              ['system', Monitor, t.systemMode],
+            ] as const
+          ).map(([mode, Icon, label]) => {
+            const active = themeMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onChangeMode(mode)}
+                aria-pressed={active}
+                className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  active
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                    : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
-                <button
-                  type="button"
-                  data-testid="app-icon-custom"
-                  aria-pressed={appIconId === 'custom'}
-                  onClick={() => onChangeAppIcon('custom')}
-                  className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start text-[13px] font-medium transition-colors ${
-                    appIconId === 'custom'
-                      ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                      : 'border-dashed border-[var(--border-strong)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    {appIconId === 'custom' ? (
-                      <BrandMark
-                        className="h-4 w-4 rounded-[5px] shrink-0"
-                        bgColor={activeIconColors.bg}
-                        fgColor={activeIconColors.fg}
-                        borderColor={activeIconColors.border}
-                      />
-                    ) : (
-                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--accent)]">
-                        <Palette className="h-3.5 w-3.5" />
-                      </span>
-                    )}
-                    <span className="truncate whitespace-nowrap">
-                      {appIconId === 'custom' ? customIconColor.toUpperCase() : t.appIconCustom}
-                    </span>
-                  </span>
-                  {appIconId === 'custom' && (
-                    <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                  )}
-                </button>
-              </div>
+      {/* List Density & Font Family */}
+      <section
+        aria-label={t.appearanceTypographyTitle}
+        data-setting-id="appearance-density-font"
+        className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-4"
+      >
+        <div className="flex items-center gap-2">
+          <Type className="h-4 w-4 text-[var(--accent)]" />
+          <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+            {t.appearanceTypographyTitle}
+          </h3>
+        </div>
 
-              {appIconId === 'custom' && (
-                <div
-                  data-testid="custom-icon-editor"
-                  className="animate-tab-enter rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-3.5 space-y-2.5"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-[var(--text-primary)]">
-                      {t.appIconCustom} (HEX)
-                    </p>
-                    <p className="text-[11px] text-[var(--text-muted)]">{t.customThemeHexHint}</p>
-                  </div>
-                  <ColorSpectrumPicker
-                    value={customIconColor}
-                    onChange={onChangeCustomIconColor}
-                    hexInputLabel={`${t.appIconCustom} (HEX)`}
-                    hexInputTestId="custom-icon-hex-input"
-                    previewNode={
-                      <BrandMark
-                        className="h-8 w-8 shrink-0"
-                        bgColor={activeIconColors.bg}
-                        fgColor={activeIconColors.fg}
-                        borderColor={activeIconColors.border}
-                      />
-                    }
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">
+            {t.appearanceDensityLabel}
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {(
+              [
+                ['compact', t.appearanceDensityCompact],
+                ['comfortable', t.appearanceDensityComfortable],
+                ['spacious', t.appearanceDensitySpacious],
+              ] as const
+            ).map(([densityId, label]) => (
+              <button
+                key={densityId}
+                type="button"
+                data-testid={`density-${densityId}`}
+                aria-pressed={listDensity === densityId}
+                onClick={() => onChangeListDensity(densityId)}
+                className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                  listDensity === densityId
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2 border-t border-[var(--border)] pt-3">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">
+            {t.appearanceFontLabel}
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {(
+              [
+                ['system', t.appearanceFontSystem],
+                ['sans', t.appearanceFontSans],
+                ['mono', t.appearanceFontMono],
+                ['dyslexic', t.appearanceFontDyslexic],
+              ] as const
+            ).map(([fontId, label]) => (
+              <button
+                key={fontId}
+                type="button"
+                data-testid={`font-${fontId}`}
+                aria-pressed={fontFamily === fontId}
+                onClick={() => onChangeFontFamily(fontId)}
+                className={`rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors ${
+                  fontFamily === fontId
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Color Theme Palette */}
+      <section aria-label={t.colorThemeTitle} data-setting-id="appearance-theme">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
+            {t.colorThemeTitle}
+          </h3>
+          <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+            {COLOR_THEMES.length + 1} · {t.customThemeButton}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+          {COLOR_THEMES.map((theme) => {
+            const active = themeId === theme.id;
+            const swatch = effectiveMode === 'dark' ? theme.swatchDark : theme.swatch;
+            return (
+              <button
+                key={theme.id}
+                type="button"
+                onClick={() => onChangeTheme(theme.id)}
+                aria-pressed={active}
+                className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-start transition-colors ${
+                  active
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                    : 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="h-4 w-4 rounded-full shrink-0 border border-black/15 dark:border-white/20"
+                    style={{ backgroundColor: swatch }}
                   />
-                </div>
-              )}
+                  <span className="truncate text-xs font-medium text-[var(--text-primary)]">
+                    {themeNames[theme.id]}
+                  </span>
+                </span>
+                {active && <Check className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />}
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => onChangeTheme('custom')}
+            aria-pressed={themeId === 'custom'}
+            className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-start transition-colors ${
+              themeId === 'custom'
+                ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                : 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]'
+            }`}
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <span
+                className="flex h-4 w-4 items-center justify-center rounded-full shrink-0 border border-black/15 dark:border-white/20"
+                style={{ backgroundColor: customThemeColor }}
+              >
+                <Sparkles
+                  className="h-2.5 w-2.5"
+                  style={{ color: getContrastingForeground(customThemeColor) }}
+                />
+              </span>
+              <span className="truncate text-xs font-medium text-[var(--text-primary)]">
+                {t.customThemeButton}
+              </span>
+            </span>
+            {themeId === 'custom' && (
+              <Check className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+            )}
+          </button>
+        </div>
+
+        {/* Custom HEX Theme Creator + Recent Swatches */}
+        <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-[var(--text-primary)]">
+                {t.customThemeHexTitle}
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.customThemeHexHint}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="relative flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-[var(--border-strong)] shadow-xs">
+                <input
+                  type="color"
+                  aria-label={t.selectColorLabel}
+                  value={normalizeHexColor(customThemeColor) ?? '#2563eb'}
+                  onChange={(e) => {
+                    const hex = e.target.value;
+                    setCustomThemeHexInput(hex);
+                    onChangeCustomThemeColor(hex);
+                  }}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+                <span
+                  className="flex h-full w-full items-center justify-center"
+                  style={{ backgroundColor: customThemeColor }}
+                >
+                  <Pipette
+                    className="h-3.5 w-3.5"
+                    style={{ color: getContrastingForeground(customThemeColor) }}
+                  />
+                </span>
+              </label>
+
+              <input
+                type="text"
+                value={customThemeHexInput}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCustomThemeHexInput(val);
+                  const norm = normalizeHexColor(val);
+                  if (norm) onChangeCustomThemeColor(norm);
+                }}
+                onBlur={() => {
+                  const norm = normalizeHexColor(customThemeHexInput);
+                  if (norm) {
+                    setCustomThemeHexInput(norm);
+                    onChangeCustomThemeColor(norm);
+                  } else {
+                    setCustomThemeHexInput(customThemeColor);
+                  }
+                }}
+                placeholder="#2563eb"
+                aria-label={t.customColorHexLabel}
+                maxLength={7}
+                className="font-mono-tabular w-24 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs uppercase text-[var(--text-primary)] focus:border-[var(--accent)]"
+              />
+
+              <button
+                type="button"
+                data-testid="copy-theme-hex-btn"
+                onClick={() => void handleCopyHex('theme', customThemeColor)}
+                aria-label={t.docsCopyButton}
+                title={t.docsCopyButton}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+              >
+                {copiedHex === 'theme' ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {recentCustomColors.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2.5">
+              <span className="text-[11px] font-medium text-[var(--text-muted)]">
+                {t.appearanceRecentColorsLabel}:
+              </span>
+              {recentCustomColors.map((hex) => (
+                <button
+                  key={hex}
+                  type="button"
+                  onClick={() => {
+                    setCustomThemeHexInput(hex);
+                    onChangeCustomThemeColor(hex);
+                  }}
+                  title={hex.toUpperCase()}
+                  aria-label={hex.toUpperCase()}
+                  className="h-6 w-6 rounded-full border border-black/20 dark:border-white/25 transition-transform hover:scale-110"
+                  style={{ backgroundColor: hex }}
+                />
+              ))}
             </div>
           )}
         </div>
       </section>
-    </>
+
+      {/* App Icon Customization */}
+      <section aria-label={t.appIconSectionTitle} data-setting-id="appearance-icon">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            aria-expanded={iconsExpanded}
+            onClick={() => setIconsExpanded((prev) => !prev)}
+            className="flex items-start gap-2 text-start group"
+          >
+            {iconsExpanded ? (
+              <ChevronDown className="mt-0.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+            ) : (
+              <ChevronRight className="mt-0.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
+            )}
+            <div>
+              <h3 className="font-display text-xs font-semibold text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-colors">
+                {t.appIconSectionTitle}
+              </h3>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.appIconSectionDesc}</p>
+            </div>
+          </button>
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">
+            <BrandMark className="h-6 w-6" />
+            <span className="font-mono-tabular text-[11px] font-medium text-[var(--text-secondary)]">
+              Agendamea
+            </span>
+          </div>
+        </div>
+
+        {iconsExpanded && (
+          <>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+              {iconChoices.map((choice) => {
+                const active = appIconId === choice.id;
+                return (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    onClick={() => onChangeAppIcon(choice.id)}
+                    aria-pressed={active}
+                    className={`flex flex-col items-center gap-2 rounded-xl border px-2 py-2.5 text-center transition-colors ${
+                      active
+                        ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                        : 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]'
+                    }`}
+                  >
+                    <BrandMark className="h-8 w-8" bgColor={choice.bg} fgColor={choice.fg} />
+                    <span className="w-full truncate text-[11px] font-medium text-[var(--text-primary)]">
+                      {choice.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {appIconId === 'custom' && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3.5">
+                <span className="text-xs font-medium text-[var(--text-secondary)]">
+                  {t.customColorHexLabel}
+                </span>
+                <div className="flex items-center gap-2">
+                  <label className="relative flex h-8 w-8 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-[var(--border-strong)]">
+                    <input
+                      type="color"
+                      aria-label={t.customColorHexLabel}
+                      value={normalizeHexColor(customIconColor) ?? '#2563eb'}
+                      onChange={(e) => {
+                        const hex = e.target.value;
+                        setCustomIconHexInput(hex);
+                        onChangeCustomIconColor(hex);
+                      }}
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    />
+                    <span className="h-full w-full" style={{ backgroundColor: customIconColor }} />
+                  </label>
+                  <input
+                    type="text"
+                    value={customIconHexInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCustomIconHexInput(val);
+                      const norm = normalizeHexColor(val);
+                      if (norm) onChangeCustomIconColor(norm);
+                    }}
+                    onBlur={() => {
+                      const norm = normalizeHexColor(customIconHexInput);
+                      if (norm) {
+                        setCustomIconHexInput(norm);
+                        onChangeCustomIconColor(norm);
+                      } else {
+                        setCustomIconHexInput(customIconColor);
+                      }
+                    }}
+                    aria-label={t.customColorHexLabel}
+                    maxLength={7}
+                    className="font-mono-tabular w-24 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs uppercase text-[var(--text-primary)] focus:border-[var(--accent)]"
+                  />
+                  <button
+                    type="button"
+                    data-testid="copy-icon-hex-btn"
+                    onClick={() => void handleCopyHex('icon', customIconColor)}
+                    aria-label={t.docsCopyButton}
+                    title={t.docsCopyButton}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    {copiedHex === 'icon' ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+    </div>
   );
 });

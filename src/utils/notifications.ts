@@ -1,11 +1,6 @@
 import type { Todo } from '../types';
 
-export type NotificationProfileId =
-  | 'balanced'
-  | 'all'
-  | 'focus'
-  | 'silent_inapp'
-  | 'custom';
+export type NotificationProfileId = 'balanced' | 'all' | 'focus' | 'silent_inapp' | 'custom';
 
 export type NotificationChannelMode = 'both' | 'inApp' | 'desktop' | 'off';
 
@@ -28,7 +23,7 @@ export const NOTIFICATION_EVENT_KEYS: readonly NotificationEventType[] = [
   'appUpdates',
 ] as const;
 
-export const NOTIFICATION_LEAD_OPTIONS = [5, 15, 30, 60] as const;
+export const NOTIFICATION_LEAD_OPTIONS = [5, 10, 15, 30, 60] as const;
 
 export const NOTIFICATION_PROFILE_PRESETS: Record<
   Exclude<NotificationProfileId, 'custom'>,
@@ -70,9 +65,47 @@ export const NOTIFICATION_PROFILE_PRESETS: Record<
 
 export const DEFAULT_NOTIFICATION_PROFILE: NotificationProfileId = 'balanced';
 export const DEFAULT_NOTIFICATION_LEAD_MINUTES = 15;
+export const DEFAULT_QUIET_HOURS_START = '22:00';
+export const DEFAULT_QUIET_HOURS_END = '08:00';
+export const DEFAULT_DAILY_DIGEST_TIME = '09:00';
 export const DEFAULT_NOTIFICATION_CHANNELS: NotificationChannelsMap = {
   ...NOTIFICATION_PROFILE_PRESETS.balanced,
 };
+
+const HH_MM_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export function sanitizeTimeHHMM(raw: unknown, fallback: string): string {
+  if (typeof raw !== 'string') return fallback;
+  const trimmed = raw.trim();
+  return HH_MM_TIME_RE.test(trimmed) ? trimmed : fallback;
+}
+
+function toMinutesOfDay(hhmm: string): number {
+  const [h = 0, m = 0] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/**
+ * Returns true if `now` falls inside the configured Quiet Hours window.
+ * Supports overnight wrap windows such as 22:00 -> 08:00 as well as daytime windows like 13:00 -> 15:00.
+ */
+export function isWithinQuietHours(
+  now: Date,
+  enabled: boolean,
+  startHHMM: string,
+  endHHMM: string,
+): boolean {
+  if (!enabled) return false;
+  const start = toMinutesOfDay(sanitizeTimeHHMM(startHHMM, DEFAULT_QUIET_HOURS_START));
+  const end = toMinutesOfDay(sanitizeTimeHHMM(endHHMM, DEFAULT_QUIET_HOURS_END));
+  if (start === end) return false;
+  const cur = now.getHours() * 60 + now.getMinutes();
+  if (start < end) {
+    return cur >= start && cur < end;
+  }
+  // Overnight wrap (e.g., 22:00 to 08:00)
+  return cur >= start || cur < end;
+}
 
 export function isValidNotificationChannelMode(val: unknown): val is NotificationChannelMode {
   return val === 'both' || val === 'inApp' || val === 'desktop' || val === 'off';
@@ -162,8 +195,8 @@ export function evaluateTaskReminders(
     if (!targetDate) continue;
 
     if (todo.dueTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(todo.dueTime)) {
-      const [yy, mm, dd] = targetDate.split('-').map(Number);
-      const [hh, min] = todo.dueTime.split(':').map(Number);
+      const [yy = 0, mm = 1, dd = 1] = targetDate.split('-').map(Number);
+      const [hh = 0, min = 0] = todo.dueTime.split(':').map(Number);
       const dueDt = new Date(yy, mm - 1, dd, hh, min, 0, 0);
       if (Number.isNaN(dueDt.getTime())) continue;
 

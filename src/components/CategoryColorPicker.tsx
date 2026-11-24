@@ -10,11 +10,7 @@ interface CategoryColorPickerProps {
   ariaLabel: string;
 }
 
-export function CategoryColorPicker({
-  value,
-  onChange,
-  ariaLabel,
-}: CategoryColorPickerProps) {
+export function CategoryColorPicker({ value, onChange, ariaLabel }: CategoryColorPickerProps) {
   const { t, getCategoryColorDisplayName } = useI18n();
   const [hexDraft, setHexDraft] = useState(value.toUpperCase());
   const [isEditingHex, setIsEditingHex] = useState(false);
@@ -60,11 +56,7 @@ export function CategoryColorPicker({
   return (
     <div className="space-y-2">
       {/* 8 Most-Used Primary, Secondary & White Swatches */}
-      <div
-        className="grid grid-cols-8 gap-1.5"
-        role="radiogroup"
-        aria-label={ariaLabel}
-      >
+      <fieldset className="grid grid-cols-8 gap-1.5 border-0 p-0" aria-label={ariaLabel}>
         {CATEGORY_COLORS.map(({ hex, name }) => {
           const isSelected = value.toLowerCase() === hex.toLowerCase();
           const localizedColorName = getCategoryColorDisplayName(hex, name);
@@ -72,8 +64,7 @@ export function CategoryColorPicker({
             <button
               key={hex}
               type="button"
-              role="radio"
-              aria-checked={isSelected}
+              aria-pressed={isSelected}
               aria-label={`${t.selectColorLabel}: ${localizedColorName}`}
               title={localizedColorName}
               onClick={() => handleDirectSelect(hex)}
@@ -86,7 +77,7 @@ export function CategoryColorPicker({
             />
           );
         })}
-      </div>
+      </fieldset>
 
       {/* Custom In-App Visual Spectrum Toggle + Balanced Hex Input (Replaces misaligned native OS color popup) */}
       <div className="flex items-center gap-2">

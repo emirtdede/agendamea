@@ -46,6 +46,7 @@
 ---
 
 <a id="english-version"></a>
+
 # English Version
 
 <div align="center">
@@ -75,6 +76,7 @@ For effortless cross-device backup without vendor lock-in or server costs, Agend
 ## <img src="assets/icons/features.svg" width="20" height="20" align="absmiddle" alt="" /> Key Features
 
 ### <img src="assets/icons/bolt.svg" width="20" height="20" align="absmiddle" alt="" /> 4-Way Workspace Views & Daily Planning
+
 - **Flat List View**: Smart views (`All`, `Today`, `Important`, `Completed`), custom categories with 8 curated colors + custom spectrum HEX picker, pinning, instant search across titles/notes/subtasks/`#tags` with automatic **Date Range filtering**, and drag-and-drop or `Alt+Up/Down` keyboard ordering.
 - **Kanban Board**: Group tasks dynamically by **Priority** (`High`, `Normal`, `Low`) or **Status** (`Active`, `Completed`) with drag-and-drop transitions and optional drag lock protection.
 - **Calendar Planner**: Monthly calendar grid with chronological `HH:mm` time sorting per day, multi-day date spans, and a collapsible **Undated Tasks** drawer supporting drag-to-schedule directly onto dates.
@@ -82,29 +84,34 @@ For effortless cross-device backup without vendor lock-in or server costs, Agend
 - **Rich Task Details**: Optional start/due date ranges (`YYYY-MM-DD`), optional due times (`HH:mm`), post-creation `#tag` management (batch entry, deduplication, 12-tag limit, instant chip filtering), inline subtasks, and auto-saving notes with `keepalive` unmount flush.
 
 ### <img src="assets/icons/terminal.svg" width="20" height="20" align="absmiddle" alt="" /> Built-in 22-Tool MCP Server, Short Terminal CLI (`ag`) & Headless Daemon
+
 - **22-Tool Built-in MCP Server (`mcp/server.cjs` / `ag mcp`)**: JSON-RPC 2.0 over stdio for **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf**, and **VS Code** - works with zero external Node.js installation via bundled `Agendamea.exe` (`ELECTRON_RUN_AS_NODE=1`) in both **Live API** and **Cold-Start Offline SQLite** modes (including `agendamea_semantic_search` and `agendamea_ai_status`).
 - **Short Quote-Free Terminal CLI (`ag` / `agenda` / `agendamea`)**: 1-click PATH installation (`Terminale Kur` in Settings or `ag install` headlessly), numbered 1-2-3 lists, natural token parsing (`@today`, `@tomorrow`, `@YYYY-MM-DD..YYYY-MM-DD`, `14:30`, `!`, `*`, `^`, `#tag`, `/Category`, `--note`, `--sub`), batch operations (`ag ok 1 2 3`, `ag rm 1 2`), stdin piping (`ag import -`, `ag +`), terminal views (`ag cal`, `ag kanban`, `ag matris`), local AI/RAG (`ag ai`, `ag rag`, `ag ask`), and raw `-j` / `--json` output.
 - **Headless Background Daemon (`ag serve start|stop|status`)**: Run the local `127.0.0.1` REST API, SSE stream, and incoming webhook listener in the background without opening the Electron GUI window.
 - **Bi-Directional Webhooks (Multi-URL, Retry, HMAC-SHA256 & Logs)**: Automatic Discord (`content`), Slack (`text`), and generic JSON notifications across all task/subtask/category/trash/reset events with 2-attempt retry, event filtering (`webhookEvents`), persistent SQLite `webhook_logs` (`ag hook logs`), and a full-featured incoming trigger (`POST /api/webhook/incoming`) supporting both `X-Agendamea-Secret` and `X-Agendamea-Signature` HMAC verification.
 
 ### <img src="assets/icons/database.svg" width="20" height="20" align="absmiddle" alt="" /> Self-Healing SQLite Engine, Advanced Trash & Clean Start
+
 - **WAL-Mode SQLite (`better-sqlite3`)**: Runs with `journal_mode = WAL`, `synchronous = NORMAL`, `foreign_keys = ON`, `busy_timeout = 5000`, and versioned migrations (`PRAGMA user_version = 4`, FTS5 + Hybrid RAG chunk index).
 - **Corruption Self-Healing**: If a local database file is damaged by power loss, Agendamea preserves the broken file as `.corrupt-<timestamp>.bak` and initializes a clean database automatically.
 - **Searchable Trash Bin & 12-Second Undo**: Soft-deleted tasks and categories support instant search, type filters (`All`, `Tasks`, `Categories`), sorting (`Newest`, `Oldest`, `A-Z`, `Z-A`), and deletion date-range filtering, paired with a **12-second hover-pausing Undo toast**.
 - **Atomic Backup, Restore & Clean Start Reset**: One-click JSON export (`/api/export`), 5 MB validated atomic import (`/api/import`), and a 2-step **Reset All Data (Clean Start)** action with optional settings reset (`/api/reset`).
 
 ### <img src="assets/icons/plug.svg" width="20" height="20" align="absmiddle" alt="" /> Zero-Cost Multi-Cloud Folder Sync
+
 - **Automatic Multi-Provider Detection**: Auto-detects **OneDrive**, **Google Drive** (including virtual drive letters `D:`-`Z:` and localized names), **iCloud Drive**, and **Dropbox** (`info.json`), or connects to any custom local/network folder.
 - **Crash-Safe Atomic Writes & 15-Day Rolling History**: Uses atomic `.tmp` rename swaps, preserves `agendamea-onedrive-previous.json`, keeps **15 rolling daily snapshots**, and automatically falls back if a primary sync file is interrupted.
 - **Reinstall Recovery Banner & Headless Cloud Pull**: Detects existing cloud backups on fresh installs to prompt **Restore Backup** vs **Start Fresh**, plus headless `ag sync auto|set|pull|status` support.
 
 ### <img src="assets/icons/palette.svg" width="20" height="20" align="absmiddle" alt="" /> 28+ Theme Palettes, Custom HEX, Dynamic App Icons & 73 Languages
+
 - **14 Dual-Mode Themes + Custom HEX Theme Generator**: `Obsidian`, `Slate`, `Navy`, `Blue`, `Cyan`, `Indigo`, `Purple`, `Pink`, `Red`, `Orange`, `Yellow`, `Emerald`, `Grass`, `Lime`, plus unlimited **Custom HEX (`#RRGGBB`)** themes with one-click copyable HEX badges, WCAG AA contrast tokens, and anti-FOUC caching.
 - **Dynamic System-Wide App Icons**: Match theme automatically or choose Monochrome Dark/Light, any palette color, or a **Custom HEX icon** - synchronized live across the BrandMark, main window, Windows taskbar, system tray, Jump List, and Desktop / Start Menu shortcuts (`.lnk`).
-- **Full-Page Tabbed Settings & 7-Step Welcome Guide**: Split-navigation Settings covering *Appearance & Theme*, *Accessibility* (`80%-150%` zoom, High Contrast, Reduced Motion), *General & Language* (Windows startup, global `Ctrl+Alt+N` quick add, close-to-tray behavior), *Data & Backup*, *Trash*, *Documentation* (CLI/MCP/Webhooks/Shortcuts), and *Updates & Legal*.
+- **Full-Page Tabbed Settings & 7-Step Welcome Guide**: Split-navigation Settings covering _Appearance & Theme_, _Accessibility_ (`80%-150%` zoom, High Contrast, Reduced Motion), _General & Language_ (Windows startup, global `Ctrl+Alt+N` quick add, close-to-tray behavior), _Data & Backup_, _Trash_, _Documentation_ (CLI/MCP/Webhooks/Shortcuts), and _Updates & Legal_.
 - **73 Fully Localized Languages (Zero Leakage)**: Upfront multi-language Windows Setup `.exe` selector, OS locale auto-detection, full **RTL** mirroring (`ar`, `fa`, `he`, `ur`), and 5 offline localized legal documents.
 
 ### <img src="assets/icons/shield.svg" width="20" height="20" align="absmiddle" alt="" /> Hardened Localhost Security & Zero-Cost Delta Auto-Updates
+
 - **Loopback Isolation & CSRF Defense**: Binds exclusively to `127.0.0.1` (`38721` / `47821` with Hyper-V/WinNAT `EACCES` fallback), enforces Host DNS-rebinding checks, validates `Sec-Fetch-Site` and `Origin` on mutations, and applies strict security headers (`CSP`, `nosniff`, `SAMEORIGIN`, `no-referrer`).
 - **Native Electron 45 Shell & Delta Updater**: Single-instance lock with portable handoff, `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, external URL allowlist (`vellium.dev`, `github.com`), SHA-512 verified `electron-updater` silent/delta updates on GitHub builds, and strict Microsoft Store Policy 10.2.7 isolation (`!process.windowsStore`).
 
@@ -125,17 +132,20 @@ For effortless cross-device backup without vendor lock-in or server costs, Agend
 </div>
 
 ### Desktop & Local Backend
+
 - **Electron 45.4, .NET 10 WPF & electron-builder 26.18** - Frameless Windows desktop shell, taskbar voice overlay, system tray, Jump List, customizable global hotkeys, dynamic `.ico` generator, modern `640x420` monochrome WPF Setup & Uninstaller, Portable build, and Microsoft Store `.appx`/MSIX packaging
 - **Express 4.21 & Node.js 22+** - Loopback REST API (`127.0.0.1`), UTF-8/Windows-1254 safe JSON decoder, singleton SSE live stream (`/api/events`), bi-directional HMAC webhooks, multi-cloud folder sync, and memory-cached UI static delivery + on-demand `application/wasm` voice assets
 - **better-sqlite3 13.2** - High-throughput synchronous SQLite WAL engine (`user_version = 4`) with FTS5 + Hybrid RAG chunk index, `webhook_logs`, and `.corrupt-*.bak` self-healing
 
 ### Local AI, Neural Audio, CLI & MCP
+
 - **100% Offline Neural Voice & AI** - Mozilla RNNoise WASM (`48 kHz`), Silero VAD v5 ONNX, Piper VITS ONNX Neural TTS (5 verified voices + 5 styles + 5 chimes), Whisper.cpp + Qwen3 + Multilingual-E5, plus zero-download Ollama / LM Studio integration
 - **`shared/localStore.cjs`** - Unified Live-API + Cold-Start Offline SQLite engine with automatic schema init, cloud auto-detection, OS preference bridge, and headless daemon management
 - **`cli/agendamea.cjs` (`ag` / `agenda` / `agendamea`)** - Zero-dependency natural-language terminal CLI with Windows interactive stdout wrapper (`run-cli.ps1`)
 - **`mcp/server.cjs` (`ag mcp`)** - Built-in JSON-RPC 2.0 stdio MCP server exposing 22 complete headless tools
 
 ### Frontend, Build & Release
+
 - **React 19, TypeScript 7, Tailwind CSS v4 & Vite 8** - Modular component architecture with Workbox PWA support and 73-language compact locale builder
 - **Node.js `node:test` + .NET Setup Tests** - 54 Node unit/AI/security/i18n/CLI/MCP/webhook tests + 13 .NET 10 WPF Setup & SFX engine tests
 - **GitHub Actions & `electron-updater`** - Automated CI (`ci.yml`) and tagged Windows release pipeline (`release.yml`) with `SHA256SUMS.txt` and `winget` manifests
@@ -153,40 +163,55 @@ Agendamea/
 │   ├── vellium-banner.svg           # Monochrome Vellium header banner
 │   └── icons/                       # Monochrome 20x20 documentation SVG icons
 ├── cli/
-│   └── agendamea.cjs                # Short quote-free CLI (ag / agenda / agendamea) + AI/RAG, daemon & views
+│   ├── agendamea.cjs                # Short quote-free CLI entrypoint (ag / agenda / agendamea)
+│   ├── commands/                    # Modular system, AI/RAG & webhook/cloud CLI subcommands
+│   └── lib/                         # Shared CLI formatting, snapshots & shell helpers
 ├── mcp/
-│   └── server.cjs                   # Built-in JSON-RPC 2.0 stdio MCP server (22 headless tools)
+│   └── server.cjs                   # MCP 2025-11-25 JSON-RPC 2.0 server (23 tools, 5 resources, 4 prompts)
 ├── shared/
+│   ├── sqliteCore.cjs               # Canonical SQLite WAL v5 schema & migrations
+│   ├── todoRepository.cjs           # Shared CRUD, trash & atomic reset repository
+│   ├── settingsCodec.cjs            # Zero-drift 40+ key settings codec shared by server & CLI
 │   ├── localStore.cjs               # Unified Live API + Cold-Start Offline WAL SQLite engine
+│   ├── webhookEngine.cjs            # Standard Webhooks v1 HMAC signing, SSRF guard & retry backoff
 │   ├── aiCatalog.cjs                # Verified Apache 2.0 / MIT local AI catalog & Ollama/LM Studio probe
 │   ├── piperVoices.cjs              # Verified MIT / CC0 Piper VITS ONNX Neural TTS catalog & downloader
-│   ├── cliInstaller.cjs             # Shared Windows PATH shim installer (ag.cmd + run-cli.ps1)
-│   └── releaseUtils.cjs             # Shared SemVer comparator & GitHub release parser
+│   ├── cliLocales/ & serverLocales/ # 73-language CLI & backend localization bundles
+│   └── cliInstaller.cjs             # Shared Windows PATH shim installer (ag.exe / ag.target.json)
 ├── installer/
+│   ├── Agendamea.Cli/               # Native Windows CUI console shim source (ag.exe)
 │   ├── Agendamea.Setup/             # Native .NET 10 WPF 640x420 monochrome frameless Setup & Uninstaller
-│   └── Agendamea.Setup.Tests/       # 13 automated .NET Setup, SFX, Zip-Slip & 73-locale parity tests
+│   └── Agendamea.Setup.Tests/       # 15 automated .NET Setup, SFX, Zip-Slip & 73-locale parity tests
 ├── docs/                            # Indexed architecture, i18n, release & Microsoft Store documentation
 ├── electron/
-│   ├── main.cjs                     # Electron main process, tray, Jump List, IPC, CLI shims & updater
-│   ├── voiceOverlay.cjs             # Taskbar voice dictation overlay window controller
+│   ├── main.cjs                     # Electron main window, tray, Jump List & single-instance shell
+│   ├── modules/                     # Modular backend lifecycle, allowlisted IPC & delta auto-updater
 │   ├── ai/                          # Local Whisper STT, Qwen3/Ollama LLM, embeddings & secure orchestrator
+│   ├── voiceOverlay.cjs             # Taskbar voice dictation overlay window controller
 │   ├── preload.cjs                  # Context-isolated renderer IPC bridge
 │   └── iconGenerator.cjs            # Pure-Node multi-resolution Windows .ico & .lnk updater
-├── electron-resources/              # Windows icons & Microsoft Store APPX tiles
-├── public/                          # PWA manifest icons, Windows tiles, worklets & offline voice assets
-├── scripts/                         # esbuild server bundler, voice asset sync & modern WPF setup builder
-├── winget/manifests/                # WinGet 1.6.0 manifests (Vellium.Agendamea 1.1.0)
+├── electron-resources/              # Windows icons, NSIS/SFX & Microsoft Store APPX tiles
+├── public/                          # PWA manifest icons, Windows tiles & audio worklets
+├── scripts/                         # Clean, CLI shim, esbuild server, voice sync & WPF setup builders
+├── server/
+│   ├── middleware/                  # Loopback host, CSRF, headers & sync folder security guards
+│   ├── routes/                      # Modular core CRUD, webhooks, in-process MCP, cloud sync & AI routes
+│   └── services/                    # Non-blocking cloud sync, webhook worker, AI runtime & MCP store
 ├── src/
 │   ├── api/                         # Typed REST client & shared singleton SSE eventStream bus
+│   ├── components/                  # Virtualized list, workspace views, WelcomeModal & Settings tabs
+│   ├── store/                       # Zero-dep React 19 useSyncExternalStore isolated domain stores
+│   ├── db/database.ts               # TodoDatabase (SQLite WAL v5, FTS5/RAG, transactional imports)
+│   ├── hooks/                       # Notification center, updater, media query, context menus & drag
+│   ├── i18n/                        # 73-language dynamic code-split loader (tr/en core + 71 lazy chunks)
+│   ├── overlay/                     # Standalone taskbar voice dictation overlay entry
+│   ├── utils/                       # Pure domain logic, themes, shortcuts, notifications & Intl cache
 │   ├── voice/                       # RNNoise WASM, Silero VAD v5, Piper ONNX TTS & AudioWorklet capture
-│   ├── components/                  # Workspace views, Detail panel, ContextMenu, WelcomeModal & Settings tabs
-│   ├── db/database.ts               # TodoDatabase (SQLite WAL v4, FTS5/RAG, CRUD, reset, webhook_logs)
-│   ├── hooks/                       # useNotificationCenter, useAppUpdater, useOnlineStatus & helpers
-│   ├── i18n/                        # 73-language catalog, compact builder, RTL & 5 legal documents
-│   ├── utils/                       # themes, shortcuts, notifications, jsonBodyDecoder & 54 test suites
-│   ├── App.tsx                      # Root state, SSE external sync listener, shortcuts & layout
-│   └── types.ts                     # Shared domain models
-├── server.ts                        # Express loopback API, SSE stream, AI/TTS routes, webhooks & cloud sync
+│   ├── App.tsx                      # Root workspace orchestration & SSE live sync listener
+│   └── types.ts                     # Shared TypeScript domain models
+├── tests/                           # 84 automated Node unit, AI, MCP, CLI, webhook, i18n & audit tests
+├── winget/manifests/                # WinGet 1.6.0 manifests (Vellium.Agendamea 1.1.0)
+├── server.ts                        # Modular Express loopback server bootstrap entrypoint
 ├── electron-builder.yml             # Windows Portable & Microsoft Store APPX packaging config
 ├── CHANGELOG.md                     # Version history
 ├── LICENSE                          # MIT License (Vellium Teknoloji Anonim Sirketi)
@@ -249,14 +274,14 @@ flowchart TD
 
 ## <img src="assets/icons/database.svg" width="20" height="20" align="absmiddle" alt="" /> Storage & Security Schema
 
-| Path / Boundary | Protection | Contents |
-| :--- | :--- | :--- |
-| `%APPDATA%\Agendamea\agendamea.db` | SQLite WAL, `foreign_keys = ON`, `.corrupt-*.bak` recovery | `categories`, `todos`, `subtasks`, `rag_chunks`, `settings`, and `webhook_logs` tables (`user_version = 4`) |
-| `%APPDATA%\Agendamea\runtime-port.json` | Loopback port discovery & headless PID metadata | Active local API port for live CLI/MCP routing |
-| `%APPDATA%\Agendamea\dynamic-icons\` | Generated multi-resolution `.ico` & tray `.png` | Active system-wide custom/themed Agendamea icons |
-| `%LOCALAPPDATA%\Agendamea\bin\` | User-scoped PATH shims (no UAC required) | `ag.cmd`, `agenda.cmd`, `agendamea.cmd`, and `run-cli.ps1` |
-| `<CloudFolder>\Agendamea\` | Atomic `.tmp` swap, 15-day rolling backups, corrupt fallback | `agendamea-onedrive-sync.json`, previous & daily snapshots |
-| Loopback API (`127.0.0.1`) | Host allowlist, CSRF/Origin guard, HMAC-SHA256 webhooks, CSP | Local REST CRUD, `/api/events` SSE, `/api/webhook/incoming`, cloud sync |
+| Path / Boundary                         | Protection                                                   | Contents                                                                                                    |
+| :-------------------------------------- | :----------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------- |
+| `%APPDATA%\Agendamea\agendamea.db`      | SQLite WAL, `foreign_keys = ON`, `.corrupt-*.bak` recovery   | `categories`, `todos`, `subtasks`, `rag_chunks`, `settings`, and `webhook_logs` tables (`user_version = 4`) |
+| `%APPDATA%\Agendamea\runtime-port.json` | Loopback port discovery & headless PID metadata              | Active local API port for live CLI/MCP routing                                                              |
+| `%APPDATA%\Agendamea\dynamic-icons\`    | Generated multi-resolution `.ico` & tray `.png`              | Active system-wide custom/themed Agendamea icons                                                            |
+| `%LOCALAPPDATA%\Agendamea\bin\`         | User-scoped PATH shims (no UAC required)                     | `ag.cmd`, `agenda.cmd`, `agendamea.cmd`, and `run-cli.ps1`                                                  |
+| `<CloudFolder>\Agendamea\`              | Atomic `.tmp` swap, 15-day rolling backups, corrupt fallback | `agendamea-onedrive-sync.json`, previous & daily snapshots                                                  |
+| Loopback API (`127.0.0.1`)              | Host allowlist, CSRF/Origin guard, HMAC-SHA256 webhooks, CSP | Local REST CRUD, `/api/events` SSE, `/api/webhook/incoming`, cloud sync                                     |
 
 ---
 
@@ -332,6 +357,7 @@ Add Agendamea to **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf**, 
 **Uninstall:** Windows Settings -> Apps -> Agendamea -> Uninstall. Local user data under `%APPDATA%\Agendamea` is preserved by default (`deleteAppDataOnUninstall: false`) with an interactive choice in the custom uninstaller.
 
 ### Prerequisites (Building from Source)
+
 - **Windows 10 (1809+) or Windows 11** (64-bit) for desktop builds (or Linux/macOS for web/PWA development)
 - **Node.js 22+** and **npm**
 - **Git**
@@ -405,6 +431,7 @@ See [`LICENSE`](LICENSE) for the full MIT license text. Distributions delivered 
 ---
 
 <a id="turkish-version"></a>
+
 # Türkçe Versiyon
 
 <div align="center">
@@ -434,6 +461,7 @@ Sunucu maliyeti olmadan cihazlar arası yedekleme için **OneDrive**, **Google D
 ## <img src="assets/icons/features.svg" width="20" height="20" align="absmiddle" alt="" /> Öne Çıkan Özellikler
 
 ### <img src="assets/icons/bolt.svg" width="20" height="20" align="absmiddle" alt="" /> 4 Farklı Çalışma Görünümü ve Günlük Planlama
+
 - **Düz Liste Görünümü**: Akıllı görünümler (`Tümü`, `Bugün`, `Önemli`, `Tamamlananlar`), 8 hazır renk + özel renk spektrumlu kategoriler, sabitleme, başlık/not/alt görev/`#etiket` aramasıyla birlikte otomatik **Tarih Aralığı filtresi** ve sürükle-bırak veya `Alt+Yukarı/Aşağı` klavye sıralama.
 - **Kanban Panosu**: Görevleri **Önceliğe** veya **Duruma** göre sütunlarda yönetme, sürükle-bırak geçişleri ve sürükleme kilidi.
 - **Takvim Planlayıcı**: Gün içi `SS:dd` kronolojik sıralamalı aylık takvim ızgarası, çok günlü görev şeritleri ve sürükle-bırak tarihlendirme destekli **Tarihsiz Görevler** çekmecesi.
@@ -441,21 +469,25 @@ Sunucu maliyeti olmadan cihazlar arası yedekleme için **OneDrive**, **Google D
 - **Zengin Görev Detayları**: Başlangıç/bitiş tarih aralığı, saat planlama, çoklu `#etiket` yönetimi, sıralı alt görevler ve kapanışta `keepalive` güvenceli otomatik not kaydı.
 
 ### <img src="assets/icons/terminal.svg" width="20" height="20" align="absmiddle" alt="" /> Yerleşik 22 Araçlı MCP Sunucusu, Kısa Terminal CLI (`ag`) ve Arayüzsüz Servis
+
 - **22 Araçlı Yerleşik MCP Sunucusu (`mcp/server.cjs` / `ag mcp`)**: **Claude Desktop**, **Cursor**, **Antigravity**, **Windsurf** ve **VS Code** için harici Node.js gerektirmeyen stdio JSON-RPC 2.0 sunucusu (hem **Canlı API** hem **Soğuk Başlangıç Çevrimdışı SQLite** desteği, yerel hibrit RAG ve AI durum araçları dahil).
 - **Kısa ve Tırnaksız Terminal CLI (`ag` / `agenda` / `agendamea`)**: Ayarlar'dan tek tıkla veya `ag install` ile sıfır-GUI PATH kurulumu; 1-2-3 numaralama, doğal söz dizimi (`@bugun`, `@yarin`, `@YYYY-AA-GG..YYYY-AA-GG`, `14:30`, `!`, `*`, `^`, `#etiket`, `/Kategori`, `--note`, `--sub`), toplu işlemler (`ag ok 1 2 3`, `ag rm 1 2`), `stdin` boru hattı (`ag import -`), terminal görünümleri (`ag cal`, `ag kanban`, `ag matris`), yerel AI/RAG (`ag ai`, `ag rag`, `ag ask`) ve `-j` JSON çıktısı.
 - **Arayüzsüz Arka Plan Servisi (`ag serve start|stop|status`)**: Electron penceresi açmadan `127.0.0.1` yerel REST API ve gelen webhook dinleyicisini arka planda çalıştırır.
 - **Çift Yönlü Webhook Otomasyonu**: Discord, Slack, n8n, Zapier, Make ve özel sunucular için çoklu URL desteği, otomatik retry, olay filtresi (`webhookEvents`), SQLite teslimat günlüğü (`ag hook logs`) ve `X-Agendamea-Secret` / `X-Agendamea-Signature` HMAC doğrulamalı tam kapsamlı gelen webhook (`POST /api/webhook/incoming`).
 
 ### <img src="assets/icons/database.svg" width="20" height="20" align="absmiddle" alt="" /> Kendini Onaran SQLite Motoru, Gelişmiş Çöp Kutusu ve Temiz Başlangıç
+
 - **WAL Modlu SQLite (`better-sqlite3`)**: `journal_mode = WAL`, `foreign_keys = ON`, sürüm takipli göçler (`user_version = 4`, FTS5 + Hibrit RAG) ve bozulma durumunda `.corrupt-*.bak` koruyarak otomatik kurtarma.
 - **Aramalı Çöp Kutusu ve 12 Saniyelik Geri Al**: Anlık arama, tür filtresi, sıralama ve silinme tarih aralığı seçimi + fareyle duraklayan 12 saniyelik Geri Al bildirimi.
 - **Atomik Yedekleme ve Temiz Başlangıç (Verileri Sıfırla)**: 5 MB doğrulamalı JSON yedekleme/geri yükleme ve isteğe bağlı ayar sıfırlamalı 2 adımlı **Verileri Sıfırla** aracı.
 
 ### <img src="assets/icons/plug.svg" width="20" height="20" align="absmiddle" alt="" /> Ücretsiz Çoklu Bulut Klasör Eşitleme
+
 - **Otomatik Sağlayıcı Algılama**: **OneDrive**, **Google Drive**, **iCloud Drive** ve **Dropbox** klasörlerini otomatik tanır; eşit genişlikte çoklu bulut kontrolleri ve arayüzsüz `ag sync auto|set|pull` desteği sunar.
 - **15 Günlük Döngüsel Yedek ve Kurtarma Bandı**: Atomik `.tmp` yazım, bozuk dosya otomatik geri dönüşü ve format sonrası ilk açılışta tek tıkla kurtarma.
 
 ### <img src="assets/icons/palette.svg" width="20" height="20" align="absmiddle" alt="" /> 28+ Tema, Özel HEX, Dinamik Uygulama İkonu ve 73 Dil
+
 - **14 Çift Modlu Tema + Özel HEX Oluşturucu**: Tek tıkla kopyalanabilir HEX kodları, otomatik WCAG kontrast hesaplama ve anti-FOUC önbellek.
 - **Sistem Geneli Dinamik İkonlar**: Pencere, görev çubuğu, sistem tepsisi, Jump List ve Masaüstü/Başlat kısayollarıyla anlık eşzamanlı.
 - **73 Dil, Tam Sekmeli Ayarlar ve 7 Adımlı Karşılama Rehberi**: Sıfır dil sızıntısı, çok dilli Windows Setup seçicisi, 4 RTL dili (`ar`, `fa`, `he`, `ur`), `%80-%150` yakınlaştırma, yüksek kontrast, azaltılmış hareket ve 5 çevrimdışı yasal belge.

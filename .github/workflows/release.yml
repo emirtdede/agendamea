@@ -28,20 +28,40 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install dependencies (frozen lockfile)
+        run: npm ci
 
-      - name: TypeScript type-check
+      - name: Biome lint & format check
+        run: npm run check:biome
+
+      - name: TypeScript + CJS checkJs type-check
         run: npm run lint
 
-      - name: Run unit, AI & i18n tests
-        run: npm test
+      - name: License compliance & high-severity audit
+        run: |
+          npm run check:licenses
+          npm audit --omit=dev --audit-level=high
 
-      - name: Run modern WPF Setup tests
-        run: npm run test:setup
+      - name: Run unit, integration, UI & coverage gates
+        run: |
+          npm run test:coverage
+          npm run test:ui:coverage
+
+      - name: Run modern WPF Setup tests & strict C# builds
+        run: |
+          npm run test:setup
+          dotnet build installer/Agendamea.Setup/Agendamea.Setup.csproj -c Release --nologo
+          dotnet build installer/Agendamea.Cli/Agendamea.Cli.csproj -c Release --nologo
+
+      - name: Verify production bundle budgets
+        run: |
+          npm run build
+          npm run check:budget
 
       - name: Build Windows x64 Modern Setup, Portable & Store Packages
-        run: npm run dist:win && npm run dist:win:appx
+        run: |
+          npm run dist:win
+          npm run dist:win:appx
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 

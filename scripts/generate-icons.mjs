@@ -278,17 +278,31 @@ async function main() {
   fs.writeFileSync(path.join(ICONS_DIR, 'safari-pinned-tab.svg'), monochromeSvg, 'utf8');
   fs.writeFileSync(path.join(LOGOS_DIR, 'agendamea-mark-light.svg'), markLightSvg, 'utf8');
   fs.writeFileSync(path.join(LOGOS_DIR, 'agendamea-mark-dark.svg'), markDarkSvg, 'utf8');
-  fs.writeFileSync(path.join(LOGOS_DIR, 'agendamea-logo-light.svg'), horizontalLogoSvg('light'), 'utf8');
-  fs.writeFileSync(path.join(LOGOS_DIR, 'agendamea-logo-dark.svg'), horizontalLogoSvg('dark'), 'utf8');
+  fs.writeFileSync(
+    path.join(LOGOS_DIR, 'agendamea-logo-light.svg'),
+    horizontalLogoSvg('light'),
+    'utf8',
+  );
+  fs.writeFileSync(
+    path.join(LOGOS_DIR, 'agendamea-logo-dark.svg'),
+    horizontalLogoSvg('dark'),
+    'utf8',
+  );
 
   // High-res PNG logos
   fs.writeFileSync(
     path.join(LOGOS_DIR, 'agendamea-logo-light.png'),
-    await sharp(Buffer.from(horizontalLogoSvg('light')), { density: 288 }).resize(1280, 320).png({ compressionLevel: 9 }).toBuffer(),
+    await sharp(Buffer.from(horizontalLogoSvg('light')), { density: 288 })
+      .resize(1280, 320)
+      .png({ compressionLevel: 9 })
+      .toBuffer(),
   );
   fs.writeFileSync(
     path.join(LOGOS_DIR, 'agendamea-logo-dark.png'),
-    await sharp(Buffer.from(horizontalLogoSvg('dark')), { density: 288 }).resize(1280, 320).png({ compressionLevel: 9 }).toBuffer(),
+    await sharp(Buffer.from(horizontalLogoSvg('dark')), { density: 288 })
+      .resize(1280, 320)
+      .png({ compressionLevel: 9 })
+      .toBuffer(),
   );
 
   // 2. Multi-resolution Windows ICO (16, 24, 32, 48, 64, 128, 256)
@@ -315,11 +329,26 @@ async function main() {
   // 4. PWA Standard + Maskable + Apple Touch + WebP
   fs.writeFileSync(path.join(PUBLIC_DIR, 'pwa-192x192.png'), await renderPng(masterIconSvg, 192));
   fs.writeFileSync(path.join(PUBLIC_DIR, 'pwa-512x512.png'), await renderPng(masterIconSvg, 512));
-  fs.writeFileSync(path.join(PUBLIC_DIR, 'pwa-maskable-192x192.png'), await renderPng(maskableIconSvg, 192));
-  fs.writeFileSync(path.join(PUBLIC_DIR, 'pwa-maskable-512x512.png'), await renderPng(maskableIconSvg, 512));
-  fs.writeFileSync(path.join(PUBLIC_DIR, 'apple-touch-icon.png'), await renderPng(maskableIconSvg, 180));
-  fs.writeFileSync(path.join(ICONS_DIR, 'apple-touch-icon-152x152.png'), await renderPng(maskableIconSvg, 152));
-  fs.writeFileSync(path.join(ICONS_DIR, 'apple-touch-icon-167x167.png'), await renderPng(maskableIconSvg, 167));
+  fs.writeFileSync(
+    path.join(PUBLIC_DIR, 'pwa-maskable-192x192.png'),
+    await renderPng(maskableIconSvg, 192),
+  );
+  fs.writeFileSync(
+    path.join(PUBLIC_DIR, 'pwa-maskable-512x512.png'),
+    await renderPng(maskableIconSvg, 512),
+  );
+  fs.writeFileSync(
+    path.join(PUBLIC_DIR, 'apple-touch-icon.png'),
+    await renderPng(maskableIconSvg, 180),
+  );
+  fs.writeFileSync(
+    path.join(ICONS_DIR, 'apple-touch-icon-152x152.png'),
+    await renderPng(maskableIconSvg, 152),
+  );
+  fs.writeFileSync(
+    path.join(ICONS_DIR, 'apple-touch-icon-167x167.png'),
+    await renderPng(maskableIconSvg, 167),
+  );
 
   await sharp(Buffer.from(masterIconSvg), { density: 300 })
     .resize(512, 512)
@@ -340,48 +369,66 @@ async function main() {
 
   // 6. Complete Windows 10/11 & Microsoft Store (MSIX / UWP / PWABuilder) Asset Pack
   const windowsSquarePacks = [
-    ['SmallTile', [
-      ['scale-100', 71],
-      ['scale-125', 89],
-      ['scale-150', 107],
-      ['scale-200', 142],
-      ['scale-400', 284],
-    ]],
-    ['Square150x150Logo', [
-      ['scale-100', 150],
-      ['scale-125', 188],
-      ['scale-150', 225],
-      ['scale-200', 300],
-      ['scale-400', 600],
-    ]],
-    ['LargeTile', [
-      ['scale-100', 310],
-      ['scale-125', 388],
-      ['scale-150', 465],
-      ['scale-200', 620],
-      ['scale-400', 1240],
-    ]],
-    ['Square44x44Logo', [
-      ['scale-100', 44],
-      ['scale-125', 55],
-      ['scale-150', 66],
-      ['scale-200', 88],
-      ['scale-400', 176],
-    ]],
-    ['StoreLogo', [
-      ['scale-100', 50],
-      ['scale-125', 63],
-      ['scale-150', 75],
-      ['scale-200', 100],
-      ['scale-400', 200],
-    ]],
-    ['BadgeLogo', [
-      ['scale-100', 24],
-      ['scale-125', 30],
-      ['scale-150', 36],
-      ['scale-200', 48],
-      ['scale-400', 96],
-    ]],
+    [
+      'SmallTile',
+      [
+        ['scale-100', 71],
+        ['scale-125', 89],
+        ['scale-150', 107],
+        ['scale-200', 142],
+        ['scale-400', 284],
+      ],
+    ],
+    [
+      'Square150x150Logo',
+      [
+        ['scale-100', 150],
+        ['scale-125', 188],
+        ['scale-150', 225],
+        ['scale-200', 300],
+        ['scale-400', 600],
+      ],
+    ],
+    [
+      'LargeTile',
+      [
+        ['scale-100', 310],
+        ['scale-125', 388],
+        ['scale-150', 465],
+        ['scale-200', 620],
+        ['scale-400', 1240],
+      ],
+    ],
+    [
+      'Square44x44Logo',
+      [
+        ['scale-100', 44],
+        ['scale-125', 55],
+        ['scale-150', 66],
+        ['scale-200', 88],
+        ['scale-400', 176],
+      ],
+    ],
+    [
+      'StoreLogo',
+      [
+        ['scale-100', 50],
+        ['scale-125', 63],
+        ['scale-150', 75],
+        ['scale-200', 100],
+        ['scale-400', 200],
+      ],
+    ],
+    [
+      'BadgeLogo',
+      [
+        ['scale-100', 24],
+        ['scale-125', 30],
+        ['scale-150', 36],
+        ['scale-200', 48],
+        ['scale-400', 96],
+      ],
+    ],
   ];
 
   for (const [prefix, scales] of windowsSquarePacks) {
@@ -410,20 +457,26 @@ async function main() {
 
   // Windows Wide310x150Logo & SplashScreen
   const windowsWidePacks = [
-    ['Wide310x150Logo', [
-      ['scale-100', 310, 150],
-      ['scale-125', 388, 188],
-      ['scale-150', 465, 225],
-      ['scale-200', 620, 300],
-      ['scale-400', 1240, 600],
-    ]],
-    ['SplashScreen', [
-      ['scale-100', 620, 300],
-      ['scale-125', 775, 375],
-      ['scale-150', 930, 450],
-      ['scale-200', 1240, 600],
-      ['scale-400', 2480, 1200],
-    ]],
+    [
+      'Wide310x150Logo',
+      [
+        ['scale-100', 310, 150],
+        ['scale-125', 388, 188],
+        ['scale-150', 465, 225],
+        ['scale-200', 620, 300],
+        ['scale-400', 1240, 600],
+      ],
+    ],
+    [
+      'SplashScreen',
+      [
+        ['scale-100', 620, 300],
+        ['scale-125', 775, 375],
+        ['scale-150', 930, 450],
+        ['scale-200', 1240, 600],
+        ['scale-400', 2480, 1200],
+      ],
+    ],
   ];
 
   for (const [prefix, dims] of windowsWidePacks) {
@@ -439,10 +492,15 @@ async function main() {
   // 7. OpenGraph / Social Share Image
   fs.writeFileSync(
     path.join(PUBLIC_DIR, 'og-image.png'),
-    await sharp(Buffer.from(ogImageSvg), { density: 144 }).resize(1200, 630).png({ compressionLevel: 9 }).toBuffer(),
+    await sharp(Buffer.from(ogImageSvg), { density: 144 })
+      .resize(1200, 630)
+      .png({ compressionLevel: 9 })
+      .toBuffer(),
   );
 
-  console.log('Generated complete Agendamea icon, logo, favicon.ico, PWA, and Windows/Microsoft Store asset suite.');
+  console.log(
+    'Generated complete Agendamea icon, logo, favicon.ico, PWA, and Windows/Microsoft Store asset suite.',
+  );
 }
 
 main().catch((err) => {

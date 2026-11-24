@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": [
+    "shared/*.cjs",
+    "shared/store/*.cjs",
+    "shared/schemas/*.cjs",
+    "mcp/*.cjs",
+    "electron/*.cjs",
+    "electron/modules/*.cjs",
+    "electron/ai/*.cjs",
+    "cli/*.cjs",
+    "cli/commands/*.cjs",
+    "cli/lib/*.cjs"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-server",
+    "release",
+    "shared/cliLocales",
+    "shared/serverLocales"
+  ]
+}

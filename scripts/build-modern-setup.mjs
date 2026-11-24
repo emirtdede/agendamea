@@ -11,7 +11,14 @@ const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8
 const version = pkg.version || '1.1.0';
 
 const setupProjectDir = path.join(rootDir, 'installer', 'Agendamea.Setup');
-const setupPublishDir = path.join(setupProjectDir, 'bin', 'Release', 'net10.0-windows', 'win-x64', 'publish');
+const setupPublishDir = path.join(
+  setupProjectDir,
+  'bin',
+  'Release',
+  'net10.0-windows',
+  'win-x64',
+  'publish',
+);
 const stubExePath = path.join(setupPublishDir, 'Agendamea.Setup.exe');
 const unpackedDir = path.join(rootDir, 'release', 'win-unpacked');
 const tempZipPath = path.join(rootDir, 'release', `Agendamea-${version}-payload.zip`);
@@ -22,12 +29,16 @@ function run(cmd, args, cwd = rootDir) {
   execFileSync(cmd, args, { cwd, stdio: 'inherit' });
 }
 
-// 1. Refresh embedded 73-language localization bundle for the setup UI
+// 1. Refresh embedded 73-language localization bundle for the setup UI & native CLI console shim
 const tsxCli = path.join(rootDir, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 run(process.execPath, [tsxCli, 'scripts/generate-installer-locales.mjs']);
+run(process.execPath, [path.join(rootDir, 'scripts', 'build-cli-shim.mjs')]);
 
 // 2. Ensure win-unpacked exists (run electron-builder --dir if missing or --rebuild-app passed)
-if (!fs.existsSync(path.join(unpackedDir, 'Agendamea.exe')) || process.argv.includes('--rebuild-app')) {
+if (
+  !fs.existsSync(path.join(unpackedDir, 'Agendamea.exe')) ||
+  process.argv.includes('--rebuild-app')
+) {
   const ebCli = path.join(rootDir, 'node_modules', 'electron-builder', 'cli.js');
   run(process.execPath, [ebCli, '--win', '--x64', '--dir', '--publish', 'never']);
 }
@@ -88,9 +99,10 @@ try {
     const inFd = fs.openSync(srcPath, 'r');
     const buf = Buffer.allocUnsafe(1024 * 1024);
     try {
-      let bytesRead = 0;
-      while ((bytesRead = fs.readSync(inFd, buf, 0, buf.length, null)) > 0) {
+      let bytesRead = fs.readSync(inFd, buf, 0, buf.length, null);
+      while (bytesRead > 0) {
         fs.writeSync(outFd, buf, 0, bytesRead);
+        bytesRead = fs.readSync(inFd, buf, 0, buf.length, null);
       }
     } finally {
       fs.closeSync(inFd);
@@ -119,9 +131,10 @@ const sha512Hash = crypto.createHash('sha512');
   const fd = fs.openSync(finalSetupExe, 'r');
   const buf = Buffer.allocUnsafe(1024 * 1024);
   try {
-    let bytesRead = 0;
-    while ((bytesRead = fs.readSync(fd, buf, 0, buf.length, null)) > 0) {
+    let bytesRead = fs.readSync(fd, buf, 0, buf.length, null);
+    while (bytesRead > 0) {
       sha512Hash.update(buf.subarray(0, bytesRead));
+      bytesRead = fs.readSync(fd, buf, 0, buf.length, null);
     }
   } finally {
     fs.closeSync(fd);

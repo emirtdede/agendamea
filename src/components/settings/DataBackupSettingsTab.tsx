@@ -1,19 +1,38 @@
-import React, { useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle,
   Check,
-  Cloud,
   Download,
   FolderOpen,
+  HardDrive,
+  History,
+  Lock,
   RefreshCw,
   RotateCcw,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { useI18n } from '../../i18n/I18nContext';
 import { localizeErrorMessage } from '../../i18n/translations';
-import type { BootstrapPayload, DetectedCloudProvider, OneDriveStatus } from '../../types';
+import type {
+  BootstrapPayload,
+  CloudBackupFileEntry,
+  DetectedCloudProvider,
+  OneDriveStatus,
+  SystemInfoPayload,
+} from '../../types';
+import {
+  decryptBackupPayload,
+  type EncryptedBackupEnvelope,
+  encryptBackupPayload,
+  isEncryptedBackupEnvelope,
+  parseCsvToBackupPayload,
+  parseIcsToBackupPayload,
+} from '../../utils/exportFormats';
+import { formatByteSize as formatBytes } from '../../utils/formatBytes';
+import { CloudSyncCard } from './data/CloudSyncCard';
+import { ResetDataSection } from './data/ResetDataSection';
 
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
@@ -36,7 +55,11 @@ export interface DataBackupSettingsTabProps {
   onImportBackup: (payload: unknown) => Promise<void>;
   onApplyRestoredBootstrap?: (restored: BootstrapPayload) => void;
   onResetAllData?: (resetSettings: boolean) => Promise<void>;
-  onNotifyCloudSync?: (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => void;
+  onNotifyCloudSync?: (payload: {
+    title: string;
+    body?: string;
+    variant?: 'info' | 'error';
+  }) => void;
   formatTimestamp: (iso: string | null) => string;
 }
 
@@ -56,7 +79,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   onNotifyCloudSync,
   formatTimestamp,
 }: DataBackupSettingsTabProps) {
-  const { lang, t } = useI18n();
+  const { lang, meta, t } = useI18n();
   const [isOneDriveBusy, setIsOneDriveBusy] = useState(false);
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [backupDownloaded, setBackupDownloaded] = useState(false);
@@ -65,12 +88,29 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   const [resetIncludeSettings, setResetIncludeSettings] = useState(false);
   const [isResettingData, setIsResettingData] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [sysInfo, setSysInfo] = useState<SystemInfoPayload | null>(null);
+  const [cloudSnapshots, setCloudSnapshots] = useState<CloudBackupFileEntry[]>([]);
+  const [restoringFileName, setRestoringFileName] = useState<string | null>(null);
+  const [encryptOpen, setEncryptOpen] = useState(false);
+  const [encryptPassphrase, setEncryptPassphrase] = useState('');
+  const [pendingEncrypted, setPendingEncrypted] = useState<{
+    fileName: string;
+    envelope: EncryptedBackupEnvelope;
+  } | null>(null);
+  const [decryptPassphrase, setDecryptPassphrase] = useState('');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isMountedRef = useRef(true);
   const backupBadgeTimerRef = useRef<number | null>(null);
   const revokeUrlTimerRef = useRef<number | null>(null);
+  const activeObjectUrlRef = useRef<string | null>(null);
 
-  React.useEffect(() => {
+  const hasDesktopBridge =
+    typeof window !== 'undefined' && Boolean(window.agendameaWindow?.openDataFolder);
+
+  const syncVersionKey = oneDriveStatus?.lastSyncedAt ?? '';
+
+  useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
@@ -82,8 +122,43 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         window.clearTimeout(revokeUrlTimerRef.current);
         revokeUrlTimerRef.current = null;
       }
+      if (activeObjectUrlRef.current) {
+        try {
+          URL.revokeObjectURL(activeObjectUrlRef.current);
+        } catch {
+          // Ignore revoke error
+        }
+        activeObjectUrlRef.current = null;
+      }
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const _marker = syncVersionKey;
+    void _marker;
+    void api
+      .getSystemInfo()
+      .then((info) => {
+        if (active && isMountedRef.current) setSysInfo(info);
+      })
+      .catch(() => {
+        /* ignore */
+      });
+    void api
+      .listCloudBackups()
+      .then((res) => {
+        if (active && isMountedRef.current && Array.isArray(res?.backups)) {
+          setCloudSnapshots(res.backups);
+        }
+      })
+      .catch(() => {
+        /* ignore */
+      });
+    return () => {
+      active = false;
+    };
+  }, [syncVersionKey]);
 
   const cloudProviders = useMemo<DetectedCloudProvider[]>(
     () =>
@@ -97,6 +172,46 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
           ],
     [oneDriveStatus?.detectedProviders],
   );
+
+  const triggerBlobDownload = (blob: Blob, fileName: string) => {
+    if (revokeUrlTimerRef.current !== null) {
+      window.clearTimeout(revokeUrlTimerRef.current);
+      revokeUrlTimerRef.current = null;
+    }
+    if (activeObjectUrlRef.current) {
+      try {
+        URL.revokeObjectURL(activeObjectUrlRef.current);
+      } catch {
+        // Ignore revoke error
+      }
+      activeObjectUrlRef.current = null;
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    activeObjectUrlRef.current = objectUrl;
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    revokeUrlTimerRef.current = window.setTimeout(() => {
+      revokeUrlTimerRef.current = null;
+      if (activeObjectUrlRef.current === objectUrl) {
+        activeObjectUrlRef.current = null;
+      }
+      URL.revokeObjectURL(objectUrl);
+    }, 1000);
+    if (isMountedRef.current) {
+      if (backupBadgeTimerRef.current !== null) {
+        window.clearTimeout(backupBadgeTimerRef.current);
+      }
+      setBackupDownloaded(true);
+      backupBadgeTimerRef.current = window.setTimeout(() => {
+        backupBadgeTimerRef.current = null;
+        if (isMountedRef.current) setBackupDownloaded(false);
+      }, 3000);
+    }
+  };
 
   const applyRestoredIfPresent = async (restored?: BootstrapPayload) => {
     if (!restored) return;
@@ -200,6 +315,24 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
     }
   };
 
+  const handleRestoreSpecificSnapshot = async (fileName: string) => {
+    if (restoringFileName) return;
+    setRestoringFileName(fileName);
+    setImportError(null);
+    try {
+      const { status, bootstrap } = await api.restoreCloudBackupFile(fileName);
+      if (isMountedRef.current) onOneDriveStatusChange(status);
+      await applyRestoredIfPresent(bootstrap);
+      onNotifyCloudSync?.({ title: t.onedriveSyncedToast });
+    } catch (err) {
+      if (isMountedRef.current) {
+        setImportError(localizeErrorMessage(err, t.importRestoreFailedError, lang, t));
+      }
+    } finally {
+      if (isMountedRef.current) setRestoringFileName(null);
+    }
+  };
+
   const handleOneDriveToggleAutoSync = async () => {
     if (isOneDriveBusy || !oneDriveStatus) return;
     setIsOneDriveBusy(true);
@@ -233,42 +366,14 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
     }
   };
 
-  const handleDownloadBackup = async () => {
+  const handleDownloadExport = async (format: 'json' | 'csv' | 'md' | 'ics') => {
     if (isExportingBackup) return;
     setIsExportingBackup(true);
     setImportError(null);
     try {
-      const res = await fetch(`/api/export?lang=${encodeURIComponent(lang)}`);
-      if (!res.ok) throw new Error(t.operationFailedToast);
-      const blob = await res.blob();
-      const disp = res.headers.get('content-disposition') ?? '';
-      const match = /filename="([^"]+)"/i.exec(disp);
-      const fileName =
-        match?.[1] || `agendamea-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      if (revokeUrlTimerRef.current !== null) {
-        window.clearTimeout(revokeUrlTimerRef.current);
-      }
-      revokeUrlTimerRef.current = window.setTimeout(() => {
-        revokeUrlTimerRef.current = null;
-        URL.revokeObjectURL(objectUrl);
-      }, 1000);
-      if (isMountedRef.current) {
-        if (backupBadgeTimerRef.current !== null) {
-          window.clearTimeout(backupBadgeTimerRef.current);
-        }
-        setBackupDownloaded(true);
-        backupBadgeTimerRef.current = window.setTimeout(() => {
-          backupBadgeTimerRef.current = null;
-          if (isMountedRef.current) setBackupDownloaded(false);
-        }, 4000);
-      }
+      const { blob, fileName } = await api.exportBackupBlob(format, lang);
+      if (!isMountedRef.current) return;
+      triggerBlobDownload(blob, fileName);
     } catch (err) {
       if (isMountedRef.current) {
         setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
@@ -278,12 +383,63 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
     }
   };
 
+  const handleDownloadEncryptedBackup = async () => {
+    if (isExportingBackup) return;
+    if (encryptPassphrase.length < 4) {
+      setImportError(t.dataEncryptPassphraseShortError);
+      return;
+    }
+    setIsExportingBackup(true);
+    setImportError(null);
+    try {
+      const jsonText = await api.exportBackupText('json', lang);
+      const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+      const envelope = await encryptBackupPayload(parsed, encryptPassphrase);
+      const blob = new Blob([JSON.stringify(envelope, null, 2)], {
+        type: 'application/json;charset=utf-8',
+      });
+      triggerBlobDownload(
+        blob,
+        `agendamea-encrypted-${new Date().toISOString().slice(0, 10)}.agenc`,
+      );
+      setEncryptPassphrase('');
+      setEncryptOpen(false);
+    } catch (err) {
+      if (isMountedRef.current) {
+        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
+      }
+    } finally {
+      if (isMountedRef.current) setIsExportingBackup(false);
+    }
+  };
+
+  const prepareImportPreview = (fileName: string, record: Record<string, unknown>) => {
+    const todoCount = Array.isArray(record.todos) ? record.todos.length : 0;
+    const catCount = Array.isArray(record.categories) ? record.categories.length : 0;
+    const trashCountInFile =
+      (Array.isArray(record.trashedTodos) ? record.trashedTodos.length : 0) +
+      (Array.isArray(record.trashedCategories) ? record.trashedCategories.length : 0);
+    const summaryParts = [
+      `${todoCount} ${t.tasksTitle.toLocaleLowerCase(meta.intlLocale)}`,
+      `${catCount} ${t.categories.toLocaleLowerCase(meta.intlLocale)}`,
+    ];
+    if (trashCountInFile > 0) {
+      summaryParts.push(`${trashCountInFile} ${t.tabTrash.toLocaleLowerCase(meta.intlLocale)}`);
+    }
+    onPendingImportChange({
+      fileName,
+      payload: record,
+      summary: summaryParts.join(' · '),
+    });
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
 
     setImportError(null);
+    setPendingEncrypted(null);
     onPendingImportChange(null);
 
     if (file.size > MAX_IMPORT_BYTES) {
@@ -293,7 +449,26 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
 
     try {
       const text = await file.text();
+      const lowerName = file.name.toLowerCase();
+
+      if (lowerName.endsWith('.csv')) {
+        const csvPayload = parseCsvToBackupPayload(text);
+        prepareImportPreview(file.name, csvPayload as Record<string, unknown>);
+        return;
+      }
+
+      if (lowerName.endsWith('.ics') || text.includes('BEGIN:VCALENDAR')) {
+        const icsPayload = parseIcsToBackupPayload(text);
+        prepareImportPreview(file.name, icsPayload as Record<string, unknown>);
+        return;
+      }
+
       const parsed: unknown = JSON.parse(text);
+      if (isEncryptedBackupEnvelope(parsed)) {
+        setPendingEncrypted({ fileName: file.name, envelope: parsed });
+        setDecryptPassphrase('');
+        return;
+      }
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         setImportError(t.importInvalidBackupError);
         return;
@@ -311,25 +486,22 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         setImportError(t.importInvalidBackupError);
         return;
       }
-      const todoCount = Array.isArray(record.todos) ? record.todos.length : 0;
-      const catCount = Array.isArray(record.categories) ? record.categories.length : 0;
-      const trashCountInFile =
-        (Array.isArray(record.trashedTodos) ? record.trashedTodos.length : 0) +
-        (Array.isArray(record.trashedCategories) ? record.trashedCategories.length : 0);
-      const summaryParts = [
-        `${todoCount} ${t.tasksTitle.toLowerCase()}`,
-        `${catCount} ${t.categories.toLowerCase()}`,
-      ];
-      if (trashCountInFile > 0) {
-        summaryParts.push(`${trashCountInFile} ${t.tabTrash.toLowerCase()}`);
-      }
-      onPendingImportChange({
-        fileName: file.name,
-        payload: parsed,
-        summary: summaryParts.join(' · '),
-      });
+      prepareImportPreview(file.name, record);
     } catch {
       setImportError(t.importInvalidBackupError);
+    }
+  };
+
+  const handleDecryptEncryptedImport = async () => {
+    if (!pendingEncrypted) return;
+    setImportError(null);
+    try {
+      const decrypted = await decryptBackupPayload(pendingEncrypted.envelope, decryptPassphrase);
+      prepareImportPreview(pendingEncrypted.fileName, decrypted);
+      setPendingEncrypted(null);
+      setDecryptPassphrase('');
+    } catch {
+      setImportError(t.dataDecryptFailedError);
     }
   };
 
@@ -350,22 +522,91 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   };
 
   return (
-    <section aria-label={t.dataAndBackupTitle} className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-          {t.dataAndBackupTitle}
-        </h3>
-        <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-          {totalTodoCount} {t.localRecordsBadge}
-        </span>
+    <section aria-label={t.dataAndBackupTitle} className="space-y-4">
+      {/* Local Storage Footprint Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="inline-flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
+            <HardDrive className="h-3.5 w-3.5 text-[var(--accent)]" />
+            <span>
+              {totalTodoCount} {t.localRecordsBadge}
+            </span>
+          </span>
+          {sysInfo && (
+            <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+              SQLite: {formatBytes(sysInfo.dbSizeBytes)} · AI:{' '}
+              {formatBytes(sysInfo.modelsDiskBytes)}
+            </span>
+          )}
+        </div>
+        {hasDesktopBridge && (
+          <button
+            type="button"
+            data-testid="data-open-folder-btn"
+            onClick={() => void window.agendameaWindow?.openDataFolder?.()}
+            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+          >
+            <FolderOpen className="h-3 w-3 text-[var(--accent)]" />
+            <span>{t.aboutOpenDataFolderButton}</span>
+          </button>
+        )}
       </div>
 
       {importError && (
         <div
           role="alert"
-          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-600 dark:text-red-400"
+          data-testid="data-import-error-banner"
+          className="sticky top-2 z-20 flex items-start justify-between gap-2.5 rounded-xl border border-red-500/40 bg-[var(--surface)] px-3.5 py-2.5 text-xs font-medium text-red-600 dark:text-red-400 shadow-md animate-fade-in"
         >
-          {importError}
+          <span className="min-w-0 flex-1 break-words leading-snug">{importError}</span>
+          <button
+            type="button"
+            onClick={() => setImportError(null)}
+            aria-label={t.closeMenu}
+            className="shrink-0 rounded-md p-0.5 text-red-600/80 hover:bg-red-500/15 hover:text-red-600 dark:text-red-400/80 dark:hover:text-red-300 transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Encrypted Backup Passphrase Prompt */}
+      {pendingEncrypted && (
+        <div
+          role="dialog"
+          aria-label={t.dataEncryptedBackupTitle}
+          className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent-soft)] p-4 space-y-2.5 animate-fade-in"
+        >
+          <p className="text-xs font-semibold text-[var(--text-primary)]">
+            {t.dataDecryptPromptTitle}:{' '}
+            <span className="font-mono-tabular">{pendingEncrypted.fileName}</span>
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="password"
+              data-testid="data-decrypt-passphrase-input"
+              value={decryptPassphrase}
+              onChange={(e) => setDecryptPassphrase(e.target.value)}
+              placeholder={t.dataEncryptPassphrasePlaceholder}
+              className="min-w-[200px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--accent)]"
+            />
+            <button
+              type="button"
+              onClick={() => setPendingEncrypted(null)}
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)]"
+            >
+              {t.cancelButton}
+            </button>
+            <button
+              type="button"
+              data-testid="data-decrypt-confirm-btn"
+              onClick={() => void handleDecryptEncryptedImport()}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+              style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
+            >
+              {t.dataDecryptUnlockButton}
+            </button>
+          </div>
         </div>
       )}
 
@@ -373,10 +614,11 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         <div
           role="alertdialog"
           aria-label={t.backupRestoreTitle}
-          className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3.5 space-y-2.5"
+          className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3.5 space-y-2.5 animate-fade-in"
         >
-          <p className="text-xs leading-relaxed text-[var(--text-primary)]">
-            <strong>{pendingImport.fileName}</strong> ({pendingImport.summary})
+          <p className="text-xs leading-relaxed text-[var(--text-primary)] break-words">
+            <strong className="break-all">{pendingImport.fileName}</strong> ({pendingImport.summary}
+            )
           </p>
           <div className="flex items-center justify-end gap-1.5">
             <button
@@ -401,36 +643,45 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
       )}
 
       <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        {/* JSON Backup & Restore */}
-        <div className="flex flex-wrap items-center justify-between gap-4 px-4 py-3.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-[var(--text-primary)]">{t.backupRestoreTitle}</p>
-            <p className="text-xs text-[var(--text-muted)]">{t.backupRestoreDesc}</p>
+        {/* Multi-Format Export & Universal Import */}
+        <div data-setting-id="data-export-import" className="px-4 py-4 space-y-3.5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-[var(--text-primary)]">
+                {t.backupRestoreTitle}
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.dataMultiFormatDesc}</p>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json,.json,.agenc,.csv,.ics,text/csv,text/calendar"
+                onChange={(e) => void handleFileChange(e)}
+                aria-label={t.restoreButton}
+                className="hidden"
+              />
+              <button
+                type="button"
+                data-testid="data-universal-import-btn"
+                disabled={isImporting}
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                <span>{isImporting ? t.restoringButton : t.restoreButton}</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json,.json"
-              onChange={(e) => void handleFileChange(e)}
-              aria-label={t.restoreButton}
-              className="hidden"
-            />
-            <button
-              type="button"
-              disabled={isImporting}
-              onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              <span>{isImporting ? t.restoringButton : t.restoreButton}</span>
-            </button>
+
+          {/* Export Format Buttons */}
+          <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               disabled={isExportingBackup}
               data-testid="download-backup-link"
-              onClick={() => void handleDownloadBackup()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+              onClick={() => void handleDownloadExport('json')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
             >
               {backupDownloaded ? (
                 <Check className="h-3.5 w-3.5 text-emerald-500" />
@@ -439,202 +690,146 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
               ) : (
                 <Download className="h-3.5 w-3.5" />
               )}
-              <span>{t.downloadBackupButton}</span>
+              <span>{t.downloadBackupButton} (JSON)</span>
             </button>
-          </div>
-        </div>
-
-        {/* Zero-Cost Multi-Cloud Folder Sync (OneDrive, Google Drive, iCloud Drive, Dropbox, Custom) */}
-        <div data-testid="onedrive-sync-card" className="px-4 py-4 space-y-3.5">
-          <div className="space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <Cloud className="h-4 w-4 text-[var(--accent)] shrink-0" />
-                <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                  {t.cloudSyncSectionTitle}
-                </p>
-              </div>
-              {oneDriveStatus?.connected && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent)] whitespace-nowrap">
-                    <Check className="h-3 w-3 shrink-0" />
-                    <span>{t.enabledBadge}</span>
-                  </span>
-                  <button
-                    type="button"
-                    disabled={isOneDriveBusy}
-                    onClick={() => void handleOneDriveDisconnect()}
-                    className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
-                  >
-                    {t.onedriveDisconnectButton}
-                  </button>
-                </div>
-              )}
-            </div>
-            <p className="text-xs leading-relaxed text-[var(--text-muted)]">
-              {t.cloudSyncSectionDesc}
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.04em] text-[var(--text-muted)]">
-              {t.cloudSyncProvidersTitle}
-            </p>
-            <div className="grid grid-cols-2 gap-2" data-testid="cloud-providers-grid">
-              {oneDriveStatus === null
-                ? [0, 1, 2, 3].map((idx) => (
-                    <div
-                      key={idx}
-                      data-testid="cloud-provider-skeleton"
-                      className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 animate-pulse"
-                    >
-                      <div className="space-y-1.5 flex-1">
-                        <div className="h-3 w-20 rounded bg-[var(--surface-subtle)]" />
-                        <div className="h-2.5 w-28 rounded bg-[var(--surface-subtle)]" />
-                      </div>
-                      <div className="h-3.5 w-3.5 rounded-full bg-[var(--surface-subtle)]" />
-                    </div>
-                  ))
-                : cloudProviders.map((provider) => {
-                const isActive =
-                  Boolean(oneDriveStatus?.connected) &&
-                  oneDriveStatus?.activeProvider === provider.id;
-                return (
-                  <button
-                    key={provider.id}
-                    type="button"
-                    data-testid={`cloud-provider-${provider.id}`}
-                    disabled={isOneDriveBusy}
-                    onClick={() => void handleSelectCloudProvider(provider)}
-                    className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-start transition-colors disabled:opacity-45 ${
-                      isActive
-                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                        : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-semibold text-[var(--text-primary)]">
-                        {provider.label}
-                      </p>
-                      <p className="truncate text-[10.5px] text-[var(--text-muted)]">
-                        {provider.detected ? t.cloudDetectedBadge : t.cloudNotInstalledHint}
-                      </p>
-                    </div>
-                    {isActive ? (
-                      <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-                    ) : provider.detected ? (
-                      <span
-                        aria-hidden="true"
-                        className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
-                      />
-                    ) : (
-                      <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {oneDriveStatus?.folderPath && (
-            <div className="space-y-0.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2">
-              <p
-                data-testid="onedrive-folder-path"
-                className="truncate font-mono-tabular text-[11px] text-[var(--text-secondary)]"
-                title={oneDriveStatus.folderPath}
-              >
-                {oneDriveStatus.folderPath}
-              </p>
-              {oneDriveStatus.lastSyncedAt && (
-                <p className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
-                  {t.onedriveLastSyncedPrefix}: {formatTimestamp(oneDriveStatus.lastSyncedAt)}
-                  {oneDriveStatus.hasRemoteBackup &&
-                  typeof oneDriveStatus.remoteTodoCount === 'number'
-                    ? ` · ${oneDriveStatus.remoteTodoCount} ${t.tasksTitle.toLowerCase()}`
-                    : ''}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div
-            data-testid="cloud-sync-actions-grid"
-            className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5"
-          >
             <button
               type="button"
-              disabled={isOneDriveBusy}
-              title={
-                oneDriveStatus?.connected ? t.onedriveSyncNowButton : t.onedriveConnectButton
-              }
-              onClick={() => void handleOneDriveConnectOrSync()}
-              className="inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition-opacity disabled:opacity-40"
-              style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
+              data-testid="export-csv-btn"
+              disabled={isExportingBackup}
+              onClick={() => void handleDownloadExport('csv')}
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
             >
-              <RefreshCw
-                className={`h-3.5 w-3.5 shrink-0 ${isOneDriveBusy ? 'animate-spin' : ''}`}
+              <Download className="h-3 w-3" />
+              <span>CSV</span>
+            </button>
+            <button
+              type="button"
+              data-testid="export-md-btn"
+              disabled={isExportingBackup}
+              onClick={() => void handleDownloadExport('md')}
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            >
+              <Download className="h-3 w-3" />
+              <span>Markdown</span>
+            </button>
+            <button
+              type="button"
+              data-testid="export-ics-btn"
+              disabled={isExportingBackup}
+              onClick={() => void handleDownloadExport('ics')}
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+            >
+              <Download className="h-3 w-3" />
+              <span>iCalendar (.ics)</span>
+            </button>
+            <button
+              type="button"
+              data-testid="export-encrypted-toggle-btn"
+              onClick={() => setEncryptOpen((v) => !v)}
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:opacity-90"
+            >
+              <Lock className="h-3 w-3 text-[var(--accent)]" />
+              <span>{t.dataEncryptedBackupButton}</span>
+            </button>
+          </div>
+
+          {encryptOpen && (
+            <div className="animate-accordion flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-3">
+              <input
+                type="password"
+                data-testid="data-encrypt-passphrase-input"
+                value={encryptPassphrase}
+                onChange={(e) => setEncryptPassphrase(e.target.value)}
+                placeholder={t.dataEncryptPassphrasePlaceholder}
+                className="min-w-[200px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--accent)]"
               />
-              <span className="truncate">
-                {oneDriveStatus?.connected ? t.onedriveSyncNowButton : t.onedriveConnectButton}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isOneDriveBusy || !oneDriveStatus?.hasRemoteBackup}
-              title={t.onedriveRestoreButton}
-              onClick={() => void handleOneDriveRestore()}
-              className="inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
-            >
-              <Upload className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{t.onedriveRestoreButton}</span>
-            </button>
-
-            <button
-              type="button"
-              data-testid="onedrive-pick-folder-btn"
-              disabled={isOneDriveBusy}
-              title={t.cloudPickFolderButton}
-              onClick={() => void handleOneDrivePickFolder()}
-              className="inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
-            >
-              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
-              <span className="truncate">{t.cloudPickFolderButton}</span>
-            </button>
-
-            <button
-              type="button"
-              title={t.onedriveOpenFolderButton}
-              onClick={() => void api.openOneDriveFolder(oneDriveStatus?.folderPath).catch(() => {})}
-              className="inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
-            >
-              <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{t.onedriveOpenFolderButton}</span>
-            </button>
-          </div>
-
-          {oneDriveStatus?.connected && (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2">
-              <span className="text-xs font-medium text-[var(--text-secondary)]">
-                {t.onedriveAutoSyncTitle}
-              </span>
               <button
                 type="button"
-                role="switch"
-                aria-checked={oneDriveStatus.autoSync}
-                disabled={isOneDriveBusy}
-                onClick={() => void handleOneDriveToggleAutoSync()}
-                className={`inline-flex items-center rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors shrink-0 ${
-                  oneDriveStatus.autoSync
-                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                    : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                }`}
+                data-testid="data-encrypt-download-btn"
+                disabled={isExportingBackup}
+                onClick={() => void handleDownloadEncryptedBackup()}
+                className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold"
+                style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
-                {oneDriveStatus.autoSync ? t.enabledBadge : t.disabledBadge}
+                <Lock className="h-3 w-3" />
+                <span>{t.dataEncryptDownloadButton}</span>
               </button>
             </div>
           )}
         </div>
+
+        {/* Multi-Cloud Sync */}
+        <div data-setting-id="data-cloud">
+          <CloudSyncCard
+            oneDriveStatus={oneDriveStatus}
+            cloudProviders={cloudProviders}
+            isOneDriveBusy={isOneDriveBusy}
+            formatTimestamp={formatTimestamp}
+            onConnectOrSync={() => void handleOneDriveConnectOrSync()}
+            onRestore={() => void handleOneDriveRestore()}
+            onPickFolder={() => void handleOneDrivePickFolder()}
+            onOpenFolder={() => {
+              setImportError(null);
+              void api.openOneDriveFolder(oneDriveStatus?.folderPath).catch((err) => {
+                const errMsg = localizeErrorMessage(err, t.operationFailedToast, lang, t);
+                if (isMountedRef.current) {
+                  setImportError(errMsg);
+                }
+                onNotifyCloudSync?.({
+                  title: t.onedriveOpenFolderButton,
+                  body: errMsg,
+                  variant: 'error',
+                });
+              });
+            }}
+            onSelectProvider={(provider) => void handleSelectCloudProvider(provider)}
+            onToggleAutoSync={() => void handleOneDriveToggleAutoSync()}
+            onDisconnect={() => void handleOneDriveDisconnect()}
+          />
+        </div>
+
+        {/* Rolling Cloud / Local Backup Snapshot History */}
+        {cloudSnapshots.length > 0 && (
+          <div className="px-4 py-3.5 space-y-2.5" data-testid="data-snapshot-history">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-[var(--accent)]" />
+              <p className="text-xs font-semibold text-[var(--text-primary)]">
+                {t.dataSnapshotHistoryTitle} ({cloudSnapshots.length})
+              </p>
+            </div>
+            <div className="max-h-48 divide-y divide-[var(--border)] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--canvas)]">
+              {cloudSnapshots.map((snap) => (
+                <div
+                  key={snap.fileName}
+                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <p className="font-mono-tabular font-medium text-[var(--text-primary)] truncate">
+                      {snap.fileName}
+                    </p>
+                    <p className="font-mono-tabular text-[10.5px] text-[var(--text-muted)]">
+                      {formatTimestamp(snap.mtimeIso)} · {snap.todoCount} {t.tasksTitle} ·{' '}
+                      {formatBytes(snap.sizeBytes)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={restoringFileName !== null}
+                    onClick={() => void handleRestoreSpecificSnapshot(snap.fileName)}
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    <span>
+                      {restoringFileName === snap.fileName
+                        ? t.restoringButton
+                        : t.restoreItemButton}
+                    </span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Move Completed to Trash */}
         <div className="flex items-center justify-between gap-4 px-4 py-3.5">
@@ -669,100 +864,43 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
 
         {/* Clean Start / Reset All Data */}
         {onResetAllData && (
-          <div data-testid="reset-all-data-section" className="px-4 py-3.5 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  {t.resetDataSectionTitle}
-                </p>
-                <p className="text-xs text-[var(--text-muted)]">{t.resetDataSectionDesc}</p>
-              </div>
-              {!confirmResetOpen && (
-                <button
-                  type="button"
-                  data-testid="reset-all-data-open-btn"
-                  disabled={isResettingData || isImporting}
-                  onClick={() => setConfirmResetOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/15 disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <span>{t.resetDataButton}</span>
-                </button>
-              )}
-            </div>
-
-            {confirmResetOpen && (
-              <div
-                role="alertdialog"
-                data-testid="reset-all-data-confirm-box"
-                aria-label={t.resetDataSectionTitle}
-                className="animate-tab-enter rounded-xl border border-red-500/35 bg-red-500/10 p-3.5 space-y-3"
-              >
-                <div className="flex items-start gap-2.5">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-                  <p className="text-xs leading-relaxed text-[var(--text-primary)]">
-                    {t.resetDataConfirmWarning}
-                  </p>
-                </div>
-
-                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)] cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    data-testid="reset-include-settings-checkbox"
-                    checked={resetIncludeSettings}
-                    onChange={(e) => setResetIncludeSettings(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-[var(--border-strong)] accent-red-600 cursor-pointer"
-                  />
-                  <span>{t.resetDataIncludeSettingsLabel}</span>
-                </label>
-
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    disabled={isResettingData}
-                    onClick={() => {
+          <div data-setting-id="data-reset">
+            <ResetDataSection
+              confirmResetOpen={confirmResetOpen}
+              resetIncludeSettings={resetIncludeSettings}
+              isResettingData={isResettingData}
+              isImporting={isImporting}
+              onOpenConfirm={() => setConfirmResetOpen(true)}
+              onCancelConfirm={() => {
+                setConfirmResetOpen(false);
+                setResetIncludeSettings(false);
+              }}
+              onToggleIncludeSettings={setResetIncludeSettings}
+              onConfirmReset={() => {
+                void (async () => {
+                  if (isResettingData) return;
+                  setIsResettingData(true);
+                  setImportError(null);
+                  try {
+                    await onResetAllData(resetIncludeSettings);
+                    if (isMountedRef.current) {
                       setConfirmResetOpen(false);
                       setResetIncludeSettings(false);
-                    }}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
-                  >
-                    {t.cancelButton}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="reset-all-data-confirm-btn"
-                    disabled={isResettingData}
-                    onClick={async () => {
-                      if (isResettingData) return;
-                      setIsResettingData(true);
-                      setImportError(null);
-                      try {
-                        await onResetAllData(resetIncludeSettings);
-                        if (isMountedRef.current) {
-                          setConfirmResetOpen(false);
-                          setResetIncludeSettings(false);
-                          const refreshed = await api.getOneDriveStatus().catch(() => null);
-                          if (isMountedRef.current && refreshed) {
-                            onOneDriveStatusChange(refreshed);
-                          }
-                        }
-                      } catch (err) {
-                        if (isMountedRef.current) {
-                          setImportError(
-                            localizeErrorMessage(err, t.operationFailedToast, lang, t),
-                          );
-                        }
-                      } finally {
-                        if (isMountedRef.current) setIsResettingData(false);
+                      const refreshed = await api.getOneDriveStatus().catch(() => null);
+                      if (isMountedRef.current && refreshed) {
+                        onOneDriveStatusChange(refreshed);
                       }
-                    }}
-                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40 transition-colors"
-                  >
-                    {isResettingData ? t.deletingButton : t.resetDataConfirmButton}
-                  </button>
-                </div>
-              </div>
-            )}
+                    }
+                  } catch (err) {
+                    if (isMountedRef.current) {
+                      setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
+                    }
+                  } finally {
+                    if (isMountedRef.current) setIsResettingData(false);
+                  }
+                })();
+              }}
+            />
           </div>
         )}
       </div>

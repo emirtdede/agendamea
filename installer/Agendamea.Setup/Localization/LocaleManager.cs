@@ -46,6 +46,7 @@ public sealed class InstallerLocale
     [JsonPropertyName("errorTitle")] public string ErrorTitle { get; set; } = "Setup could not finish";
     [JsonPropertyName("retryButton")] public string RetryButton { get; set; } = "Retry";
     [JsonPropertyName("footerText")] public string FooterText { get; set; } = "Vellium Teknoloji A.S. · MIT";
+    [JsonPropertyName("closeOptionsTooltip")] public string CloseOptionsTooltip { get; set; } = "Close Options";
 
     public bool IsRtl => string.Equals(Dir, "rtl", StringComparison.OrdinalIgnoreCase);
 
@@ -117,7 +118,7 @@ public static class LocaleManager
             l.Code.StartsWith(prefix + "-", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static IReadOnlyList<InstallerLocale> LoadEmbeddedLocales()
+    private static List<InstallerLocale> LoadEmbeddedLocales()
     {
         var asm = Assembly.GetExecutingAssembly();
         const string resourceName = "Agendamea.Setup.Localization.locales.json";

@@ -1,5 +1,5 @@
-import React from 'react';
 import { ChevronDown } from 'lucide-react';
+import React from 'react';
 
 export interface SelectFieldProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   wrapperClassName?: string;
@@ -15,7 +15,14 @@ export interface SelectFieldProps extends React.SelectHTMLAttributes<HTMLSelectE
  */
 export const SelectField = React.forwardRef<HTMLSelectElement, SelectFieldProps>(
   function SelectField(
-    { wrapperClassName = '', selectClassName = '', chevronClassName = '', className = '', children, ...rest },
+    {
+      wrapperClassName = '',
+      selectClassName = '',
+      chevronClassName = '',
+      className = '',
+      children,
+      ...rest
+    },
     ref,
   ) {
     return (

@@ -116,36 +116,23 @@
               </Viewbox>
             </Border>
 
-            <!-- 26px Bold Name + Version Pill -->
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,18,0,0">
-              <TextBlock Text="Agendamea"
-                         Foreground="#FAFAFA"
-                         FontFamily="Segoe UI Variable Display, Segoe UI"
-                         FontSize="26"
-                         FontWeight="Bold"
-                         VerticalAlignment="Center" />
-              <Border Margin="9,2,0,0"
-                      Background="#1C1C1F"
-                      BorderBrush="#27272A"
-                      BorderThickness="1"
-                      CornerRadius="10"
-                      Padding="8,2"
-                      VerticalAlignment="Center">
-                <TextBlock Text="v1.1.0"
-                           Foreground="#A1A1AA"
-                           FontFamily="Cascadia Mono, Consolas, Segoe UI"
-                           FontSize="11"
-                           FontWeight="SemiBold" />
-              </Border>
-            </StackPanel>
+            <!-- 26px Bold App Name (Vellium Standard: no duplicate version pill beside title) -->
+            <TextBlock Text="Agendamea"
+                       Foreground="#FAFAFA"
+                       FontFamily="Segoe UI Variable Display, Segoe UI"
+                       FontSize="26"
+                       FontWeight="Bold"
+                       HorizontalAlignment="Center"
+                       Margin="0,18,0,0" />
 
-            <!-- Single-Line Tagline -->
+            <!-- Subtitle Tagline with Dynamic Version -->
             <TextBlock x:Name="WelcomeTagline"
                        Text="Fast, offline-first daily task manager with on-device AI."
                        Foreground="#A1A1AA"
                        FontFamily="Segoe UI Variable Text, Segoe UI"
-                       FontSize="13"
+                       FontSize="13.5"
                        HorizontalAlignment="Center"
+                       TextAlignment="Center"
                        TextTrimming="CharacterEllipsis"
                        MaxWidth="520"
                        Margin="0,7,0,0" />
@@ -178,10 +165,10 @@
             </Button>
           </StackPanel>
 
-          <!-- 12px Subtle Footer -->
+          <!-- 12px Subtle Footer (WCAG AA contrast on #111113) -->
           <TextBlock x:Name="FooterText"
                      Text="Vellium Teknoloji A.S. · MIT"
-                     Foreground="#52525B"
+                     Foreground="#A1A1AA"
                      FontFamily="Segoe UI Variable Text, Segoe UI"
                      FontSize="11.5"
                      HorizontalAlignment="Center"
@@ -202,14 +189,23 @@
             </Border>
 
             <Grid Margin="0,28,0,10">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
               <TextBlock x:Name="ProgressStepText"
+                         Grid.Column="0"
                          Text="Extracting application files..."
                          Foreground="#E4E4E7"
                          FontFamily="Segoe UI Variable Text, Segoe UI"
                          FontSize="13"
                          FontWeight="Medium"
+                         TextTrimming="CharacterEllipsis"
+                         Margin="0,0,12,0"
                          HorizontalAlignment="Left" />
               <TextBlock x:Name="ProgressPercentText"
+                         Grid.Column="1"
+                         FlowDirection="LeftToRight"
                          Text="0%"
                          Foreground="#A1A1AA"
                          FontFamily="Cascadia Mono, Consolas, Segoe UI"
@@ -356,8 +352,9 @@
                           Content="Also delete local user data and tasks"
                           Style="{StaticResource MonochromeCheckBox}" />
                 <TextBlock x:Name="UserDataPathText"
+                           FlowDirection="LeftToRight"
                            Text="%APPDATA%\Agendamea"
-                           Foreground="#71717A"
+                           Foreground="#A1A1AA"
                            FontFamily="Cascadia Mono, Consolas, Segoe UI"
                            FontSize="11"
                            Margin="25,4,0,0"
@@ -422,16 +419,28 @@
                        FontSize="21"
                        FontWeight="Bold"
                        HorizontalAlignment="Center"
+                       MaxWidth="460"
+                       TextTrimming="CharacterEllipsis"
                        Margin="0,18,0,0" />
 
-            <TextBlock x:Name="StatusSubtitleText"
+            <ScrollViewer MaxHeight="96"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Margin="0,7,0,0">
+              <TextBox x:Name="StatusSubtitleText"
                        Text="All application files have been removed cleanly."
+                       IsReadOnly="True"
+                       BorderThickness="0"
+                       Background="Transparent"
                        Foreground="#A1A1AA"
+                       CaretBrush="#FAFAFA"
                        FontFamily="Segoe UI Variable Text, Segoe UI"
                        FontSize="12.5"
                        TextAlignment="Center"
                        TextWrapping="Wrap"
-                       Margin="0,7,0,0" />
+                       Padding="4,0"
+                       FocusVisualStyle="{x:Null}" />
+            </ScrollViewer>
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,24,0,0">
               <Button x:Name="StatusRetryButton"
@@ -458,9 +467,12 @@
                 Background="#1C1C1F"
                 BorderBrush="#1FFFFFFF"
                 BorderThickness="0,1,0,0"
-                CornerRadius="18,18,22,22"
+                CornerRadius="22,22,22,22"
                 Panel.ZIndex="30"
                 Visibility="Collapsed">
+          <Border.Effect>
+            <DropShadowEffect Color="#000000" BlurRadius="24" ShadowDepth="6" Direction="90" Opacity="0.45" />
+          </Border.Effect>
           <Border.RenderTransform>
             <TranslateTransform x:Name="OptionsSheetTransform" Y="380" />
           </Border.RenderTransform>
@@ -481,7 +493,8 @@
                          FontWeight="SemiBold"
                          VerticalAlignment="Center"
                          HorizontalAlignment="Left" />
-              <Button Style="{StaticResource TitleBarButton}"
+              <Button x:Name="CloseOptionsButton"
+                      Style="{StaticResource TitleBarButton}"
                       HorizontalAlignment="Right"
                       Click="CloseOptionsButton_Click"
                       ToolTip="Close Options">
@@ -530,6 +543,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="InstallDirTextBox"
                              Grid.Column="0"
+                             FlowDirection="LeftToRight"
                              Height="32"
                              Style="{StaticResource DarkTextBox}" />
                     <Button x:Name="BrowseDirButton"
@@ -591,6 +605,7 @@
                            Foreground="#71717A"
                            FontSize="12" />
                 <TextBlock x:Name="DiskRequiredValueText"
+                           FlowDirection="LeftToRight"
                            Text="~190 MB"
                            Foreground="#E4E4E7"
                            FontFamily="Cascadia Mono, Consolas, Segoe UI"

@@ -4,12 +4,8 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
-    "types": ["vite/client", "vite-plugin-pwa/client"],
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "types": ["node", "vite/client", "vite-plugin-pwa/client"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,
@@ -17,12 +13,25 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     },
     "allowImportingTsExtensions": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true
   },
-  "exclude": ["dist"]
+  "include": [
+    "src/**/*",
+    "server/**/*",
+    "server.ts",
+    "tests/**/*",
+    "types/**/*",
+    "vitest.config.ts",
+    "vite.config.ts"
+  ],
+  "exclude": ["dist", "dist-server", "release", "node_modules"]
 }

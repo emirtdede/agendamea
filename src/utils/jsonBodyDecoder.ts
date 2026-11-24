@@ -14,7 +14,7 @@ try {
 function extractCharsetFromContentType(contentType?: string): string | null {
   if (!contentType) return null;
   const match = /charset\s*=\s*["']?([a-zA-Z0-9._-]+)["']?/i.exec(contentType);
-  return match ? match[1].trim().toLowerCase() : null;
+  return match?.[1] ? match[1].trim().toLowerCase() : null;
 }
 
 /**

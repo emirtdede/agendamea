@@ -1,5 +1,12 @@
 import type React from 'react';
-import { useCallback, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import {
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+  useCallback,
+  useRef,
+  useState,
+} from 'react';
 import { api } from '../api/client';
 import type { SortOption, Todo } from '../types';
 import { getVerticalDropPosition, moveIdRelative } from '../utils/todoLogic';
@@ -60,7 +67,10 @@ export function useTodoDragReorder({
       const sourceTodo = currentVisible.find((tItem) => tItem.id === sourceId);
       const targetTodo = currentVisible.find((tItem) => tItem.id === targetId);
       if (!sourceTodo || !targetTodo) return;
-      if (sourceTodo.pinned !== targetTodo.pinned || sourceTodo.completed !== targetTodo.completed) {
+      if (
+        sourceTodo.pinned !== targetTodo.pinned ||
+        sourceTodo.completed !== targetTodo.completed
+      ) {
         return;
       }
 
@@ -72,7 +82,7 @@ export function useTodoDragReorder({
       let cursor = 0;
       const nextOrderedIds = allSorted.map((tItem) => {
         if (visibleSet.has(tItem.id)) {
-          const replacement = reorderedVisible[cursor];
+          const replacement = reorderedVisible[cursor] ?? tItem.id;
           cursor += 1;
           return replacement;
         }
@@ -101,43 +111,34 @@ export function useTodoDragReorder({
     [todosRef, setTodos, setSortBy, showInfoToast, loadData, formatUiError],
   );
 
-  const handleTodoDragStart = useCallback(
-    (e: React.DragEvent<HTMLDivElement>, id: string) => {
-      setDraggedTodoId(id);
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/agendamea-todo', id);
-      e.dataTransfer.setData('text/plain', id);
-    },
-    [],
-  );
+  const handleTodoDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, id: string) => {
+    setDraggedTodoId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/agendamea-todo', id);
+    e.dataTransfer.setData('text/plain', id);
+  }, []);
 
-  const handleTodoDragOver = useCallback(
-    (e: React.DragEvent<HTMLDivElement>, id: string) => {
-      const draggedId = draggedTodoIdRef.current;
-      if (!canDragTodosRef.current || !draggedId || draggedId === id) return;
-      const list = visibleTodosRef.current;
-      const sourceTodo = list.find((tItem) => tItem.id === draggedId);
-      const targetTodo = list.find((tItem) => tItem.id === id);
-      if (
-        !sourceTodo ||
-        !targetTodo ||
-        sourceTodo.pinned !== targetTodo.pinned ||
-        sourceTodo.completed !== targetTodo.completed
-      ) {
-        return;
-      }
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      const position = getVerticalDropPosition(
-        e.clientY,
-        e.currentTarget.getBoundingClientRect(),
-      );
-      setTodoDropTarget((prev) =>
-        prev && prev.id === id && prev.position === position ? prev : { id, position },
-      );
-    },
-    [],
-  );
+  const handleTodoDragOver = useCallback((e: React.DragEvent<HTMLDivElement>, id: string) => {
+    const draggedId = draggedTodoIdRef.current;
+    if (!canDragTodosRef.current || !draggedId || draggedId === id) return;
+    const list = visibleTodosRef.current;
+    const sourceTodo = list.find((tItem) => tItem.id === draggedId);
+    const targetTodo = list.find((tItem) => tItem.id === id);
+    if (
+      !sourceTodo ||
+      !targetTodo ||
+      sourceTodo.pinned !== targetTodo.pinned ||
+      sourceTodo.completed !== targetTodo.completed
+    ) {
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const position = getVerticalDropPosition(e.clientY, e.currentTarget.getBoundingClientRect());
+    setTodoDropTarget((prev) =>
+      prev && prev.id === id && prev.position === position ? prev : { id, position },
+    );
+  }, []);
 
   const handleTodoDragLeave = useCallback((id: string) => {
     setTodoDropTarget((prev) => (prev && prev.id === id ? null : prev));

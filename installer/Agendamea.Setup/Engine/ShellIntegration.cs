@@ -35,7 +35,10 @@ public static class ShellIntegration
     [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = false)]
     private static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
 
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static readonly System.Text.Json.JsonSerializerOptions IndentedJsonOptions =
+        new() { WriteIndented = true };
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr SendMessageTimeout(
         IntPtr hWnd,
         uint msg,
@@ -108,7 +111,7 @@ public static class ShellIntegration
                 }
                 finally
                 {
-                    PropVariantClear(ref pv);
+                    _ = PropVariantClear(ref pv);
                 }
             }
 
@@ -145,7 +148,7 @@ public static class ShellIntegration
                 }
                 finally
                 {
-                    PropVariantClear(ref pv);
+                    _ = PropVariantClear(ref pv);
                 }
             }
             return null;
@@ -210,7 +213,7 @@ public static class ShellIntegration
             if (key is null) return;
             if (enabled && !string.IsNullOrWhiteSpace(appExePath))
             {
-                key.SetValue(RunValueName, $"\"{appExePath}\" --tray", RegistryValueKind.String);
+                key.SetValue(RunValueName, $"\"{appExePath}\" --minimized", RegistryValueKind.String);
             }
             else
             {
@@ -223,30 +226,151 @@ public static class ShellIntegration
         }
     }
 
-    public static void InstallCliShims(string installDir)
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool CreateHardLink(string lpFileName, string lpExistingFileName, IntPtr lpSecurityAttributes);
+
+    private static void SafeDeployBinary(string sourceExe, string targetExe, string? hardlinkSource)
     {
-        var binDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Agendamea",
-            "bin");
+        if (File.Exists(targetExe))
+        {
+            try
+            {
+                File.Delete(targetExe);
+            }
+            catch
+            {
+                try
+                {
+                    File.Move(targetExe, $"{targetExe}.old.{Environment.ProcessId}.{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
+                }
+                catch
+                {
+                    // Ignore
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(hardlinkSource) && File.Exists(hardlinkSource))
+        {
+            try
+            {
+                if (CreateHardLink(targetExe, hardlinkSource, IntPtr.Zero))
+                {
+                    return;
+                }
+            }
+            catch
+            {
+                // Fall back to direct file copy
+            }
+        }
+
+        File.Copy(sourceExe, targetExe, overwrite: true);
+    }
+
+    public static void InstallCliShims(string installDir, string? customBinDir = null, bool skipPathUpdate = false)
+    {
+        var binDir = string.IsNullOrWhiteSpace(customBinDir)
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Agendamea",
+                "bin")
+            : Path.GetFullPath(customBinDir);
         Directory.CreateDirectory(binDir);
 
         var appExe = Path.Combine(installDir, "Agendamea.exe");
-        var cliScript = Path.Combine(installDir, "resources", "app.asar.unpacked", "cli", "agendamea.cjs");
-
-        var cmdBody = string.Join(
-            "\r\n",
-            "@echo off",
-            "setlocal",
-            "chcp 65001 >nul 2>&1",
-            "set ELECTRON_RUN_AS_NODE=1",
-            $"\"{appExe}\" \"{cliScript}\" %*",
-            "endlocal");
+        var unpackedRoot = Path.Combine(installDir, "resources", "app.asar.unpacked");
+        var cliScript = Path.Combine(unpackedRoot, "cli", "agendamea.cjs");
+        var mcpScript = Path.Combine(unpackedRoot, "mcp", "server.cjs");
+        var bundledShimExe = Path.Combine(unpackedRoot, "cli", "bin", "ag.exe");
+        if (!File.Exists(bundledShimExe))
+        {
+            var alt = Path.Combine(installDir, "resources", "bin", "ag.exe");
+            if (File.Exists(alt)) bundledShimExe = alt;
+        }
 
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        foreach (var name in new[] { "ag.cmd", "agenda.cmd", "agendamea.cmd" })
+
+        if (File.Exists(bundledShimExe))
         {
-            File.WriteAllText(Path.Combine(binDir, name), cmdBody, utf8NoBom);
+            var targetManifest = System.Text.Json.JsonSerializer.Serialize(
+                new
+                {
+                    schemaVersion = 1,
+                    execPath = appExe,
+                    cliScript,
+                    mcpScript,
+                    runtimeRoot = unpackedRoot,
+                    updatedAt = DateTime.UtcNow.ToString("O"),
+                },
+                IndentedJsonOptions);
+            var manifestPath = Path.Combine(binDir, "ag.target.json");
+            var manifestTmp = $"{manifestPath}.tmp.{Environment.ProcessId}";
+            File.WriteAllText(manifestTmp, targetManifest + "\n", utf8NoBom);
+            File.Move(manifestTmp, manifestPath, overwrite: true);
+
+            var primaryExe = Path.Combine(binDir, "ag.exe");
+            SafeDeployBinary(bundledShimExe, primaryExe, hardlinkSource: null);
+            SafeDeployBinary(bundledShimExe, Path.Combine(binDir, "agenda.exe"), hardlinkSource: primaryExe);
+            SafeDeployBinary(bundledShimExe, Path.Combine(binDir, "agendamea.exe"), hardlinkSource: primaryExe);
+
+            foreach (var legacy in new[] { "ag.cmd", "agenda.cmd", "agendamea.cmd", "run-cli.ps1" })
+            {
+                try
+                {
+                    var lp = Path.Combine(binDir, legacy);
+                    if (File.Exists(lp)) File.Delete(lp);
+                }
+                catch
+                {
+                    // Ignore locked legacy shim
+                }
+            }
+        }
+        else
+        {
+            // Unified fallback with PowerShell stdout bridge when ag.exe is absent
+            var psHelper = string.Join(
+                "\r\n",
+                "$env:ELECTRON_RUN_AS_NODE = '1'",
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+                "$exe = $args[0]",
+                "$script = $args[1]",
+                "$rest = @()",
+                "if ($args.Length -gt 2) { $rest = $args[2..($args.Length - 1)] }",
+                "& $exe $script @rest | Write-Output",
+                "exit $LASTEXITCODE",
+                "");
+            File.WriteAllText(Path.Combine(binDir, "run-cli.ps1"), psHelper, utf8NoBom);
+
+            var cmdBody = string.Join(
+                "\r\n",
+                "@echo off",
+                "setlocal",
+                "chcp 65001 >nul 2>&1",
+                "if /I \"%~1\"==\"mcp\" if \"%~2\"==\"\" (",
+                "  set \"ELECTRON_RUN_AS_NODE=1\"",
+                $"  \"{appExe}\" \"{mcpScript}\"",
+                "  exit /b %ERRORLEVEL%",
+                ")",
+                "where node >nul 2>&1",
+                "if %ERRORLEVEL%==0 (",
+                $"  node \"{cliScript}\" %*",
+                "  if not %ERRORLEVEL%==86 exit /b %ERRORLEVEL%",
+                ")",
+                $"powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0run-cli.ps1\" \"{appExe}\" \"{cliScript}\" %*",
+                "exit /b %ERRORLEVEL%",
+                "");
+
+            foreach (var name in new[] { "ag.cmd", "agenda.cmd", "agendamea.cmd" })
+            {
+                File.WriteAllText(Path.Combine(binDir, name), cmdBody, utf8NoBom);
+            }
+        }
+
+        if (skipPathUpdate)
+        {
+            return;
         }
 
         // Add binDir to HKCU\Environment\Path if not already present

@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw, Search, Trash2, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { Category, Todo } from '../../types';
 import {
@@ -19,6 +19,7 @@ export interface TrashSettingsTabProps {
   onRestoreCategory: (id: string) => Promise<void>;
   onPermanentDeleteCategory: (id: string) => Promise<void>;
   onEmptyTrash: () => Promise<void>;
+  onRestoreAllTrash?: () => Promise<void>;
   formatTimestamp: (iso: string | null) => string;
 }
 
@@ -30,11 +31,14 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
   onRestoreCategory,
   onPermanentDeleteCategory,
   onEmptyTrash,
+  onRestoreAllTrash,
   formatTimestamp,
 }: TrashSettingsTabProps) {
   const { t, meta } = useI18n();
   const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
+  const [isBulkBusy, setIsBulkBusy] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [busyTrashIds, setBusyTrashIds] = useState<Set<string>>(() => new Set());
   const [trashSearchQuery, setTrashSearchQuery] = useState('');
   const [trashTypeFilter, setTrashTypeFilter] = useState<TrashTypeFilter>('all');
@@ -48,6 +52,7 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
     id: string;
   } | null>(null);
   const isMountedRef = useRef(true);
+  const busyTrashRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -55,6 +60,23 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
       isMountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    const validKeys = new Set<string>([
+      ...trashedCategories.map((c) => `cat:${c.id}`),
+      ...trashedTodos.map((td) => `todo:${td.id}`),
+    ]);
+    setSelectedKeys((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set<string>();
+      for (const key of prev) {
+        if (validKeys.has(key)) next.add(key);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [trashedCategories, trashedTodos]);
 
   const trashCount = trashedCategories.length + trashedTodos.length;
 
@@ -96,28 +118,66 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
   };
 
   const runTrashItemOp = useCallback(async (key: string, op: () => Promise<void>) => {
-    setBusyTrashIds((prev) => {
-      if (prev.has(key)) return prev;
-      const next = new Set(prev);
-      next.add(key);
-      return next;
-    });
+    if (busyTrashRef.current.has(key)) return;
+    busyTrashRef.current.add(key);
+    setBusyTrashIds(new Set(busyTrashRef.current));
     try {
       await op();
     } finally {
+      busyTrashRef.current.delete(key);
       if (isMountedRef.current) {
-        setBusyTrashIds((prev) => {
-          if (!prev.has(key)) return prev;
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
-        });
+        setBusyTrashIds(new Set(busyTrashRef.current));
       }
     }
   }, []);
 
+  const toggleSelectedKey = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const allFilteredKeys = useMemo(
+    () => [
+      ...filteredTrash.categories.map((c) => `cat:${c.id}`),
+      ...filteredTrash.todos.map((td) => `todo:${td.id}`),
+    ],
+    [filteredTrash.categories, filteredTrash.todos],
+  );
+
+  const handleBulkRestore = async () => {
+    if (isBulkBusy || selectedKeys.size === 0) return;
+    setIsBulkBusy(true);
+    try {
+      for (const key of Array.from(selectedKeys)) {
+        if (key.startsWith('cat:')) await onRestoreCategory(key.slice(4));
+        else if (key.startsWith('todo:')) await onRestoreTodo(key.slice(5));
+      }
+      if (isMountedRef.current) setSelectedKeys(new Set());
+    } finally {
+      if (isMountedRef.current) setIsBulkBusy(false);
+    }
+  };
+
+  const handleBulkPermanentDelete = async () => {
+    if (isBulkBusy || selectedKeys.size === 0) return;
+    setIsBulkBusy(true);
+    try {
+      for (const key of Array.from(selectedKeys)) {
+        if (key.startsWith('cat:')) await onPermanentDeleteCategory(key.slice(4));
+        else if (key.startsWith('todo:')) await onPermanentDeleteTodo(key.slice(5));
+      }
+      if (isMountedRef.current) setSelectedKeys(new Set());
+    } finally {
+      if (isMountedRef.current) setIsBulkBusy(false);
+    }
+  };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-setting-id="trash-main">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-[var(--text-muted)]">{t.trashIntroDesc}</p>
 
@@ -140,7 +200,10 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                   setIsEmptyingTrash(true);
                   try {
                     await onEmptyTrash();
-                    if (isMountedRef.current) setConfirmEmptyTrash(false);
+                    if (isMountedRef.current) {
+                      setConfirmEmptyTrash(false);
+                      setSelectedKeys(new Set());
+                    }
                   } finally {
                     if (isMountedRef.current) setIsEmptyingTrash(false);
                   }
@@ -151,16 +214,93 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmEmptyTrash(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors whitespace-nowrap shrink-0"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>{t.emptyTrashButton}</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              {onRestoreAllTrash && (
+                <button
+                  type="button"
+                  data-testid="trash-restore-all-btn"
+                  disabled={isBulkBusy || isEmptyingTrash}
+                  onClick={() => {
+                    void (async () => {
+                      setIsBulkBusy(true);
+                      try {
+                        await onRestoreAllTrash();
+                        if (isMountedRef.current) setSelectedKeys(new Set());
+                      } finally {
+                        if (isMountedRef.current) setIsBulkBusy(false);
+                      }
+                    })();
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-[var(--accent)]" />
+                  <span>{t.trashRestoreAllButton}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setConfirmEmptyTrash(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors whitespace-nowrap"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>{t.emptyTrashButton}</span>
+              </button>
+            </div>
           ))}
       </div>
+
+      {/* Bulk Selection Action Bar */}
+      {trashCount > 0 && filteredTrashCount > 0 && (
+        <div
+          data-testid="trash-bulk-bar"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 text-xs"
+        >
+          <label className="inline-flex items-center gap-2 cursor-pointer text-[var(--text-secondary)]">
+            <input
+              type="checkbox"
+              checked={
+                allFilteredKeys.length > 0 && allFilteredKeys.every((k) => selectedKeys.has(k))
+              }
+              onChange={(e) => {
+                if (e.target.checked) setSelectedKeys(new Set(allFilteredKeys));
+                else setSelectedKeys(new Set());
+              }}
+              className="h-3.5 w-3.5 rounded accent-[var(--accent)]"
+            />
+            <span>
+              {t.trashSelectAllLabel} ({selectedKeys.size}/{allFilteredKeys.length})
+            </span>
+          </label>
+          {selectedKeys.size > 0 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                data-testid="trash-bulk-restore-btn"
+                disabled={isBulkBusy}
+                onClick={() => void handleBulkRestore()}
+                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span>
+                  {t.restoreItemButton} ({selectedKeys.size})
+                </span>
+              </button>
+              <button
+                type="button"
+                data-testid="trash-bulk-delete-btn"
+                disabled={isBulkBusy}
+                onClick={() => void handleBulkPermanentDelete()}
+                className="inline-flex items-center gap-1 rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-600 dark:text-red-400 hover:bg-red-500/20 disabled:opacity-40"
+              >
+                <Trash2 className="h-3 w-3" />
+                <span>
+                  {t.permanentDeleteTitle} ({selectedKeys.size})
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {trashCount === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-6 py-14 text-center">
@@ -278,7 +418,7 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                     onClick={clearFilters}
                     className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 text-[11px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
                   >
-                    {t.zoomResetButton}
+                    {t.clearDate}
                   </button>
                 )}
               </div>
@@ -313,24 +453,39 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                   </div>
                   <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
                     {filteredTrash.categories.map((cat) => (
+                      // biome-ignore lint/a11y/noStaticElementInteractions: Trash category context-menu wrapper; actions exposed via inner buttons
                       <div
                         key={cat.id}
                         onContextMenu={(e) => {
                           e.preventDefault();
-                          setTrashCtxMenu({ x: e.clientX, y: e.clientY, kind: 'category', id: cat.id });
+                          setTrashCtxMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            kind: 'category',
+                            id: cat.id,
+                          });
                         }}
                         className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--surface-hover)]/50 transition-colors"
                       >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <ColorDot color={cat.color} size="sm" />
-                            <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                              {cat.name}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedKeys.has(`cat:${cat.id}`)}
+                            onChange={() => toggleSelectedKey(`cat:${cat.id}`)}
+                            aria-label={cat.name}
+                            className="h-3.5 w-3.5 shrink-0 rounded accent-[var(--accent)]"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <ColorDot color={cat.color} size="sm" />
+                              <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                                {cat.name}
+                              </p>
+                            </div>
+                            <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
+                              {t.deletedPrefix}: {formatTimestamp(cat.deletedAt)}
                             </p>
                           </div>
-                          <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
-                            {t.deletedPrefix}: {formatTimestamp(cat.deletedAt)}
-                          </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
@@ -378,30 +533,45 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
                   </div>
                   <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
                     {filteredTrash.todos.map((todo) => (
+                      // biome-ignore lint/a11y/noStaticElementInteractions: Trash todo context-menu wrapper; actions exposed via inner buttons
                       <div
                         key={todo.id}
                         onContextMenu={(e) => {
                           e.preventDefault();
-                          setTrashCtxMenu({ x: e.clientX, y: e.clientY, kind: 'todo', id: todo.id });
+                          setTrashCtxMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            kind: 'todo',
+                            id: todo.id,
+                          });
                         }}
                         className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--surface-hover)]/50 transition-colors"
                       >
-                        <div className="min-w-0">
-                          <p
-                            className={`truncate text-sm font-medium ${
-                              todo.completed
-                                ? 'line-through text-[var(--text-muted)]'
-                                : 'text-[var(--text-primary)]'
-                            }`}
-                          >
-                            {todo.title}
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
-                            {t.deletedPrefix}: {formatTimestamp(todo.deletedAt)}
-                            {todo.subtasks.length > 0
-                              ? ` · ${todo.subtasks.length} ${t.subtaskCountUnit}`
-                              : ''}
-                          </p>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedKeys.has(`todo:${todo.id}`)}
+                            onChange={() => toggleSelectedKey(`todo:${todo.id}`)}
+                            aria-label={todo.title}
+                            className="h-3.5 w-3.5 shrink-0 rounded accent-[var(--accent)]"
+                          />
+                          <div className="min-w-0">
+                            <p
+                              className={`truncate text-sm font-medium ${
+                                todo.completed
+                                  ? 'line-through text-[var(--text-muted)]'
+                                  : 'text-[var(--text-primary)]'
+                              }`}
+                            >
+                              {todo.title}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-[var(--text-muted)] font-mono-tabular">
+                              {t.deletedPrefix}: {formatTimestamp(todo.deletedAt)}
+                              {todo.subtasks.length > 0
+                                ? ` · ${todo.subtasks.length} ${t.subtaskCountUnit}`
+                                : ''}
+                            </p>
+                          </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
@@ -454,7 +624,9 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
               icon: <RotateCcw className="h-3.5 w-3.5" />,
               disabled:
                 isEmptyingTrash ||
-                busyTrashIds.has(`${trashCtxMenu.kind === 'category' ? 'cat' : 'todo'}:${trashCtxMenu.id}`),
+                busyTrashIds.has(
+                  `${trashCtxMenu.kind === 'category' ? 'cat' : 'todo'}:${trashCtxMenu.id}`,
+                ),
               onSelect: () => {
                 if (trashCtxMenu.kind === 'category') {
                   void runTrashItemOp(`cat:${trashCtxMenu.id}`, () =>
@@ -475,7 +647,9 @@ export const TrashSettingsTab = React.memo(function TrashSettingsTab({
               danger: true,
               disabled:
                 isEmptyingTrash ||
-                busyTrashIds.has(`${trashCtxMenu.kind === 'category' ? 'cat' : 'todo'}:${trashCtxMenu.id}`),
+                busyTrashIds.has(
+                  `${trashCtxMenu.kind === 'category' ? 'cat' : 'todo'}:${trashCtxMenu.id}`,
+                ),
               onSelect: () => {
                 if (trashCtxMenu.kind === 'category') {
                   void runTrashItemOp(`cat:${trashCtxMenu.id}`, () =>

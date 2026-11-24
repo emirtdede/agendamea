@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
 import { ArrowDownToLine, ChevronRight, Power, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 import { BrandMark } from './BrandMark';
 
@@ -29,7 +29,7 @@ export function CloseActionModal({ onSelectAction, onCancel }: CloseActionModalP
       aria-modal="true"
       aria-labelledby="close-action-modal-title"
       data-testid="close-action-modal"
-      className="animate-fade-in fixed inset-0 z-[58] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
+      className="animate-fade-in fixed inset-0 z-[68] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -67,14 +67,14 @@ export function CloseActionModal({ onSelectAction, onCancel }: CloseActionModalP
             type="button"
             data-testid="close-action-tray"
             onClick={() => onSelectAction('tray', rememberChoice)}
-            className="group flex w-full items-center gap-3 px-3.5 py-3 text-left hover:bg-[var(--accent-soft)] transition-colors"
+            className="group flex w-full items-center gap-3 px-3.5 py-3 text-start hover:bg-[var(--accent-soft)] transition-colors"
           >
             <ArrowDownToLine className="h-4 w-4 shrink-0 text-[var(--accent)]" />
             <span className="min-w-0 flex-1">
               <span className="block font-display text-[13px] font-semibold text-[var(--text-primary)] truncate">
                 {t.closeActionTrayTitle}
               </span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-[var(--text-muted)] truncate">
+              <span className="mt-0.5 block text-[11px] leading-snug text-[var(--text-muted)] line-clamp-2">
                 {t.closeActionTrayDesc}
               </span>
             </span>
@@ -85,14 +85,14 @@ export function CloseActionModal({ onSelectAction, onCancel }: CloseActionModalP
             type="button"
             data-testid="close-action-quit"
             onClick={() => onSelectAction('quit', rememberChoice)}
-            className="group flex w-full items-center gap-3 px-3.5 py-3 text-left hover:bg-[var(--danger-soft)] transition-colors"
+            className="group flex w-full items-center gap-3 px-3.5 py-3 text-start hover:bg-[var(--danger-soft)] transition-colors"
           >
             <Power className="h-4 w-4 shrink-0 text-[var(--danger)]" />
             <span className="min-w-0 flex-1">
               <span className="block font-display text-[13px] font-semibold text-[var(--text-primary)] truncate">
                 {t.closeActionQuitTitle}
               </span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-[var(--text-muted)] truncate">
+              <span className="mt-0.5 block text-[11px] leading-snug text-[var(--text-muted)] line-clamp-2">
                 {t.closeActionQuitDesc}
               </span>
             </span>

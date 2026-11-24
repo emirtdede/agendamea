@@ -4,16 +4,16 @@ import { useI18n } from '../i18n/I18nContext';
 
 interface NativeWindowBridge {
   isWindowsStore?: boolean;
-  minimize?: () => void | Promise<void>;
-  toggleMaximize?: () => void | Promise<boolean | void>;
-  close?: () => void | Promise<void>;
+  minimize?: () => Promise<void> | undefined;
+  toggleMaximize?: () => Promise<boolean | undefined> | undefined;
+  close?: () => Promise<void> | undefined;
   isMaximized?: () => Promise<boolean> | boolean;
-  onMaximizedChange?: (cb: (isMaximized: boolean) => void) => (() => void) | void;
-  onCloseRequested?: (cb: () => void) => (() => void) | void;
-  onFocusQuickAdd?: (cb: () => void) => (() => void) | void;
+  onMaximizedChange?: (cb: (isMaximized: boolean) => void) => (() => void) | undefined;
+  onCloseRequested?: (cb: () => void) => (() => void) | undefined;
+  onFocusQuickAdd?: (cb: () => void) => (() => void) | undefined;
   onNavigateSmartView?: (
     cb: (viewId: import('../types').SmartView) => void,
-  ) => (() => void) | void;
+  ) => (() => void) | undefined;
   setCloseBehavior?: (
     behavior: import('../types').CloseBehavior,
   ) => Promise<{ ok: boolean; closeBehavior?: import('../types').CloseBehavior }>;
@@ -22,20 +22,29 @@ interface NativeWindowBridge {
   ) => Promise<{ ok: boolean; action?: 'tray' | 'quit' }>;
   setLaunchAtStartup?: (
     enabled: boolean,
+    minimizedToTray?: boolean,
   ) => Promise<{ ok: boolean; launchAtStartup?: boolean }>;
   setGlobalQuickAddShortcut?: (
     enabled: boolean,
-  ) => Promise<{ ok: boolean; globalQuickAddShortcut?: boolean }>;
+  ) => Promise<{ ok: boolean; registered?: boolean; globalQuickAddShortcut?: boolean }>;
   setGlobalQuickAddShortcutKey?: (
     shortcut: string,
-  ) => Promise<{ ok: boolean; globalQuickAddShortcutKey?: string }>;
+  ) => Promise<{ ok: boolean; registered?: boolean; globalQuickAddShortcutKey?: string }>;
+  getShortcutStatus?: () => Promise<{
+    quickAddEnabled: boolean;
+    quickAddKey?: string;
+    quickAddRegistered: boolean;
+    voiceEnabled: boolean;
+    voiceShortcut?: string;
+    voiceRegistered: boolean;
+  }>;
   showDesktopNotification?: (payload: {
     title: string;
     body: string;
     todoId?: string;
     silent?: boolean;
   }) => Promise<{ ok: boolean; supported?: boolean }>;
-  onFocusTodo?: (cb: (todoId: string) => void) => (() => void) | void;
+  onFocusTodo?: (cb: (todoId: string) => void) => (() => void) | undefined;
   getDiagnostics?: () => Promise<{
     appVersion: string;
     electronVersion: string;
@@ -45,22 +54,59 @@ interface NativeWindowBridge {
     arch: string;
     osRelease: string;
     isWindowsStore: boolean;
+    distributionChannel?: 'store' | 'portable' | 'setup' | 'dev';
     locale: string;
     execPath?: string;
     cliPath?: string;
     mcpPath?: string;
     cliBinDir?: string;
+    cliExePath?: string;
     cliInstalled?: boolean;
     runtimePort?: number | null;
     userDataDir?: string;
+    logsDir?: string;
+    modelsDir?: string;
+    quickAddRegistered?: boolean;
+    voiceRegistered?: boolean;
   }>;
+  openDataFolder?: () => Promise<{ ok: boolean; path?: string }>;
+  openLogsFolder?: () => Promise<{ ok: boolean; path?: string }>;
+  openModelsFolder?: () => Promise<{ ok: boolean; path?: string }>;
+  openFileLocation?: (targetPath: string) => Promise<{ ok: boolean; path?: string }>;
+  openWindowsNotificationSettings?: () => Promise<{ ok: boolean }>;
+  openMicrosoftStorePage?: () => Promise<{ ok: boolean }>;
+  runCliDry?: (
+    commandName: 'stat' | 'doctor',
+  ) => Promise<{ ok: boolean; stdout: string; stderr: string }>;
   installCliShims?: () => Promise<{
     ok: boolean;
     binDir?: string;
     installed?: boolean;
+    nativeShim?: boolean;
+    executablePath?: string;
     error?: string;
   }>;
   openCliTerminal?: () => Promise<{ ok: boolean; error?: string }>;
+  listMcpClients?: () => Promise<{
+    ok: boolean;
+    clients: import('../types').McpClientStatus[];
+    error?: string;
+  }>;
+  installMcpClient?: (clientId: string) => Promise<{
+    ok: boolean;
+    clientId?: string;
+    name?: string;
+    configPath?: string;
+    requiresRestart?: boolean;
+    error?: string;
+  }>;
+  uninstallMcpClient?: (clientId: string) => Promise<{
+    ok: boolean;
+    clientId?: string;
+    removed?: boolean;
+    error?: string;
+  }>;
+  testMcpServer?: () => Promise<import('../types').McpProbeResult>;
   updateTrayLabels?: (labels: {
     openLabel: string;
     newTaskLabel: string;
@@ -81,16 +127,16 @@ interface NativeWindowBridge {
     preferred: string;
   }>;
   checkForUpdates?: () => Promise<import('../types').UpdateCheckResult>;
-  downloadAndInstallUpdate?: (
-    url?: string,
-  ) => Promise<{
+  downloadAndInstallUpdate?: (url?: string) => Promise<{
     ok: boolean;
     downloaded?: boolean;
+    cancelled?: boolean;
     nativeAutoUpdater?: boolean;
     launchedInstaller?: boolean;
     launchedExternal?: boolean;
     storeManaged?: boolean;
   }>;
+  cancelUpdateDownload?: () => Promise<{ ok: boolean; cancelled?: boolean }>;
   quitAndInstallUpdate?: () => Promise<{ ok: boolean; storeManaged?: boolean }>;
   pickCloudSyncFolder?: () => Promise<{
     ok: boolean;
@@ -98,17 +144,26 @@ interface NativeWindowBridge {
     folderPath?: string;
   }>;
   openOneDriveFolder?: (folderPath?: string | null) => Promise<{ ok: boolean; path?: string }>;
-  onUpdateProgress?: (cb: (percent: number) => void) => (() => void) | void;
-  onUpdateDownloaded?: (cb: (info: { version: string }) => void) => (() => void) | void;
-  onUpdateError?: (cb: (message: string) => void) => (() => void) | void;
-  setVoiceShortcut?: (shortcut: string) => Promise<{ ok: boolean; voiceShortcut?: string }>;
+  onUpdateProgress?: (cb: (percent: number) => void) => (() => void) | undefined;
+  onUpdateDownloaded?: (cb: (info: { version: string }) => void) => (() => void) | undefined;
+  onUpdateError?: (cb: (message: string) => void) => (() => void) | undefined;
+  setVoiceShortcut?: (
+    shortcut: string,
+  ) => Promise<{ ok: boolean; registered?: boolean; voiceShortcut?: string }>;
+  setVoiceShortcutEnabled?: (enabled: boolean) => Promise<{
+    ok: boolean;
+    registered?: boolean;
+    voiceShortcut?: string;
+    voiceShortcutEnabled?: boolean;
+  }>;
   toggleVoiceOverlay?: () => Promise<{ ok: boolean; visible?: boolean; listening?: boolean }>;
   hideVoiceOverlay?: () => Promise<{ ok: boolean }>;
   setOverlayFocusable?: (focusable: boolean) => Promise<{ ok: boolean }>;
   notifyOverlayListening?: (listening: boolean) => Promise<{ ok: boolean; listening?: boolean }>;
+  notifyOverlayReady?: () => void;
   getOverlayBounds?: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
   openWindowsSpeechSettings?: () => Promise<{ ok: boolean }>;
-  onOverlayCommand?: (cb: (payload: { action?: string }) => void) => (() => void) | void;
+  onOverlayCommand?: (cb: (payload: { action?: string }) => void) => (() => void) | undefined;
 }
 
 declare global {
@@ -135,13 +190,15 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
     let active = true;
     const bridge = getNativeBridge();
 
-    let unsubNative: (() => void) | void;
+    let unsubNative: (() => void) | undefined;
     if (bridge?.isMaximized) {
       Promise.resolve(bridge.isMaximized())
         .then((val) => {
           if (active) setIsFullscreenOrMaximized(Boolean(val));
         })
-        .catch(() => {});
+        .catch(() => {
+          // Ignore maximize query errors
+        });
     }
     if (bridge?.onMaximizedChange) {
       unsubNative = bridge.onMaximizedChange((val) => {
@@ -177,7 +234,9 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
     }
 
     if (document.fullscreenElement && document.exitFullscreen) {
-      await document.exitFullscreen().catch(() => {});
+      await document.exitFullscreen().catch(() => {
+        // Ignore fullscreen exit errors
+      });
     }
 
     try {
@@ -239,10 +298,9 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
   const maximizeTitle = isFullscreenOrMaximized ? t.windowRestore : t.windowMaximize;
 
   return (
-    <div
-      role="group"
+    <fieldset
       aria-label={t.windowControlsLabel}
-      className="app-no-drag flex items-center gap-0.5 rounded-lg bg-[var(--canvas)]/75 p-0.5 backdrop-blur-sm"
+      className="app-no-drag flex items-center gap-0.5 rounded-lg border-0 bg-[var(--canvas)]/75 p-0.5 backdrop-blur-sm"
     >
       {/* Minimize */}
       <button
@@ -252,19 +310,8 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
         title={t.windowMinimize}
         className="app-no-drag flex h-7 w-8 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] active:bg-[var(--border)]"
       >
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 12 12"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M2 6.5H10"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            strokeLinecap="round"
-          />
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M2 6.5H10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
         </svg>
       </button>
 
@@ -278,13 +325,7 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
         className="app-no-drag flex h-7 w-8 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] active:bg-[var(--border)]"
       >
         {isFullscreenOrMaximized ? (
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 12 12"
-            fill="none"
-            aria-hidden="true"
-          >
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path
               d="M3.75 3.75V2.5C3.75 2.08579 4.08579 1.75 4.5 1.75H9.5C9.91421 1.75 10.25 2.08579 10.25 2.5V7.5C10.25 7.91421 9.91421 8.25 9.5 8.25H8.25"
               stroke="currentColor"
@@ -302,13 +343,7 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
             />
           </svg>
         ) : (
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 12 12"
-            fill="none"
-            aria-hidden="true"
-          >
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <rect
               x="2"
               y="2"
@@ -330,13 +365,7 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
         title={t.windowClose}
         className="app-no-drag flex h-7 w-8 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[#c42b1c] hover:text-white active:bg-[#a62216]"
       >
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 12 12"
-          fill="none"
-          aria-hidden="true"
-        >
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
           <path
             d="M2.5 2.5L9.5 9.5M9.5 2.5L2.5 9.5"
             stroke="currentColor"
@@ -345,6 +374,6 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
           />
         </svg>
       </button>
-    </div>
+    </fieldset>
   );
 }

@@ -37,7 +37,10 @@ type OrtTensor = import('onnxruntime-web/wasm').Tensor;
 
 let phonemizerScriptPromise: Promise<CreatePiperPhonemizeFn | null> | null = null;
 let sharedOrtPromise: Promise<OrtModule | null> | null = null;
-const sessionCache = new Map<string, Promise<{ session: OrtSession; config: PiperModelConfig } | null>>();
+const sessionCache = new Map<
+  string,
+  Promise<{ session: OrtSession; config: PiperModelConfig } | null>
+>();
 
 let activeAudio: HTMLAudioElement | null = null;
 let activeObjectUrl: string | null = null;
@@ -98,13 +101,19 @@ async function ensureVoiceSession(
   const loader = (async () => {
     try {
       const ort = await ensureOrt();
-      if (!ort) return null;
+      if (!ort) {
+        sessionCache.delete(voiceId);
+        return null;
+      }
       const encoded = encodeURIComponent(voiceId);
       const [cfgRes, onnxRes] = await Promise.all([
         fetch(`/api/ai/tts-voices/${encoded}/config`),
         fetch(`/api/ai/tts-voices/${encoded}/onnx`),
       ]);
-      if (!cfgRes.ok || !onnxRes.ok) return null;
+      if (!cfgRes.ok || !onnxRes.ok) {
+        sessionCache.delete(voiceId);
+        return null;
+      }
       const config = (await cfgRes.json()) as PiperModelConfig;
       const onnxBytes = await onnxRes.arrayBuffer();
       const session = await ort.InferenceSession.create(onnxBytes, {
@@ -166,7 +175,7 @@ export function encodeFloat32PcmToWav(samples: Float32Array, sampleRate: number)
 
   let offset = 44;
   for (let i = 0; i < samples.length; i += 1) {
-    const clamped = Math.max(-1, Math.min(1, samples[i]));
+    const clamped = Math.max(-1, Math.min(1, samples[i] ?? 0));
     const int16 = clamped < 0 ? Math.round(clamped * 32768) : Math.round(clamped * 32767);
     view.setInt16(offset, int16, true);
     offset += 2;
@@ -181,9 +190,14 @@ async function phonemizeText(text: string, espeakVoice: string): Promise<number[
   const payload = JSON.stringify([{ text: text.trim() }]);
   return new Promise<number[] | null>((resolve) => {
     let settled = false;
+    let fallbackTimer: number | null = null;
     const finish = (ids: number[] | null) => {
       if (settled) return;
       settled = true;
+      if (fallbackTimer !== null) {
+        window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
       resolve(ids);
     };
     void createPhonemizer({
@@ -208,19 +222,14 @@ async function phonemizeText(text: string, espeakVoice: string): Promise<number[
     })
       .then((mod) => {
         try {
-          mod.callMain([
-            '-l',
-            espeakVoice,
-            '--input',
-            payload,
-            '--espeak_data',
-            '/espeak-ng-data',
-          ]);
+          mod.callMain(['-l', espeakVoice, '--input', payload, '--espeak_data', '/espeak-ng-data']);
         } catch {
           finish(null);
         }
         // Fallback timeout if callMain exited without printing
-        window.setTimeout(() => finish(null), 1500);
+        if (!settled) {
+          fallbackTimer = window.setTimeout(() => finish(null), 1500);
+        }
       })
       .catch(() => finish(null));
   });
@@ -262,9 +271,25 @@ export async function speakWithPiperVoice(
   const [ort, loaded] = await Promise.all([ensureOrt(), ensureVoiceSession(voiceId)]);
   if (!ort || !loaded || seq !== activePlaySeq) return false;
 
-  const espeakVoice = loaded.config.espeak?.voice || 'tr';
+  const espeakVoice = loaded.config.espeak?.voice || 'en';
   const phonemeIds = await phonemizeText(text, espeakVoice);
   if (!phonemeIds || phonemeIds.length === 0 || seq !== activePlaySeq) return false;
+
+  const disposeTensors = (map: Record<string, OrtTensor> | null) => {
+    if (!map) return;
+    for (const tensor of Object.values(map)) {
+      try {
+        (tensor as unknown as { dispose?: () => void })?.dispose?.();
+      } catch {
+        // Ignore already-disposed tensor
+      }
+    }
+  };
+
+  let feeds: Record<string, OrtTensor> | null = null;
+  let outputs: Record<string, OrtTensor> | null = null;
+  let createdObjectUrl: string | null = null;
+  let createdAudio: HTMLAudioElement | null = null;
 
   try {
     const stylePreset = TTS_STYLE_PRESETS[options?.style ?? 'natural'] ?? TTS_STYLE_PRESETS.natural;
@@ -274,24 +299,27 @@ export async function speakWithPiperVoice(
     const effectiveLengthScale = Math.max(0.65, Math.min(1.45, baseLengthScale / stylePreset.rate));
     const noiseW = loaded.config.inference?.noise_w ?? 0.8;
 
-    const feeds: Record<string, OrtTensor> = {
-      input: new ort.Tensor(
-        'int64',
-        BigInt64Array.from(phonemeIds.map((id) => BigInt(id))),
-        [1, phonemeIds.length],
-      ),
+    feeds = {
+      input: new ort.Tensor('int64', BigInt64Array.from(phonemeIds.map((id) => BigInt(id))), [
+        1,
+        phonemeIds.length,
+      ]),
       input_lengths: new ort.Tensor('int64', BigInt64Array.from([BigInt(phonemeIds.length)]), [1]),
-      scales: new ort.Tensor('float32', Float32Array.from([noiseScale, effectiveLengthScale, noiseW]), [3]),
+      scales: new ort.Tensor(
+        'float32',
+        Float32Array.from([noiseScale, effectiveLengthScale, noiseW]),
+        [3],
+      ),
     };
 
     if (loaded.config.speaker_id_map && Object.keys(loaded.config.speaker_id_map).length > 0) {
       feeds.sid = new ort.Tensor('int64', BigInt64Array.from([0n]), [1]);
     }
 
-    const outputs: Record<string, OrtTensor> = await loaded.session.run(feeds);
+    outputs = await loaded.session.run(feeds);
     if (seq !== activePlaySeq) return false;
 
-    const outTensor = outputs['output'];
+    const outTensor = outputs.output;
     const pcmData = outTensor?.data;
     if (!(pcmData instanceof Float32Array) || pcmData.length === 0) return false;
 
@@ -299,12 +327,17 @@ export async function speakWithPiperVoice(
     const wavBuffer = encodeFloat32PcmToWav(pcmData, sampleRate);
     const blob = new Blob([wavBuffer], { type: 'audio/wav' });
     const objectUrl = URL.createObjectURL(blob);
+    createdObjectUrl = objectUrl;
 
     const audio = new Audio(objectUrl);
+    createdAudio = audio;
     activeAudio = audio;
     activeObjectUrl = objectUrl;
 
+    let cleaned = false;
     const cleanupAudio = () => {
+      if (cleaned) return;
+      cleaned = true;
       if (activeAudio === audio) activeAudio = null;
       if (activeObjectUrl === objectUrl) activeObjectUrl = null;
       try {
@@ -318,8 +351,32 @@ export async function speakWithPiperVoice(
     audio.onended = cleanupAudio;
     audio.onerror = cleanupAudio;
     await audio.play();
+    if (seq !== activePlaySeq) {
+      try {
+        audio.pause();
+        audio.src = '';
+      } catch {
+        // Ignore
+      }
+      cleanupAudio();
+      return false;
+    }
     return true;
   } catch {
+    if (createdAudio && activeAudio === createdAudio) {
+      activeAudio = null;
+    }
+    if (createdObjectUrl) {
+      if (activeObjectUrl === createdObjectUrl) activeObjectUrl = null;
+      try {
+        URL.revokeObjectURL(createdObjectUrl);
+      } catch {
+        // Ignore
+      }
+    }
     return false;
+  } finally {
+    disposeTensors(feeds);
+    disposeTensors(outputs);
   }
 }

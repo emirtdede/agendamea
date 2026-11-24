@@ -7,9 +7,13 @@
  * - Turkish Female + Male & English Female + Male voices (~60 MB each, optional 1-click download)
  */
 
-const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { getAppLogger } = require('./logger.cjs');
+const { getDiskFreeBytes } = require('./hardwareProfiler.cjs');
+const { computeFileSha256, writeChunkSafe, renameWithRetry } = require('./downloadUtils.cjs');
+
+const piperLog = () => getAppLogger('piper-voices');
 
 const ALLOWED_PIPER_LICENSES = new Set(['mit', 'cc0', 'public-domain']);
 
@@ -109,38 +113,16 @@ function assertAllowedPiperLicense(spec) {
   }
 }
 
-function computeFileSha256(filePath) {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', reject);
-  });
-}
-
-async function renameWithRetry(fromPath, toPath, attempts = 5) {
-  for (let i = 0; i < attempts; i += 1) {
-    try {
-      fs.renameSync(fromPath, toPath);
-      return;
-    } catch (err) {
-      if (i === attempts - 1 || (err?.code !== 'EPERM' && err?.code !== 'EBUSY')) {
-        throw err;
-      }
-      await new Promise((r) => setTimeout(r, 150 * (i + 1)));
-    }
-  }
-}
-
 class PiperVoiceManager {
   constructor(options = {}) {
     if (!options.voicesDir) {
       throw new Error('PiperVoiceManager requires voicesDir.');
     }
     this.voicesDir = path.resolve(options.voicesDir);
-    this.fetchFn = options.fetchFn || ((...args) => globalThis.fetch(...args));
-    this.onProgressEvent = typeof options.onProgressEvent === 'function' ? options.onProgressEvent : null;
+    this.fetchFn = options.fetchFn || ((input, init) => globalThis.fetch(input, init));
+    this.statfsFn = options.statfsFn || null;
+    this.onProgressEvent =
+      typeof options.onProgressEvent === 'function' ? options.onProgressEvent : null;
     this.activeControllers = new Map();
     this.activePromises = new Map();
     this.downloadProgress = new Map();
@@ -233,6 +215,20 @@ class PiperVoiceManager {
     }
 
     this.ensureDir();
+
+    // 2x free disk space guard before writing temporary voice binary
+    const requiredFreeBytes = spec.bytes * 2;
+    const freeBytes = getDiskFreeBytes(this.voicesDir, this.statfsFn || undefined);
+    if (freeBytes !== null && freeBytes < requiredFreeBytes) {
+      return {
+        ok: false,
+        code: 'INSUFFICIENT_DISK_SPACE',
+        requiredBytes: requiredFreeBytes,
+        freeBytes,
+        message: 'Insufficient free disk space to download voice pack.',
+      };
+    }
+
     const ctrl = new AbortController();
     this.activeControllers.set(voiceId, ctrl);
 
@@ -256,12 +252,19 @@ class PiperVoiceManager {
         if (!onnxRes.ok || !onnxRes.body) {
           try {
             fs.rmSync(cfgTmp, { force: true });
-          } catch {}
+          } catch {
+            /* ignore */
+          }
           return { ok: false, code: 'MODEL_DOWNLOAD_FAILED', message: `HTTP ${onnxRes.status}` };
         }
 
-        const totalBytes = Number(onnxRes.headers.get('content-length') || spec.bytes) || spec.bytes;
+        const totalBytes =
+          Number(onnxRes.headers.get('content-length') || spec.bytes) || spec.bytes;
         writeStream = fs.createWriteStream(partPath);
+        let writeErr = null;
+        writeStream.on('error', (e) => {
+          writeErr = e;
+        });
         const reader = onnxRes.body.getReader();
         let receivedBytes = 0;
         let lastEmit = 0;
@@ -271,13 +274,14 @@ class PiperVoiceManager {
           if (done) break;
           if (value && value.byteLength > 0) {
             const buf = Buffer.from(value.buffer, value.byteOffset, value.byteLength);
-            if (!writeStream.write(buf)) {
-              await new Promise((resolve, reject) => {
-                writeStream.once('drain', resolve);
-                writeStream.once('error', reject);
+            receivedBytes += buf.byteLength;
+            if (spec.bytes > 0 && receivedBytes > spec.bytes) {
+              throw Object.assign(new Error('Voice download exceeded expected size.'), {
+                code: 'SIZE_EXCEEDED',
               });
             }
-            receivedBytes += buf.byteLength;
+            await writeChunkSafe(writeStream, buf, () => writeErr);
+            if (writeErr) throw writeErr;
             const now = Date.now();
             if (now - lastEmit >= 180 || receivedBytes >= totalBytes) {
               lastEmit = now;
@@ -299,6 +303,7 @@ class PiperVoiceManager {
           writeStream.end();
         });
         writeStream = null;
+        if (writeErr) throw writeErr;
 
         // 3. Mandatory SHA-256 verification (fail-closed)
         const actualSha = await computeFileSha256(partPath);
@@ -306,7 +311,9 @@ class PiperVoiceManager {
           try {
             fs.rmSync(partPath, { force: true });
             fs.rmSync(cfgTmp, { force: true });
-          } catch {}
+          } catch {
+            /* ignore */
+          }
           return {
             ok: false,
             code: 'SHA256_MISMATCH',
@@ -334,17 +341,29 @@ class PiperVoiceManager {
         if (writeStream) {
           try {
             writeStream.destroy();
-          } catch {}
+          } catch {
+            /* ignore */
+          }
         }
         try {
           fs.rmSync(partPath, { force: true });
           fs.rmSync(`${configPath}.part`, { force: true });
-        } catch {}
+        } catch {
+          /* ignore */
+        }
         const cancelled = ctrl.signal.aborted;
+        const sizeExceeded = err?.code === 'SIZE_EXCEEDED';
+        if (!cancelled) {
+          piperLog().error({ voiceId: spec.id, err }, 'Piper voice download failed');
+        }
         return {
           ok: false,
-          code: cancelled ? 'CANCELLED' : 'DOWNLOAD_ERROR',
-          message: cancelled ? 'Download cancelled.' : err instanceof Error ? err.message : 'Download failed.',
+          code: cancelled ? 'CANCELLED' : sizeExceeded ? 'SIZE_EXCEEDED' : 'DOWNLOAD_ERROR',
+          message: cancelled
+            ? 'Download cancelled.'
+            : sizeExceeded
+              ? 'Voice download exceeded expected size.'
+              : 'Voice model download failed.',
         };
       } finally {
         this.activeControllers.delete(voiceId);

@@ -17,37 +17,43 @@ const DEFAULT_TIMEOUT_MS = 3000;
 
 const GPU_PS_SCRIPT = [
   "$regPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\*';",
-  "$regGpus = @();",
-  "try {",
-  "  $items = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue;",
-  "  foreach ($it in $items) {",
-  "    $desc = $it.DriverDesc;",
+  '$regGpus = @();',
+  'try {',
+  '  $items = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue;',
+  '  foreach ($it in $items) {',
+  '    $desc = $it.DriverDesc;',
   "    $qw = $it.'HardwareInformation.qwMemorySize';",
   "    $ms = $it.'HardwareInformation.MemorySize';",
-  "    if ($desc -or $qw -or $ms) {",
-  "      $bytes = 0;",
-  "      if ($qw -is [array] -and $qw.Length -ge 8) { $bytes = [System.BitConverter]::ToUInt64([byte[]]$qw, 0) }",
-  "      elseif ($qw -is [array] -and $qw.Length -ge 4) { $bytes = [System.BitConverter]::ToUInt32([byte[]]$qw, 0) }",
-  "      elseif ($qw) { $bytes = [uint64]$qw }",
-  "      elseif ($ms -is [array] -and $ms.Length -ge 4) { $bytes = [System.BitConverter]::ToUInt32([byte[]]$ms, 0) }",
-  "      elseif ($ms) { $bytes = [uint64]$ms }",
-  "      $regGpus += @{ name = [string]$desc; qwMemorySize = $bytes };",
-  "    }",
-  "  }",
-  "} catch {}",
-  "$cimGpus = @();",
-  "try {",
-  "  $vc = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue;",
-  "  foreach ($v in $vc) {",
-  "    $cimGpus += @{ name = [string]$v.Name; adapterRam = [uint64]($v.AdapterRAM -as [uint64]); vendor = [string]$v.AdapterCompatibility };",
-  "  }",
-  "} catch {}",
-  "@{ regGpus = $regGpus; cimGpus = $cimGpus } | ConvertTo-Json -Compress -Depth 3",
+  '    if ($desc -or $qw -or $ms) {',
+  '      $bytes = 0;',
+  '      if ($qw -is [array] -and $qw.Length -ge 8) { $bytes = [System.BitConverter]::ToUInt64([byte[]]$qw, 0) }',
+  '      elseif ($qw -is [array] -and $qw.Length -ge 4) { $bytes = [System.BitConverter]::ToUInt32([byte[]]$qw, 0) }',
+  '      elseif ($qw) { $bytes = [uint64]$qw }',
+  '      elseif ($ms -is [array] -and $ms.Length -ge 4) { $bytes = [System.BitConverter]::ToUInt32([byte[]]$ms, 0) }',
+  '      elseif ($ms) { $bytes = [uint64]$ms }',
+  '      $regGpus += @{ name = [string]$desc; qwMemorySize = $bytes };',
+  '    }',
+  '  }',
+  '} catch {}',
+  '$cimGpus = @();',
+  'try {',
+  '  $vc = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue;',
+  '  foreach ($v in $vc) {',
+  '    $cimGpus += @{ name = [string]$v.Name; adapterRam = [uint64]($v.AdapterRAM -as [uint64]); vendor = [string]$v.AdapterCompatibility };',
+  '  }',
+  '} catch {}',
+  '@{ regGpus = $regGpus; cimGpus = $cimGpus } | ConvertTo-Json -Compress -Depth 3',
 ].join(' ');
 
 function normalizeVendor(name) {
   const s = String(name || '').toLowerCase();
-  if (s.includes('nvidia') || s.includes('geforce') || s.includes('rtx') || s.includes('gtx') || s.includes('quadro')) {
+  if (
+    s.includes('nvidia') ||
+    s.includes('geforce') ||
+    s.includes('rtx') ||
+    s.includes('gtx') ||
+    s.includes('quadro')
+  ) {
     return 'nvidia';
   }
   if (s.includes('amd') || s.includes('radeon') || s.includes('ati')) {
@@ -78,7 +84,9 @@ function isVirtualOrBasicDisplay(name) {
 function isDiscreteGpuName(name, vramGb) {
   const s = String(name || '').toLowerCase();
   if (isVirtualOrBasicDisplay(s)) return false;
-  if (/\b(rtx|gtx|quadro|tesla|titan|rx\s*\d{3,4}|radeon\s+pro|arc\s+a\d{3}|arc\s+b\d{3})\b/i.test(s)) {
+  if (
+    /\b(rtx|gtx|quadro|tesla|titan|rx\s*\d{3,4}|radeon\s+pro|arc\s+a\d{3}|arc\s+b\d{3})\b/i.test(s)
+  ) {
     return true;
   }
   const vendor = normalizeVendor(s);
@@ -126,7 +134,8 @@ function parseGpuProbeOutput(rawStdout) {
     if (!name && !(bytes > 0)) continue;
     const normName = name.toLowerCase();
     const existing = candidates.find(
-      (x) => x.name.toLowerCase() === normName || (normName && x.name.toLowerCase().includes(normName)),
+      (x) =>
+        x.name.toLowerCase() === normName || (normName && x.name.toLowerCase().includes(normName)),
     );
     if (existing) {
       if (existing.vramBytes <= 0 && Number.isFinite(bytes) && bytes > 0) {
@@ -243,12 +252,10 @@ async function profileHardware(options = {}) {
   const ramGb = Math.round((totalMemBytes / GIB) * 10) / 10;
   const cpuCores = cpuList.length || 1;
   const cpuModel = String(cpuList[0]?.model || 'CPU').trim();
-  const avx2Likely =
-    process.arch === 'x64' && !/pentium|celeron|atom|core2/i.test(cpuModel);
+  const avx2Likely = process.arch === 'x64' && !/pentium|celeron|atom|core2/i.test(cpuModel);
 
   const freeDiskBytes = getDiskFreeBytes(options.targetDir, options.statfsFn);
-  const freeDiskGb =
-    freeDiskBytes !== null ? Math.round((freeDiskBytes / GIB) * 10) / 10 : null;
+  const freeDiskGb = freeDiskBytes !== null ? Math.round((freeDiskBytes / GIB) * 10) / 10 : null;
 
   let gpus = [];
   let fallbackReason = null;

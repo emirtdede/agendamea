@@ -1,153 +1,202 @@
+import { Contrast, Eye, Focus, Minus, Plus, RotateCcw, Sparkles, ZoomIn } from 'lucide-react';
 import React from 'react';
-import { Contrast, Minus, Plus } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import { getNextZoomPreset, getPrevZoomPreset, ZOOM_PRESETS } from '../../utils/themes';
 
-export interface AccessibilitySettingsTabProps {
+interface AccessibilitySettingsTabProps {
   zoomPercent: number;
   highContrast: boolean;
   reducedMotion: boolean;
+  colorBlindShapes: boolean;
+  strongFocusRing: boolean;
   onChangeZoomPercent: (zoom: number) => void;
   onToggleHighContrast: (enabled: boolean) => void;
   onToggleReducedMotion: (enabled: boolean) => void;
+  onToggleColorBlindShapes: (enabled: boolean) => void;
+  onToggleStrongFocusRing: (enabled: boolean) => void;
+  onResetAccessibility: () => void;
 }
 
 export const AccessibilitySettingsTab = React.memo(function AccessibilitySettingsTab({
   zoomPercent,
   highContrast,
   reducedMotion,
+  colorBlindShapes,
+  strongFocusRing,
   onChangeZoomPercent,
   onToggleHighContrast,
   onToggleReducedMotion,
+  onToggleColorBlindShapes,
+  onToggleStrongFocusRing,
+  onResetAccessibility,
 }: AccessibilitySettingsTabProps) {
   const { t } = useI18n();
 
+  const toggleRows = [
+    {
+      id: 'high-contrast',
+      icon: Contrast,
+      title: t.highContrastTitle,
+      desc: t.highContrastDesc,
+      checked: highContrast,
+      onToggle: () => onToggleHighContrast(!highContrast),
+    },
+    {
+      id: 'reduced-motion',
+      icon: Sparkles,
+      title: t.reducedMotionTitle,
+      desc: t.reducedMotionDesc,
+      checked: reducedMotion,
+      onToggle: () => onToggleReducedMotion(!reducedMotion),
+    },
+    {
+      id: 'colorblind-shapes',
+      icon: Eye,
+      title: t.accessibilityColorBlindTitle,
+      desc: t.accessibilityColorBlindDesc,
+      checked: colorBlindShapes,
+      onToggle: () => onToggleColorBlindShapes(!colorBlindShapes),
+    },
+    {
+      id: 'strong-focus',
+      icon: Focus,
+      title: t.accessibilityStrongFocusTitle,
+      desc: t.accessibilityStrongFocusDesc,
+      checked: strongFocusRing,
+      onToggle: () => onToggleStrongFocusRing(!strongFocusRing),
+    },
+  ];
+
   return (
-    <section aria-label={t.accessibilitySectionTitle} className="space-y-3">
-      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        {/* Zoom Percentage */}
-        <div className="space-y-3 px-4 py-4">
-          <div className="flex items-center justify-between gap-3">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs leading-relaxed text-[var(--text-muted)]">{t.settingsSubtitle}</p>
+        <button
+          type="button"
+          data-testid="a11y-reset-btn"
+          onClick={onResetAccessibility}
+          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          <span>{t.resetTabDefaultsButton}</span>
+        </button>
+      </div>
+
+      {/* Interface Zoom / Scale Card */}
+      <section
+        aria-label={t.zoomLevelTitle}
+        data-setting-id="a11y-zoom"
+        className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-4"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <ZoomIn className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-medium text-[var(--text-primary)]">{t.zoomLevelTitle}</p>
-              <p className="text-xs text-[var(--text-muted)]">{t.zoomLevelDesc}</p>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                data-testid="zoom-decrease-btn"
-                disabled={zoomPercent <= ZOOM_PRESETS[0]}
-                aria-label="-"
-                onClick={() => {
-                  const prev = getPrevZoomPreset(zoomPercent);
-                  if (prev !== zoomPercent) onChangeZoomPercent(prev);
-                }}
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-              <span
-                data-testid="zoom-percent-value"
-                className="min-w-[46px] text-center font-mono-tabular text-xs font-semibold text-[var(--text-primary)]"
-              >
-                {zoomPercent}%
-              </span>
-              <button
-                type="button"
-                data-testid="zoom-increase-btn"
-                disabled={zoomPercent >= ZOOM_PRESETS[ZOOM_PRESETS.length - 1]}
-                aria-label="+"
-                onClick={() => {
-                  const next = getNextZoomPreset(zoomPercent);
-                  if (next !== zoomPercent) onChangeZoomPercent(next);
-                }}
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                {t.zoomLevelTitle}
+              </h3>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.zoomLevelDesc}</p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {ZOOM_PRESETS.map((preset) => {
-              const active = zoomPercent === preset;
-              return (
-                <button
-                  key={preset}
-                  type="button"
-                  data-testid={`zoom-preset-${preset}`}
-                  onClick={() => onChangeZoomPercent(preset)}
-                  className={`rounded-md border px-2.5 py-1 font-mono-tabular text-xs font-medium transition-colors whitespace-nowrap ${
-                    active
-                      ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)]'
-                      : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  {preset}%
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onChangeZoomPercent(getPrevZoomPreset(zoomPercent))}
+              disabled={zoomPercent <= (ZOOM_PRESETS[0] ?? 80)}
+              aria-label={t.accessibilityZoomDecrease}
+              title={t.accessibilityZoomDecrease}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="font-mono-tabular min-w-[3.5rem] text-center text-sm font-semibold text-[var(--text-primary)]">
+              {zoomPercent}%
+            </span>
+            <button
+              type="button"
+              onClick={() => onChangeZoomPercent(getNextZoomPreset(zoomPercent))}
+              disabled={zoomPercent >= (ZOOM_PRESETS[ZOOM_PRESETS.length - 1] ?? 130)}
+              aria-label={t.accessibilityZoomIncrease}
+              title={t.accessibilityZoomIncrease}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
             {zoomPercent !== 100 && (
               <button
                 type="button"
                 onClick={() => onChangeZoomPercent(100)}
-                className="ms-auto rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
+                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
               >
-                {t.zoomResetButton}
+                <RotateCcw className="h-3 w-3" />
+                <span>{t.zoomResetButton}</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* High Contrast */}
-        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-          <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
-              <Contrast className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
-              <span>{t.highContrastTitle}</span>
-            </p>
-            <p className="text-xs text-[var(--text-muted)]">{t.highContrastDesc}</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            data-testid="toggle-high-contrast"
-            aria-checked={highContrast}
-            onClick={() => onToggleHighContrast(!highContrast)}
-            className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-              highContrast
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-            }`}
-          >
-            {highContrast ? t.enabledBadge : t.disabledBadge}
-          </button>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+          {ZOOM_PRESETS.map((preset) => {
+            const active = zoomPercent === preset;
+            return (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => onChangeZoomPercent(preset)}
+                aria-pressed={active}
+                className={`font-mono-tabular rounded-lg border py-1.5 text-xs font-medium transition-colors ${
+                  active
+                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
+                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                }`}
+              >
+                {preset}%
+              </button>
+            );
+          })}
         </div>
+      </section>
 
-        {/* Reduced Motion */}
-        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--text-primary)]">
-              {t.reducedMotionTitle}
-            </p>
-            <p className="text-xs text-[var(--text-muted)]">{t.reducedMotionDesc}</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            data-testid="toggle-reduced-motion"
-            aria-checked={reducedMotion}
-            onClick={() => onToggleReducedMotion(!reducedMotion)}
-            className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
-              reducedMotion
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-            }`}
-          >
-            {reducedMotion ? t.enabledBadge : t.disabledBadge}
-          </button>
-        </div>
+      {/* Contrast, Motion, Colorblind Shapes & Focus Ring Switches */}
+      <div
+        data-setting-id="a11y-contrast"
+        className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
+      >
+        {toggleRows.map((row) => {
+          const Icon = row.icon;
+          return (
+            <div key={row.id} className="flex items-center justify-between gap-4 px-4 py-3.5">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <Icon className="h-4 w-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">{row.title}</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">{row.desc}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                data-testid={`a11y-toggle-${row.id}`}
+                aria-checked={row.checked}
+                aria-label={row.title}
+                onClick={row.onToggle}
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                  row.checked ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-[var(--surface)] shadow-sm transition-transform ${
+                    row.checked
+                      ? 'translate-x-4.5 rtl:-translate-x-4.5'
+                      : 'translate-x-0.5 rtl:-translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+          );
+        })}
       </div>
-    </section>
+    </div>
   );
 });

@@ -595,12 +595,13 @@ export function getNextZoomPreset(current: number): number {
   for (const preset of ZOOM_PRESETS) {
     if (preset > current) return preset;
   }
-  return ZOOM_PRESETS[ZOOM_PRESETS.length - 1];
+  return ZOOM_PRESETS[ZOOM_PRESETS.length - 1] ?? 150;
 }
 
 export function getPrevZoomPreset(current: number): number {
   for (let i = ZOOM_PRESETS.length - 1; i >= 0; i -= 1) {
-    if (ZOOM_PRESETS[i] < current) return ZOOM_PRESETS[i];
+    const preset = ZOOM_PRESETS[i];
+    if (preset !== undefined && preset < current) return preset;
   }
   return ZOOM_PRESETS[0];
 }
@@ -693,7 +694,7 @@ function hslToHex(h: number, s: number, l: number): string {
   else if (hue < 180) [r, g, b] = [0, c, x];
   else if (hue < 240) [r, g, b] = [0, x, c];
   else if (hue < 300) [r, g, b] = [x, 0, c];
-  else[r, g, b] = [c, 0, x];
+  else [r, g, b] = [c, 0, x];
   return rgbToHex((r + m) * 255, (g + m) * 255, (b + m) * 255);
 }
 
@@ -701,7 +702,7 @@ export function getContrastingForeground(hex: string): string {
   const { r, g, b } = hexToRgb(hex);
   const toLinear = (v: number) => {
     const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   };
   const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
   return luminance > 0.42 ? '#09090b' : '#ffffff';
@@ -776,7 +777,11 @@ export function buildCustomThemeTokens(hex: string, mode: ThemeMode): ThemeToken
 }
 
 export function getThemeById(id: string): ColorTheme {
-  return COLOR_THEMES.find((t) => t.id === id) ?? COLOR_THEMES[0];
+  const found = COLOR_THEMES.find((t) => t.id === id) ?? COLOR_THEMES[0];
+  if (!found) {
+    throw new Error('COLOR_THEMES must not be empty');
+  }
+  return found;
 }
 
 export function isValidThemeId(id: string): id is ThemeId {
@@ -857,6 +862,10 @@ export function applyAccessibilityToDocument(options: {
   zoomPercent: number;
   highContrast: boolean;
   reducedMotion: boolean;
+  listDensity?: string;
+  fontFamily?: string;
+  colorBlindShapes?: boolean;
+  strongFocusRing?: boolean;
 }): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
@@ -874,6 +883,21 @@ export function applyAccessibilityToDocument(options: {
     root.classList.remove('reduce-motion');
   }
 
+  if (options.strongFocusRing) {
+    root.classList.add('strong-focus-ring');
+  } else {
+    root.classList.remove('strong-focus-ring');
+  }
+
+  if (options.colorBlindShapes) {
+    root.classList.add('colorblind-shapes');
+  } else {
+    root.classList.remove('colorblind-shapes');
+  }
+
+  root.dataset.density = options.listDensity || 'comfortable';
+  root.dataset.font = options.fontFamily || 'system';
+
   const electronBridge = (
     window as unknown as {
       agendameaWindow?: { setZoomFactor?: (factor: number) => Promise<void> | void };
@@ -882,7 +906,9 @@ export function applyAccessibilityToDocument(options: {
 
   if (electronBridge && typeof electronBridge.setZoomFactor === 'function') {
     root.style.zoom = '';
-    void Promise.resolve(electronBridge.setZoomFactor(zoom / 100)).catch(() => {});
+    void Promise.resolve(electronBridge.setZoomFactor(zoom / 100)).catch(() => {
+      /* ignore */
+    });
   } else {
     root.style.zoom = zoom === 100 ? '' : `${zoom}%`;
   }

@@ -7,8 +7,9 @@
  */
 
 const ragChunker = require('./ragChunker.cjs');
+const textNormalize = require('./textNormalize.cjs');
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 function applyAgendameaSchema(db, options = {}) {
   const selfHealFts = options.selfHealFts !== false;
@@ -71,6 +72,31 @@ function applyAgendameaSchema(db, options = {}) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS webhook_outbox (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      event TEXT NOT NULL,
+      target_url TEXT NOT NULL,
+      format TEXT NOT NULL DEFAULT 'auto',
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 6,
+      next_attempt_at TEXT NOT NULL,
+      last_status_code INTEGER DEFAULT NULL,
+      last_error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS webhook_reminder_dispatches (
+      todo_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      schedule_key TEXT NOT NULL,
+      fired_at TEXT NOT NULL,
+      PRIMARY KEY (todo_id, kind, schedule_key)
+    );
+
     CREATE TABLE IF NOT EXISTS todo_embedding_chunks (
       todo_id TEXT NOT NULL,
       chunk_index INTEGER NOT NULL,
@@ -87,6 +113,7 @@ function applyAgendameaSchema(db, options = {}) {
     CREATE INDEX IF NOT EXISTS idx_todos_category ON todos(category_id);
     CREATE INDEX IF NOT EXISTS idx_subtasks_todo ON subtasks(todo_id);
     CREATE INDEX IF NOT EXISTS idx_webhook_logs_created ON webhook_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_webhook_outbox_pending ON webhook_outbox(status, next_attempt_at ASC);
     CREATE INDEX IF NOT EXISTS idx_embedding_chunks_model ON todo_embedding_chunks(model_id, dims);
   `);
 
@@ -152,7 +179,8 @@ function applyAgendameaSchema(db, options = {}) {
       VALUES ('delete', old.rowid, old.title, old.notes, old.tags);
     END;
 
-    CREATE TRIGGER IF NOT EXISTS todos_fts_au AFTER UPDATE ON todos BEGIN
+    DROP TRIGGER IF EXISTS todos_fts_au;
+    CREATE TRIGGER todos_fts_au AFTER UPDATE OF title, notes, tags ON todos BEGIN
       INSERT INTO todos_fts(todos_fts, rowid, title, notes, tags)
       VALUES ('delete', old.rowid, old.title, old.notes, old.tags);
       INSERT INTO todos_fts(rowid, title, notes, tags)
@@ -228,7 +256,8 @@ function searchHybridRagCore(db, query, options = {}) {
   const topK = Math.max(1, Math.min(20, Number(options.topK) || 5));
   const minScore = typeof options.minScore === 'number' ? options.minScore : 0.35;
   const vectorHits = Array.isArray(options.vectorHits) ? options.vectorHits : [];
-  const getActiveTodos = typeof options.getActiveTodos === 'function' ? options.getActiveTodos : null;
+  const getActiveTodos =
+    typeof options.getActiveTodos === 'function' ? options.getActiveTodos : null;
   const getTodoById = typeof options.getTodoById === 'function' ? options.getTodoById : null;
 
   if (!cleanQuery && vectorHits.length === 0) {
@@ -257,7 +286,10 @@ function searchHybridRagCore(db, query, options = {}) {
           tags: parseRawTags(r.tags),
         });
         let bestChunkText = r.notes || r.title;
-        let bestCov = ragChunker.computeLexicalCoverage(cleanQuery, `${r.title} ${r.notes} ${r.tags}`);
+        let bestCov = ragChunker.computeLexicalCoverage(
+          cleanQuery,
+          `${r.title} ${r.notes} ${r.tags}`,
+        );
         for (const ch of chunks) {
           const cov = ragChunker.computeLexicalCoverage(cleanQuery, ch.chunkText);
           if (cov >= bestCov) {
@@ -278,7 +310,6 @@ function searchHybridRagCore(db, query, options = {}) {
   }
 
   if (ftsHits.length === 0 && cleanQuery) {
-    const qLower = cleanQuery.toLocaleLowerCase('tr-TR');
     const activeTodos = getActiveTodos
       ? getActiveTodos()
       : db
@@ -294,7 +325,7 @@ function searchHybridRagCore(db, query, options = {}) {
     for (const todo of activeTodos) {
       const fullDoc = ragChunker.buildTodoDocumentText(todo);
       const cov = ragChunker.computeLexicalCoverage(cleanQuery, fullDoc);
-      if (cov > 0 || fullDoc.toLocaleLowerCase('tr-TR').includes(qLower)) {
+      if (cov > 0 || textNormalize.matchesNormalized(fullDoc, cleanQuery)) {
         const chunks = ragChunker.chunkTaskDocument(todo);
         let bestSnippet = todo.notes || todo.title;
         let bestChunkCov = cov;
@@ -329,7 +360,9 @@ function searchHybridRagCore(db, query, options = {}) {
     if (getTodoById) {
       todo = getTodoById(hit.todoId);
     } else {
-      const row = db.prepare('SELECT * FROM todos WHERE id = ? AND deleted_at IS NULL').get(hit.todoId);
+      const row = db
+        .prepare('SELECT * FROM todos WHERE id = ? AND deleted_at IS NULL')
+        .get(hit.todoId);
       if (row) {
         todo = {
           id: row.id,

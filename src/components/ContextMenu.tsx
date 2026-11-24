@@ -1,4 +1,5 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type React from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface ContextMenuItem {
@@ -31,7 +32,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onCloseRef.current = onClose;
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: x, top: y });
 
+  const itemCount = items.length;
   useLayoutEffect(() => {
+    void itemCount;
     const el = menuRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -42,7 +45,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       left: Math.min(Math.max(pad, x), maxLeft),
       top: Math.min(Math.max(pad, y), maxTop),
     });
-  }, [x, y, items.length]);
+  }, [x, y, itemCount]);
 
   useEffect(() => {
     const handlePointerDown = (e: MouseEvent) => {
@@ -82,7 +85,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     >
       {items.map((item) => {
         if (item.divider) {
-          return <div key={item.id} role="separator" className="my-1 h-px bg-[var(--border)]" />;
+          return <hr key={item.id} className="my-1 border-0 border-t border-[var(--border)]" />;
         }
         return (
           <button
@@ -95,13 +98,17 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
               onClose();
               item.onSelect?.();
             }}
-            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors disabled:opacity-40 ${
+            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-start text-xs font-medium transition-colors disabled:opacity-40 ${
               item.danger
                 ? 'text-red-600 dark:text-red-400 hover:bg-red-500/10'
                 : 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
             }`}
           >
-            {item.icon && <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center opacity-80">{item.icon}</span>}
+            {item.icon && (
+              <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center opacity-80">
+                {item.icon}
+              </span>
+            )}
             <span className="truncate">{item.label}</span>
           </button>
         );

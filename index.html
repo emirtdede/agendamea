@@ -46,20 +46,25 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
 
     <script>
-      (function () {
+      (() => {
         try {
-          var root = document.documentElement;
-          var savedLang = localStorage.getItem('agendamea-language');
+          const root = document.documentElement;
+          let savedLang = localStorage.getItem('agendamea-language');
           if (!savedLang && typeof navigator !== 'undefined') {
-            var navLang = (navigator.languages && navigator.languages[0]) || navigator.language || '';
-            var base = String(navLang).toLowerCase().split('-')[0];
+            const navLang = navigator.languages?.[0] || navigator.language || '';
+            const base = String(navLang).toLowerCase().split('-')[0];
             if (base && base !== 'tr') {
               savedLang = base;
             }
           }
           if (savedLang) {
             root.lang = savedLang;
-            if (savedLang === 'ar' || savedLang === 'fa' || savedLang === 'he' || savedLang === 'ur') {
+            if (
+              savedLang === 'ar' ||
+              savedLang === 'fa' ||
+              savedLang === 'he' ||
+              savedLang === 'ur'
+            ) {
               root.dir = 'rtl';
             } else {
               root.dir = 'ltr';
@@ -68,12 +73,12 @@
               document.title = 'Agendamea';
             }
           }
-          var savedTitle = localStorage.getItem('agendamea-app-title');
+          const savedTitle = localStorage.getItem('agendamea-app-title');
           if (savedTitle) {
             document.title = savedTitle;
           }
-          var mode = localStorage.getItem('agendamea-theme-mode');
-          var isSystemDark =
+          const mode = localStorage.getItem('agendamea-theme-mode');
+          const isSystemDark =
             mode === 'system' &&
             typeof window.matchMedia === 'function' &&
             window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -86,20 +91,20 @@
           if (localStorage.getItem('agendamea-reduced-motion') === 'true') {
             root.classList.add('reduce-motion');
           }
-          var rawTokens = localStorage.getItem('agendamea-theme-tokens');
+          const rawTokens = localStorage.getItem('agendamea-theme-tokens');
           if (rawTokens) {
-            var tokens = JSON.parse(rawTokens);
+            const tokens = JSON.parse(rawTokens);
             if (tokens && typeof tokens === 'object') {
-              Object.keys(tokens).forEach(function (k) {
-                if (k.indexOf('--') === 0 && typeof tokens[k] === 'string') {
+              for (const k of Object.keys(tokens)) {
+                if (k.startsWith('--') && typeof tokens[k] === 'string') {
                   root.style.setProperty(k, tokens[k]);
                 }
-              });
+              }
             }
           }
-          var rawIcon = localStorage.getItem('agendamea-app-icon-tokens');
+          const rawIcon = localStorage.getItem('agendamea-app-icon-tokens');
           if (rawIcon) {
-            var ic = JSON.parse(rawIcon);
+            const ic = JSON.parse(rawIcon);
             if (ic && typeof ic.bg === 'string' && typeof ic.fg === 'string') {
               root.style.setProperty('--app-icon-bg', ic.bg);
               root.style.setProperty('--app-icon-fg', ic.fg);
@@ -108,7 +113,9 @@
               }
             }
           }
-        } catch (e) {}
+        } catch {
+          // Ignore storage restrictions before hydration
+        }
       })();
     </script>
   </head>

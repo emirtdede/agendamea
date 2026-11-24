@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly InstallEngine _engine = new();
     private readonly DispatcherTimer _backdropTimer;
     private readonly bool _reducedMotion;
+    private readonly string _appVersion;
     private InstallerLocale _locale;
     private double _backdropPhase;
     private bool _isBusy;
@@ -33,6 +34,8 @@ public partial class MainWindow : Window
         _locale = initialLocale;
         _currentExePath = currentExePath;
         _reducedMotion = !SystemParameters.ClientAreaAnimation;
+        var ver = typeof(MainWindow).Assembly.GetName().Version;
+        _appVersion = ver is not null ? $"{ver.Major}.{ver.Minor}.{Math.Max(0, ver.Build)}" : "1.1.0";
 
         // Hydrate form fields
         InstallDirTextBox.Text = _options.InstallDir;
@@ -106,12 +109,13 @@ public partial class MainWindow : Window
 
         Title = _options.Uninstall ? loc.UninstallWindowTitle : loc.WindowTitle;
         TitleBarText.Text = Title;
-        WelcomeTagline.Text = loc.Tagline;
+        WelcomeTagline.Text = $"{loc.Tagline} (v{_appVersion})";
         PrimaryInstallButton.Content = loc.InstallButton;
         OpenOptionsText.Text = loc.OptionsButton;
         FooterText.Text = loc.FooterText;
 
         OptionsTitleText.Text = loc.OptionsTitle;
+        CloseOptionsButton.ToolTip = loc.CloseOptionsTooltip;
         LanguageLabelText.Text = loc.LanguageLabel;
         InstallDirLabelText.Text = loc.InstallDirLabel;
         BrowseDirButton.Content = loc.BrowseButton;
@@ -230,6 +234,7 @@ public partial class MainWindow : Window
         if (_isBusy) return;
         _isBusy = true;
         CloseButton.IsEnabled = false;
+        CloseButton.Visibility = Visibility.Collapsed;
         SetOptionsSheetOpen(false);
 
         _options.InstallDir = string.IsNullOrWhiteSpace(InstallDirTextBox.Text)
@@ -269,6 +274,7 @@ public partial class MainWindow : Window
         {
             _isBusy = false;
             CloseButton.IsEnabled = true;
+            CloseButton.Visibility = Visibility.Visible;
         }
     }
 
@@ -277,6 +283,7 @@ public partial class MainWindow : Window
         if (_isBusy) return;
         _isBusy = true;
         CloseButton.IsEnabled = false;
+        CloseButton.Visibility = Visibility.Collapsed;
         _options.DeleteUserData = DeleteUserDataCheck.IsChecked == true;
 
         SwitchView(UninstallView, ProgressView);
@@ -299,6 +306,7 @@ public partial class MainWindow : Window
             StatusGlyphPath.Data = Geometry.Parse("M 21,37 L 31,47 L 51,26");
             StatusGlyphPath.Stroke = new SolidColorBrush(Color.FromRgb(17, 17, 19));
             StatusTitleText.Text = _locale.UninstalledTitle;
+            StatusSubtitleText.TextAlignment = TextAlignment.Center;
             StatusSubtitleText.Text = _locale.UninstalledSubtitle;
             StatusRetryButton.Visibility = Visibility.Collapsed;
             SwitchView(ProgressView, StatusDoneView);
@@ -314,6 +322,7 @@ public partial class MainWindow : Window
         {
             _isBusy = false;
             CloseButton.IsEnabled = true;
+            CloseButton.Visibility = Visibility.Visible;
         }
     }
 
@@ -323,6 +332,7 @@ public partial class MainWindow : Window
         StatusGlyphPath.Data = Geometry.Parse("M 24,24 L 48,48 M 48,24 L 24,48");
         StatusGlyphPath.Stroke = new SolidColorBrush(Color.FromRgb(250, 250, 250));
         StatusTitleText.Text = _locale.ErrorTitle;
+        StatusSubtitleText.TextAlignment = message.Length > 140 ? TextAlignment.Left : TextAlignment.Center;
         StatusSubtitleText.Text = message;
         StatusRetryButton.Visibility = Visibility.Visible;
     }

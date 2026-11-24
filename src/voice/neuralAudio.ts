@@ -78,6 +78,15 @@ type OrtModule = typeof import('onnxruntime-web/wasm');
 type OrtSession = import('onnxruntime-web/wasm').InferenceSession;
 type OrtTensor = import('onnxruntime-web/wasm').Tensor;
 
+function disposeOrtTensor(tensor: OrtTensor | null | undefined): void {
+  if (!tensor) return;
+  try {
+    (tensor as unknown as { dispose?: () => void }).dispose?.();
+  } catch {
+    // Ignore already-disposed or non-disposable WASM tensor
+  }
+}
+
 let sharedSileroSession: OrtSession | null = null;
 let sharedOrt: OrtModule | null = null;
 let sileroInitPromise: Promise<{ ort: OrtModule; session: OrtSession } | null> | null = null;
@@ -148,6 +157,8 @@ export class SileroVadEngine {
   }
 
   reset(): void {
+    disposeOrtTensor(this.state);
+    this.state = null;
     if (this.ort) {
       this.state = new this.ort.Tensor('float32', new Float32Array(2 * 128), [2, 1, 128]);
     }
@@ -190,21 +201,37 @@ export class SileroVadEngine {
           1,
           withContext.length,
         ]);
-        const outputs: Record<string, OrtTensor> = await this.session.run({
-          input: inputTensor,
-          state: currentState,
-          sr: srTensor,
-        });
-        const nextState: OrtTensor | undefined = outputs['stateN'];
-        const outTensor: OrtTensor | undefined = outputs['output'];
-        if (!nextState || !outTensor?.data) {
-          return null;
-        }
-        currentState = nextState;
-        this.state = nextState;
-        const prob = Number(outTensor.data[0]);
-        if (Number.isFinite(prob) && prob > maxProb) {
-          maxProb = prob;
+        let outputs: Record<string, OrtTensor> | null = null;
+        try {
+          outputs = await this.session.run({
+            input: inputTensor,
+            state: currentState,
+            sr: srTensor,
+          });
+          const nextState: OrtTensor | undefined = outputs.stateN;
+          const outTensor: OrtTensor | undefined = outputs.output;
+          if (!nextState || !outTensor?.data) {
+            return null;
+          }
+          const prevState = currentState;
+          currentState = nextState;
+          this.state = nextState;
+          if (prevState !== nextState) {
+            disposeOrtTensor(prevState);
+          }
+          const prob = Number(outTensor.data[0]);
+          if (Number.isFinite(prob) && prob > maxProb) {
+            maxProb = prob;
+          }
+        } finally {
+          disposeOrtTensor(inputTensor);
+          if (outputs) {
+            for (const [k, tensor] of Object.entries(outputs)) {
+              if (k !== 'stateN' || tensor !== this.state) {
+                disposeOrtTensor(tensor);
+              }
+            }
+          }
         }
       }
 
@@ -220,6 +247,8 @@ export class SileroVadEngine {
 
   dispose(): void {
     this.ready = false;
+    disposeOrtTensor(this.state);
+    disposeOrtTensor(this.srTensor);
     this.state = null;
     this.srTensor = null;
     this.remainder = new Float32Array(0);

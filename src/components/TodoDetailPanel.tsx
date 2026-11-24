@@ -1,21 +1,20 @@
+import { Check, Copy, Pencil, Pin, Star, Trash2, X } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, Check, Clock, Copy, Hash, Pencil, Pin, Plus, Star, Trash2, X } from 'lucide-react';
 import { useI18n } from '../i18n/I18nContext';
-import type { Category, Priority, Subtask, Todo, TodoPatch } from '../types';
+import type { Category, Subtask, Todo, TodoPatch } from '../types';
+import { getCachedDateTimeFormatter } from '../utils/intlCache';
 import { addDaysToDateString, sanitizeTags } from '../utils/todoLogic';
 import { ContextMenu } from './ContextMenu';
-import { SelectField } from './SelectField';
+import { TodoScheduleSection } from './detail/TodoScheduleSection';
+import { TodoSubtaskList } from './detail/TodoSubtaskList';
+import { TodoTagsSection } from './detail/TodoTagsSection';
 
 interface TodoDetailPanelProps {
   todo: Todo;
   categories: Category[];
   todayStr: string;
   onClose: () => void;
-  onUpdate: (
-    id: string,
-    patch: TodoPatch,
-    options?: { keepalive?: boolean },
-  ) => Promise<boolean>;
+  onUpdate: (id: string, patch: TodoPatch, options?: { keepalive?: boolean }) => Promise<boolean>;
   onToggleComplete?: (id: string, completed: boolean) => void;
   onDelete: (id: string) => void;
   onAddSubtask: (todoId: string, title: string) => Promise<boolean>;
@@ -24,20 +23,13 @@ interface TodoDetailPanelProps {
   onDeleteSubtask: (todoId: string, subtaskId: string) => Promise<void>;
 }
 
-const CREATED_AT_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat>();
-
 function getCreatedAtFormatter(intlLocale: string): Intl.DateTimeFormat {
-  let fmt = CREATED_AT_FORMATTER_CACHE.get(intlLocale);
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat(intlLocale, {
-      day: 'numeric',
-      month: 'long',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    CREATED_AT_FORMATTER_CACHE.set(intlLocale, fmt);
-  }
-  return fmt;
+  return getCachedDateTimeFormatter(intlLocale, 'todo-created-at', {
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function formatCreatedAt(iso: string, intlLocale: string): string {
@@ -87,41 +79,48 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
   const lastSavedRef = useRef({ id: todo.id, title: todo.title, notes: todo.notes });
   const draftRef = useRef({ id: todo.id, title: todo.title, notes: todo.notes });
 
+  const flushChangesRef = useRef(
+    (targetId: string, nextTitle: string, nextNotes: string, keepalive = false) => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (lastSavedRef.current.id !== targetId) return;
+
+      const trimmedTitle = nextTitle.trim();
+      const titleChanged = trimmedTitle.length > 0 && trimmedTitle !== lastSavedRef.current.title;
+      const notesChanged = nextNotes !== lastSavedRef.current.notes;
+      if (!titleChanged && !notesChanged) return;
+
+      const patch: { title?: string; notes?: string } = {};
+      if (titleChanged) patch.title = trimmedTitle;
+      if (notesChanged) patch.notes = nextNotes;
+
+      const prevSaved = lastSavedRef.current;
+      const nextSaved = {
+        id: targetId,
+        title: titleChanged ? trimmedTitle : prevSaved.title,
+        notes: notesChanged ? nextNotes : prevSaved.notes,
+      };
+      lastSavedRef.current = nextSaved;
+
+      void onUpdateRef
+        .current(targetId, patch, keepalive ? { keepalive: true } : undefined)
+        .then((ok) => {
+          if (!ok && lastSavedRef.current === nextSaved) {
+            lastSavedRef.current = prevSaved;
+          }
+        });
+    },
+  );
+
   const flushChangesFor = (
     targetId: string,
     nextTitle: string,
     nextNotes: string,
     keepalive = false,
   ) => {
-    if (lastSavedRef.current.id !== targetId) return;
-
-    const trimmedTitle = nextTitle.trim();
-    const titleChanged = trimmedTitle.length > 0 && trimmedTitle !== lastSavedRef.current.title;
-    const notesChanged = nextNotes !== lastSavedRef.current.notes;
-
-    if (!titleChanged && !notesChanged) return;
-
-    const patch: { title?: string; notes?: string } = {};
-    if (titleChanged) patch.title = trimmedTitle;
-    if (notesChanged) patch.notes = nextNotes;
-
-    const prevSaved = lastSavedRef.current;
-    const nextSaved = {
-      id: targetId,
-      title: titleChanged ? trimmedTitle : prevSaved.title,
-      notes: notesChanged ? nextNotes : prevSaved.notes,
-    };
-    lastSavedRef.current = nextSaved;
-
-    void onUpdateRef.current(targetId, patch, keepalive ? { keepalive: true } : undefined).then(
-      (ok) => {
-        if (!ok) {
-          if (lastSavedRef.current === nextSaved) {
-            lastSavedRef.current = prevSaved;
-          }
-        }
-      },
-    );
+    flushChangesRef.current(targetId, nextTitle, nextNotes, keepalive);
   };
 
   useEffect(() => {
@@ -130,12 +129,11 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
         window.clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      flushChangesFor(
+      flushChangesRef.current(
         lastSavedRef.current.id,
         draftRef.current.title,
         draftRef.current.notes,
       );
-
       setTitle(todo.title);
       setNotes(todo.notes);
       setNewSubtaskTitle('');
@@ -163,13 +161,11 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
 
   const scheduleAutoSave = (nextTitle: string, nextNotes: string) => {
     draftRef.current = { id: todo.id, title: nextTitle, notes: nextNotes };
-    if (timerRef.current) {
-      window.clearTimeout(timerRef.current);
-    }
+    if (timerRef.current) window.clearTimeout(timerRef.current);
     const targetId = todo.id;
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
-      flushChangesFor(targetId, nextTitle, nextNotes);
+      flushChangesRef.current(targetId, nextTitle, nextNotes);
     }, 320);
   };
 
@@ -180,7 +176,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
         window.clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      flushChangesFor(
+      flushChangesRef.current(
         lastSavedRef.current.id,
         draftRef.current.title,
         draftRef.current.notes,
@@ -198,7 +194,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
         timerRef.current = null;
       }
       if (!skipUnmountFlushRef.current) {
-        flushChangesFor(
+        flushChangesRef.current(
           lastSavedRef.current.id,
           draftRef.current.title,
           draftRef.current.notes,
@@ -223,9 +219,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
       }
     } finally {
       isAddingSubtaskRef.current = false;
-      if (isMountedRef.current) {
-        setIsAddingSubtask(false);
-      }
+      if (isMountedRef.current) setIsAddingSubtask(false);
     }
   };
 
@@ -234,14 +228,6 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
     () => formatCreatedAt(todo.createdAt, meta.intlLocale),
     [todo.createdAt, meta.intlLocale],
   );
-
-  const priorities: Array<{ value: Priority; label: string }> = [
-    { value: 'low', label: t.priorityLow },
-    { value: 'normal', label: t.priorityNormal },
-    { value: 'high', label: t.priorityHigh },
-  ];
-
-  const hasAnyDate = Boolean(todo.startDate || todo.dueDate || todo.dueTime);
   const currentTags = todo.tags ?? [];
 
   const handleAddTag = (e: React.FormEvent) => {
@@ -257,23 +243,28 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
-    const next = currentTags.filter((tg) => tg !== tagToRemove);
-    void onUpdate(todo.id, { tags: next });
+    void onUpdate(todo.id, { tags: currentTags.filter((tg) => tg !== tagToRemove) });
+  };
+
+  const handleCommitEditSubtask = (sub: Subtask) => {
+    const next = editingSubtaskTitle.trim();
+    setEditingSubtaskId(null);
+    if (next && next !== sub.title) {
+      void onRenameSubtask?.(todo.id, sub.id, next);
+    }
   };
 
   return (
     <aside
       aria-label={todo.title}
-      className="animate-slide-in-right fixed inset-y-0 right-0 z-30 flex w-full max-w-[380px] flex-col border-l border-[var(--border)] bg-[var(--surface)] lg:relative lg:z-auto lg:w-[368px] shrink-0"
+      className="animate-slide-in-right fixed inset-y-0 end-0 z-30 flex w-full max-w-[380px] flex-col border-s border-[var(--border)] bg-[var(--surface)] lg:relative lg:z-auto lg:w-[368px] shrink-0"
     >
-      {/* Top frameless drag clearance (stops before top-right WindowControls) */}
       <div
         aria-hidden="true"
         className="app-drag-region absolute start-0 end-36 top-0 z-10 h-9 select-none"
       />
 
-      {/* Top Bar */}
-      <div className="flex items-center justify-between border-b border-[var(--border)] px-5 pt-11 pb-3">
+      <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-5 pt-12 pb-3">
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -344,15 +335,14 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
             onClose();
           }}
           aria-label={t.closeMenu}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+          title={t.closeMenu}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Body */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-        {/* Title & Notes (Instant Auto-Save) */}
         <div className="space-y-2">
           <input
             type="text"
@@ -362,7 +352,16 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
               setTitle(val);
               scheduleAutoSave(val, notes);
             }}
-            onBlur={() => flushChangesFor(todo.id, title, notes)}
+            onBlur={() => {
+              if (!title.trim()) {
+                const fallbackTitle = lastSavedRef.current.title;
+                setTitle(fallbackTitle);
+                draftRef.current.title = fallbackTitle;
+                flushChangesFor(todo.id, fallbackTitle, notes);
+              } else {
+                flushChangesFor(todo.id, title, notes);
+              }
+            }}
             maxLength={300}
             aria-label={t.taskTitlePlaceholder}
             placeholder={t.taskTitlePlaceholder}
@@ -387,379 +386,53 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
           />
         </div>
 
-        {/* Subtasks */}
-        <section aria-label={t.subtasksTitle} className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-              {t.subtasksTitle}
-            </h3>
-            {todo.subtasks.length > 0 && (
-              <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                {todo.subtasks.filter((s) => s.completed).length}/{todo.subtasks.length}
-              </span>
-            )}
-          </div>
+        <TodoSubtaskList
+          todoId={todo.id}
+          subtasks={todo.subtasks}
+          newSubtaskTitle={newSubtaskTitle}
+          isAddingSubtask={isAddingSubtask}
+          editingSubtaskId={editingSubtaskId}
+          editingSubtaskTitle={editingSubtaskTitle}
+          onChangeNewSubtaskTitle={setNewSubtaskTitle}
+          onAddSubtask={(e) => void handleAddSubtask(e)}
+          onToggleSubtask={onToggleSubtask}
+          onStartEditSubtask={(sub) => {
+            setEditingSubtaskId(sub.id);
+            setEditingSubtaskTitle(sub.title);
+          }}
+          onChangeEditSubtaskTitle={setEditingSubtaskTitle}
+          onCancelEditSubtask={() => setEditingSubtaskId(null)}
+          onCommitEditSubtask={handleCommitEditSubtask}
+          onDeleteSubtask={onDeleteSubtask}
+          onOpenContextMenu={(e, subtask) =>
+            setSubtaskCtxMenu({ x: e.clientX, y: e.clientY, subtask })
+          }
+        />
 
-          <div className="space-y-1">
-            {todo.subtasks.map((sub) => (
-              <div
-                key={sub.id}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setSubtaskCtxMenu({ x: e.clientX, y: e.clientY, subtask: sub });
-                }}
-                className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-[var(--surface-hover)] transition-colors"
-              >
-                <button
-                  type="button"
-                  onClick={() => void onToggleSubtask(todo.id, sub.id, !sub.completed)}
-                  aria-label={sub.title}
-                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors"
-                  style={
-                    sub.completed
-                      ? {
-                          backgroundColor: 'var(--accent)',
-                          borderColor: 'var(--accent)',
-                          color: 'var(--accent-fg)',
-                        }
-                      : { borderColor: 'var(--border-strong)' }
-                  }
-                >
-                  {sub.completed && <Check className="h-2.5 w-2.5 stroke-[3]" />}
-                </button>
-                {editingSubtaskId === sub.id ? (
-                  <input
-                    type="text"
-                    autoFocus
-                    value={editingSubtaskTitle}
-                    maxLength={200}
-                    aria-label={sub.title}
-                    onChange={(e) => setEditingSubtaskTitle(e.target.value)}
-                    onBlur={() => {
-                      const next = editingSubtaskTitle.trim();
-                      setEditingSubtaskId(null);
-                      if (next && next !== sub.title) {
-                        void onRenameSubtask?.(todo.id, sub.id, next);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const next = editingSubtaskTitle.trim();
-                        setEditingSubtaskId(null);
-                        if (next && next !== sub.title) {
-                          void onRenameSubtask?.(todo.id, sub.id, next);
-                        }
-                      } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        setEditingSubtaskId(null);
-                      }
-                    }}
-                    className="flex-1 min-w-0 rounded border border-[var(--border-strong)] bg-[var(--canvas)] px-2 py-0.5 text-sm text-[var(--text-primary)] focus:outline-none"
-                  />
-                ) : (
-                  <span
-                    onDoubleClick={() => {
-                      setEditingSubtaskId(sub.id);
-                      setEditingSubtaskTitle(sub.title);
-                    }}
-                    className={`flex-1 min-w-0 text-sm break-words cursor-text ${
-                      sub.completed
-                        ? 'line-through text-[var(--text-muted)]'
-                        : 'text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {sub.title}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void onDeleteSubtask(todo.id, sub.id)}
-                  aria-label={`${t.deleteToTrashButton}: ${sub.title}`}
-                  className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 text-[var(--text-muted)] hover:text-red-500 p-1 rounded transition-opacity"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <form onSubmit={handleAddSubtask} className="flex items-center gap-2">
-            <input
-              type="text"
-              value={newSubtaskTitle}
-              onChange={(e) => setNewSubtaskTitle(e.target.value)}
-              disabled={isAddingSubtask}
-              maxLength={200}
-              aria-label={t.addSubtaskPlaceholder}
-              placeholder={t.addSubtaskPlaceholder}
-              className="flex-1 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none disabled:opacity-60"
-            />
-            <button
-              type="submit"
-              disabled={!newSubtaskTitle.trim() || isAddingSubtask}
-              aria-label={t.addButton}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-35"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </form>
-        </section>
-
-        {/* Post-Creation Tags (#tag - Microsoft To Do style) */}
-        <section aria-label={t.tagsLabel} className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-              {t.tagsLabel}
-            </h3>
-            {currentTags.length > 0 && (
-              <span className="font-mono-tabular text-xs text-[var(--text-muted)]">
-                {currentTags.length}/12
-              </span>
-            )}
-          </div>
-
-          {currentTags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {currentTags.map((tag) => (
-                <span
-                  key={tag}
-                  data-testid="detail-tag-chip"
-                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)]"
-                >
-                  <Hash className="h-3 w-3 text-[var(--accent)] shrink-0" />
-                  <span>{tag}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveTag(tag)}
-                    aria-label={`${t.clearDate}: #${tag}`}
-                    className="ml-0.5 rounded p-0.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-red-500 transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <form onSubmit={handleAddTag} className="flex items-center gap-2">
-            <input
-              type="text"
-              data-testid="detail-tag-input"
-              value={newTagInput}
-              onChange={(e) => setNewTagInput(e.target.value)}
-              disabled={currentTags.length >= 12}
-              maxLength={40}
-              aria-label={t.addTagPlaceholder}
-              placeholder={t.addTagPlaceholder}
-              className="flex-1 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none disabled:opacity-45"
-            />
-            <button
-              type="submit"
-              data-testid="detail-tag-add-button"
-              disabled={!newTagInput.trim() || currentTags.length >= 12}
-              aria-label={t.addButton}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-35"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </form>
-        </section>
+        <TodoTagsSection
+          tags={currentTags}
+          newTagInput={newTagInput}
+          onChangeNewTagInput={setNewTagInput}
+          onAddTag={handleAddTag}
+          onRemoveTag={handleRemoveTag}
+        />
 
         <div className="h-px bg-[var(--border)]" />
 
-        {/* Structured Properties */}
-        <div className="space-y-4">
-          {/* Category */}
-          <div className="space-y-1.5">
-            <label
-              htmlFor="detail-category-select"
-              className="block font-display text-xs font-semibold text-[var(--text-muted)]"
-            >
-              {t.categories}
-            </label>
-            <SelectField
-              id="detail-category-select"
-              value={todo.categoryId ?? ''}
-              onChange={(e) => void onUpdate(todo.id, { categoryId: e.target.value || null })}
-              wrapperClassName="w-full"
-              selectClassName="py-2 text-sm"
-            >
-              <option value="" className="bg-[var(--surface)]">
-                {t.uncategorized}
-              </option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id} className="bg-[var(--surface)]">
-                  {cat.name}
-                </option>
-              ))}
-            </SelectField>
-          </div>
-
-          {/* Priority */}
-          <div className="space-y-1.5">
-            <p className="font-display text-xs font-semibold text-[var(--text-muted)]">
-              {t.priorityLabel}
-            </p>
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-[var(--surface-subtle)] p-1 border border-[var(--border)]">
-              {priorities.map(({ value, label }) => {
-                const active = todo.priority === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => void onUpdate(todo.id, { priority: value })}
-                    aria-pressed={active}
-                    className={`rounded-md py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
-                      active
-                        ? 'bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border)] shadow-xs'
-                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Optional Start Date & End / Due Date */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="font-display text-xs font-semibold text-[var(--text-muted)]">
-                {t.dateButton}
-              </span>
-              {hasAnyDate && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void onUpdate(todo.id, { startDate: null, dueDate: null, dueTime: null })
-                  }
-                  className="rounded-md px-2 py-0.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] whitespace-nowrap"
-                >
-                  {t.clearDate}
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => void onUpdate(todo.id, { startDate: null, dueDate: todayStr })}
-                className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-                  todo.dueDate === todayStr && !todo.startDate
-                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                }`}
-              >
-                {t.today}
-              </button>
-              <button
-                type="button"
-                onClick={() => void onUpdate(todo.id, { startDate: null, dueDate: tomorrowStr })}
-                className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-                  todo.dueDate === tomorrowStr && !todo.startDate
-                    ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                    : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
-                }`}
-              >
-                {t.tomorrow}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label
-                  htmlFor="detail-start-date"
-                  className="block text-[11px] font-medium text-[var(--text-muted)]"
-                >
-                  {t.startDateLabel}
-                </label>
-                <div className="relative flex items-center">
-                  <Calendar className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
-                  <input
-                    id="detail-start-date"
-                    type="date"
-                    value={todo.startDate ?? ''}
-                    onChange={(e) =>
-                      void onUpdate(todo.id, { startDate: e.target.value || null })
-                    }
-                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label
-                  htmlFor="detail-due-date"
-                  className="block text-[11px] font-medium text-[var(--text-muted)]"
-                >
-                  {t.dueDateLabel}
-                </label>
-                <div className="relative flex items-center">
-                  <Calendar className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
-                  <input
-                    id="detail-due-date"
-                    type="date"
-                    value={todo.dueDate ?? ''}
-                    onChange={(e) =>
-                      void onUpdate(todo.id, { dueDate: e.target.value || null })
-                    }
-                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Optional Due Time Input */}
-            <div className="space-y-1">
-              <label
-                htmlFor="detail-due-time"
-                className="block text-[11px] font-medium text-[var(--text-muted)]"
-              >
-                {t.dueTimeLabel}
-              </label>
-              <div className="relative flex items-center gap-1.5">
-                <div className="relative flex flex-1 items-center">
-                  <Clock className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]" />
-                  <input
-                    id="detail-due-time"
-                    type="time"
-                    value={todo.dueTime ?? ''}
-                    onChange={(e) => {
-                      const nextTime = e.target.value || null;
-                      const patch: TodoPatch = { dueTime: nextTime };
-                      if (nextTime && !todo.dueDate && !todo.startDate) {
-                        patch.dueDate = todayStr;
-                      }
-                      void onUpdate(todo.id, patch);
-                    }}
-                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-2 py-1.5 text-xs text-[var(--text-primary)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
-                  />
-                </div>
-                {todo.dueTime && (
-                  <button
-                    type="button"
-                    onClick={() => void onUpdate(todo.id, { dueTime: null })}
-                    aria-label={t.clearDate}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <p className="text-[11px] leading-snug text-[var(--text-muted)]">
-              {t.optionalDateHint}
-            </p>
-          </div>
-        </div>
+        <TodoScheduleSection
+          todo={todo}
+          categories={categories}
+          todayStr={todayStr}
+          tomorrowStr={tomorrowStr}
+          onUpdate={onUpdate}
+        />
       </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between border-t border-[var(--border)] px-5 py-3 text-xs text-[var(--text-muted)]">
-        <span>
+      <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] px-5 py-3 text-xs text-[var(--text-muted)]">
+        <span
+          className="min-w-0 truncate"
+          title={createdFormatted ? `${t.createdPrefix}: ${createdFormatted}` : undefined}
+        >
           {createdFormatted ? `${t.createdPrefix}: ${createdFormatted}` : ''}
         </span>
         <button
@@ -772,7 +445,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
             }
             onDelete(todo.id);
           }}
-          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors whitespace-nowrap"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors whitespace-nowrap"
         >
           <Trash2 className="h-3.5 w-3.5" />
           <span>{t.deleteToTrashButton}</span>
@@ -811,7 +484,9 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
               label: t.ctxCopyTitle,
               icon: <Copy className="h-3.5 w-3.5" />,
               onSelect: () => {
-                void navigator.clipboard?.writeText?.(subtaskCtxMenu.subtask.title).catch(() => {});
+                void navigator.clipboard?.writeText?.(subtaskCtxMenu.subtask.title).catch(() => {
+                  /* ignore */
+                });
               },
             },
             { id: 'div-1', divider: true },

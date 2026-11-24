@@ -77,9 +77,12 @@ function extractUniversalTaskFields(rawText, nowDate = new Date()) {
   });
 
   // 4. Relative date words (Turkish + English + common European - Unicode-safe word boundaries)
-  const trToday = /(?<![\p{L}\p{N}_])(bug[üu]n(?:[üu]n|e|k[üu]|[üu])?|today|heute|aujourd'hui|hoy|oggi)(?![\p{L}\p{N}_])/iu;
-  const trTomorrow = /(?<![\p{L}\p{N}_])(yar[ıi]n(?:a|ki)?|tomorrow|morgen|demain|ma[ñn]ana|domani)(?![\p{L}\p{N}_])/iu;
-  const trAfterTomorrow = /(?<![\p{L}\p{N}_])([öo]b[üu]r\s+g[üu]n|day\s+after\s+tomorrow)(?![\p{L}\p{N}_])/iu;
+  const trToday =
+    /(?<![\p{L}\p{N}_])(bug[üu]n(?:[üu]n|e|k[üu]|[üu])?|today|heute|aujourd'hui|hoy|oggi)(?![\p{L}\p{N}_])/iu;
+  const trTomorrow =
+    /(?<![\p{L}\p{N}_])(yar[ıi]n(?:a|ki)?|tomorrow|morgen|demain|ma[ñn]ana|domani)(?![\p{L}\p{N}_])/iu;
+  const trAfterTomorrow =
+    /(?<![\p{L}\p{N}_])([öo]b[üu]r\s+g[üu]n|day\s+after\s+tomorrow)(?![\p{L}\p{N}_])/iu;
 
   if (!dueDate && trAfterTomorrow.test(working)) {
     dueDate = addDays(nowDate, 2);
@@ -128,12 +131,14 @@ function extractUniversalTaskFields(rawText, nowDate = new Date()) {
     working = working.replace(/(?:^|\s)\^(?=\s|$)/g, ' ');
   }
 
-  const highPriRe = /(?<![\p{L}\p{N}_])(y[üu]ksek\s+[öo]ncelik(?:li)?|acil|high\s+priority|urgent)(?![\p{L}\p{N}_])/giu;
+  const highPriRe =
+    /(?<![\p{L}\p{N}_])(y[üu]ksek\s+[öo]ncelik(?:li)?|acil|high\s+priority|urgent)(?![\p{L}\p{N}_])/giu;
   if (highPriRe.test(working)) {
     priority = 'high';
     working = working.replace(highPriRe, ' ');
   }
-  const lowPriRe = /(?<![\p{L}\p{N}_])(d[üu][şs][üu]k\s+[öo]ncelik(?:li)?|low\s+priority)(?![\p{L}\p{N}_])/giu;
+  const lowPriRe =
+    /(?<![\p{L}\p{N}_])(d[üu][şs][üu]k\s+[öo]ncelik(?:li)?|low\s+priority)(?![\p{L}\p{N}_])/giu;
   if (!priority && lowPriRe.test(working)) {
     priority = 'low';
     working = working.replace(lowPriRe, ' ');
@@ -196,9 +201,7 @@ function parseVoiceIntent(rawText, options = {}) {
     });
   }
 
-  if (
-    /\b(cop\s*kutusunu\s*(bosalt|temizle)|empty\s+trash)\b/i.test(ascii)
-  ) {
+  if (/\b(cop\s*kutusunu\s*(bosalt|temizle)|empty\s+trash)\b/i.test(ascii)) {
     return finish({
       intent: 'empty_trash',
       confidence: 0.96,
@@ -208,9 +211,7 @@ function parseVoiceIntent(rawText, options = {}) {
     });
   }
 
-  if (
-    /\b(tamamlanan(?:lari|ları)?\s*(temizle|sil)|clear\s+completed)\b/i.test(ascii)
-  ) {
+  if (/\b(tamamlanan(?:lari|ları)?\s*(temizle|sil)|clear\s+completed)\b/i.test(ascii)) {
     return finish({
       intent: 'clear_completed',
       confidence: 0.94,
@@ -221,8 +222,12 @@ function parseVoiceIntent(rawText, options = {}) {
   }
 
   // Single-task delete (still destructive -> requiresConfirmation: true)
-  const trDelMatch = text.match(/^(.+?)\s+(?:g[öo]revini|notunu|g[öo]revi|notu)?\s*(?:sil|kald[ıi]r|ç[öo]pe\s+at)$/iu);
-  const enDelMatch = text.match(/^(?:delete|remove)\s+(?:task|note|my\s+task|my\s+note)?\s*(.+)$/iu);
+  const trDelMatch = text.match(
+    /^(.+?)\s+(?:g[öo]revini|notunu|g[öo]revi|notu)?\s*(?:sil|kald[ıi]r|ç[öo]pe\s+at)$/iu,
+  );
+  const enDelMatch = text.match(
+    /^(?:delete|remove)\s+(?:task|note|my\s+task|my\s+note)?\s*(.+)$/iu,
+  );
   if (trDelMatch || enDelMatch) {
     const target = cleanTitle((trDelMatch ? trDelMatch[1] : enDelMatch[1]) || '');
     if (target) {
@@ -280,7 +285,10 @@ function parseVoiceIntent(rawText, options = {}) {
     if (trReadMatch) {
       query = query
         .replace(/(?<![\p{L}\p{N}_])(?:bana|benim|bu|su|şu)(?![\p{L}\p{N}_])/giu, ' ')
-        .replace(/(?:ile\s+ilgili|hakk[ıi]nda(?:ki)?|ilgili|notumu|notlar[ıi]m[ıi]|notu|g[öo]revimi)$/iu, '')
+        .replace(
+          /(?:ile\s+ilgili|hakk[ıi]nda(?:ki)?|ilgili|notumu|notlar[ıi]m[ıi]|notu|g[öo]revimi)$/iu,
+          '',
+        )
         .replace(/([a-zA-ZçğıöşüÇĞİÖŞÜ]{3,})(?:yla|yle|la|le)$/u, '$1')
         .trim();
     } else if (enReadMatch) {
@@ -323,7 +331,9 @@ function parseVoiceIntent(rawText, options = {}) {
   const trSearchMatch = text.match(
     /^(?:(?:g[öo]revler(?:im)?de|notlar(?:[ıi]m)?da)\s+)?(.+?)\s+(?:ara|bul|listele)$/iu,
   );
-  const enSearchMatch = text.match(/^(?:search|find|lookup|look\s+up)\s+(?:for\s+)?(?:tasks?\s+|notes?\s+)?(.+)$/iu);
+  const enSearchMatch = text.match(
+    /^(?:search|find|lookup|look\s+up)\s+(?:for\s+)?(?:tasks?\s+|notes?\s+)?(.+)$/iu,
+  );
   if (trSearchMatch || enSearchMatch) {
     const query = cleanTitle((trSearchMatch ? trSearchMatch[1] : enSearchMatch[1]) || '');
     if (query) {
@@ -339,9 +349,11 @@ function parseVoiceIntent(rawText, options = {}) {
   }
 
   // 7. ADD TASK (Turkish + English natural language)
-  const trAddPrefix = /^(?:notlar[ıi]ma|g[öo]revlerime|listeme|ajandama|yeni\s+g[öo]rev|yeni\s+not|g[öo]rev\s+ekle|not\s+ekle)\s+/iu;
+  const trAddPrefix =
+    /^(?:notlar[ıi]ma|g[öo]revlerime|listeme|ajandama|yeni\s+g[öo]rev|yeni\s+not|g[öo]rev\s+ekle|not\s+ekle)\s+/iu;
   const trAddSuffix = /\s+(?:olarak\s+)?(?:ekle|kaydet|olu[şs]tur|not\s+al|hat[ıi]rlat)$/iu;
-  const enAddPrefix = /^(?:add|create|new\s+task|new\s+note|remind\s+me\s+to|save\s+note|add\s+to\s+my\s+(?:notes|tasks|list))\s+/iu;
+  const enAddPrefix =
+    /^(?:add|create|new\s+task|new\s+note|remind\s+me\s+to|save\s+note|add\s+to\s+my\s+(?:notes|tasks|list))\s+/iu;
 
   const isTrAdd = trAddPrefix.test(text) || trAddSuffix.test(text);
   const isEnAdd = enAddPrefix.test(text);

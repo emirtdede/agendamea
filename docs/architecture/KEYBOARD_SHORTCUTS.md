@@ -4,17 +4,17 @@ Agendamea supports full keyboard-driven planning and accessible navigation acros
 
 ## Default Shortcuts
 
-| Shortcut | Action |
-| :--- | :--- |
-| `Ctrl + Alt + N` | Global OS Quick Add (opens Agendamea and focuses new task bar) |
-| `Ctrl + Alt + Space` | Global OS Voice Dictation overlay toggle |
-| `Ctrl + K` / `Cmd + K` / `/` | Focus sidebar search input (automatically opens sidebar on narrow viewports) |
-| `N` | Focus the Quick Add task input bar |
-| `Ctrl + ,` | Open Settings |
-| `1` / `2` / `3` / `4` | Switch views (List, Kanban, Calendar, Eisenhower Matrix) |
-| `Alt + ArrowUp` | Move the currently selected task or focused category up within its pin group |
-| `Alt + ArrowDown` | Move the currently selected task or focused category down within its pin group |
-| `Escape` | Close active overlay/popover in priority order: Settings sub-view -> Settings modal -> Detail panel -> active `#tag` filter -> active search query -> inline category edit/add form |
+| Shortcut                     | Action                                                                                                                                                                              |
+| :--------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Ctrl + Alt + N`             | Global OS Quick Add (opens Agendamea and focuses new task bar)                                                                                                                      |
+| `Ctrl + Alt + Space`         | Global OS Voice Dictation overlay toggle                                                                                                                                            |
+| `Ctrl + K` / `Cmd + K` / `/` | Focus sidebar search input (automatically opens sidebar on narrow viewports)                                                                                                        |
+| `N`                          | Focus the Quick Add task input bar                                                                                                                                                  |
+| `Ctrl + ,`                   | Open Settings                                                                                                                                                                       |
+| `1` / `2` / `3` / `4`        | Switch views (List, Kanban, Calendar, Eisenhower Matrix)                                                                                                                            |
+| `Alt + ArrowUp`              | Move the currently selected task or focused category up within its pin group                                                                                                        |
+| `Alt + ArrowDown`            | Move the currently selected task or focused category down within its pin group                                                                                                      |
+| `Escape`                     | Close active overlay/popover in priority order: Settings sub-view -> Settings modal -> Detail panel -> active `#tag` filter -> active search query -> inline category edit/add form |
 
 ## Reordering Guardrails
 

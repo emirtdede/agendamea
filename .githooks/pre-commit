@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+echo "[pre-commit] Running Biome staged check..."
+npx biome check --staged --no-errors-on-unmatched
+
+echo "[pre-commit] Running TypeScript lint gate..."
+npm run lint

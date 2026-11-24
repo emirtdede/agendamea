@@ -15,6 +15,8 @@ import type {
   TodoPatch,
   UpdateCheckResult,
   VoiceAskResponse,
+  WebhookLogEntry,
+  WebhookOutboxEntry,
   WebhookTestResult,
 } from '../types';
 
@@ -24,6 +26,20 @@ const AI_ASK_TIMEOUT_MS = 45_000;
 const AI_STT_TIMEOUT_MS = 60_000;
 const AI_REINDEX_TIMEOUT_MS = 120_000;
 const AI_VOICE_DOWNLOAD_TIMEOUT_MS = 300_000;
+
+export class ApiLocalizedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiLocalizedError';
+  }
+}
+
+function getActiveClientLang(): string {
+  if (typeof document !== 'undefined' && document.documentElement?.lang) {
+    return document.documentElement.lang.trim() || 'en';
+  }
+  return 'en';
+}
 
 async function request<T>(
   url: string,
@@ -40,7 +56,7 @@ async function request<T>(
   const signal =
     options?.signal && typeof AbortSignal.any === 'function'
       ? AbortSignal.any([options.signal, controller.signal])
-      : options?.signal ?? controller.signal;
+      : (options?.signal ?? controller.signal);
 
   try {
     const hasBody = options?.body !== undefined;
@@ -49,22 +65,26 @@ async function request<T>(
       signal,
       headers: {
         'X-Agendamea-Source': 'ui',
+        'X-Agendamea-Lang': getActiveClientLang(),
         ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
         ...(options?.headers ?? {}),
       },
     });
 
     if (!res.ok) {
-      let message = `HTTP ${res.status}`;
+      let localizedMsg: string | null = null;
       try {
         const data = await res.json();
         if (typeof data?.error === 'string' && data.error.trim()) {
-          message = data.error;
+          localizedMsg = data.error.trim();
         }
       } catch {
         // Ignore JSON parse error
       }
-      throw new Error(message);
+      if (localizedMsg) {
+        throw new ApiLocalizedError(localizedMsg);
+      }
+      throw new Error(`HTTP ${res.status}`);
     }
 
     return (await res.json()) as T;
@@ -290,9 +310,7 @@ export const api = {
     );
   },
 
-  async openOneDriveFolder(
-    folderPath?: string | null,
-  ): Promise<{ ok: boolean; path?: string }> {
+  async openOneDriveFolder(folderPath?: string | null): Promise<{ ok: boolean; path?: string }> {
     if (typeof window !== 'undefined' && window.agendameaWindow?.openOneDriveFolder) {
       return window.agendameaWindow.openOneDriveFolder(folderPath);
     }
@@ -302,10 +320,59 @@ export const api = {
     });
   },
 
-  testWebhook(input?: { url?: string; secret?: string }): Promise<WebhookTestResult> {
+  testWebhook(input?: {
+    url?: string;
+    secret?: string;
+    format?: string;
+  }): Promise<WebhookTestResult> {
     return request<WebhookTestResult>('/api/webhooks/test', {
       method: 'POST',
       body: JSON.stringify(input ?? {}),
+    });
+  },
+
+  getWebhookLogs(limit = 30): Promise<WebhookLogEntry[]> {
+    return request<WebhookLogEntry[]>(
+      `/api/webhooks/logs?limit=${Math.max(1, Math.min(200, limit))}`,
+    );
+  },
+
+  clearWebhookLogs(): Promise<{ ok: boolean; cleared: number }> {
+    return request<{ ok: boolean; cleared: number }>('/api/webhooks/logs', {
+      method: 'DELETE',
+    });
+  },
+
+  getWebhookOutbox(limit = 30): Promise<WebhookOutboxEntry[]> {
+    return request<WebhookOutboxEntry[]>(
+      `/api/webhooks/outbox?limit=${Math.max(1, Math.min(200, limit))}`,
+    );
+  },
+
+  replayWebhookOutbox(
+    id: string,
+  ): Promise<{ ok: boolean; id: string; statusCode?: number | null; error?: string }> {
+    return request<{ ok: boolean; id: string; statusCode?: number | null; error?: string }>(
+      `/api/webhooks/replay/${enc(id)}`,
+      { method: 'POST', body: '{}' },
+    );
+  },
+
+  testIncomingWebhook(secret?: string): Promise<{
+    ok: boolean;
+    action?: string;
+    listening?: boolean;
+    port?: number;
+    error?: string;
+  }> {
+    const headers: Record<string, string> = {};
+    if (secret?.trim()) {
+      headers['X-Agendamea-Secret'] = secret.trim();
+    }
+    return request('/api/webhook/incoming', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action: 'ping' }),
     });
   },
 
@@ -332,7 +399,9 @@ export const api = {
     return request('/api/ai/models');
   },
 
-  downloadAiModel(modelId: string): Promise<{ ok: boolean; started?: boolean; modelId?: string; error?: string; code?: string }> {
+  downloadAiModel(
+    modelId: string,
+  ): Promise<{ ok: boolean; started?: boolean; modelId?: string; error?: string; code?: string }> {
     return request(`/api/ai/models/${enc(modelId)}/download`, {
       method: 'POST',
       body: JSON.stringify({}),
@@ -418,9 +487,13 @@ export const api = {
     return request('/api/ai/tts-voices');
   },
 
-  downloadPiperVoice(
-    voiceId: string,
-  ): Promise<{ ok: boolean; voiceId?: string; alreadyInstalled?: boolean; code?: string; message?: string }> {
+  downloadPiperVoice(voiceId: string): Promise<{
+    ok: boolean;
+    voiceId?: string;
+    alreadyInstalled?: boolean;
+    code?: string;
+    message?: string;
+  }> {
     return request(
       '/api/ai/tts-voices/download',
       {
@@ -441,6 +514,96 @@ export const api = {
   deletePiperVoice(voiceId: string): Promise<{ ok: boolean; removed: boolean }> {
     return request(`/api/ai/tts-voices/${enc(voiceId)}`, {
       method: 'DELETE',
+    });
+  },
+
+  getSystemInfo(): Promise<import('../types').SystemInfoPayload> {
+    return request('/api/system/info');
+  },
+
+  listCloudBackups(): Promise<{ backups: import('../types').CloudBackupFileEntry[] }> {
+    return request('/api/onedrive/backups');
+  },
+
+  restoreCloudBackupFile(fileName: string): Promise<{
+    status: OneDriveStatus;
+    bootstrap: BootstrapPayload;
+  }> {
+    return request('/api/onedrive/restore-file', {
+      method: 'POST',
+      body: JSON.stringify({ fileName }),
+    });
+  },
+
+  restoreAllTrash(): Promise<{
+    ok: boolean;
+    restoredTodos: number;
+    restoredCategories: number;
+    bootstrap: BootstrapPayload;
+  }> {
+    return request('/api/trash/restore-all', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  async exportBackupText(format: 'json' | 'csv' | 'md' | 'ics', lang?: string): Promise<string> {
+    const { blob } = await api.exportBackupBlob(format, lang);
+    return blob.text();
+  },
+
+  async exportBackupBlob(
+    format: 'json' | 'csv' | 'md' | 'ics',
+    lang?: string,
+  ): Promise<{ blob: Blob; fileName: string }> {
+    const qs = new URLSearchParams({ format });
+    const activeLang = lang || getActiveClientLang();
+    qs.set('lang', activeLang);
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+    try {
+      const res = await fetch(`/api/export?${qs.toString()}`, {
+        signal: controller.signal,
+        headers: {
+          'X-Agendamea-Source': 'ui',
+          'X-Agendamea-Lang': activeLang,
+        },
+      });
+      if (!res.ok) {
+        let localizedMsg: string | null = null;
+        try {
+          const data = await res.json();
+          if (typeof data?.error === 'string' && data.error.trim()) {
+            localizedMsg = data.error.trim();
+          }
+        } catch {
+          // Ignore non-JSON error body
+        }
+        if (localizedMsg) throw new ApiLocalizedError(localizedMsg);
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const disp = res.headers.get('content-disposition') ?? '';
+      const match = disp.match(/filename="([^"]+)"/);
+      const fileName = match?.[1] ?? `agendamea-backup.${format}`;
+      const blob = await res.blob();
+      return { blob, fileName };
+    } finally {
+      window.clearTimeout(timer);
+    }
+  },
+
+  async callMcpTool(
+    name: string,
+    args: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
+    return request('/api/mcp', {
+      method: 'POST',
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: `docs-${Date.now()}`,
+        method: 'tools/call',
+        params: { name, arguments: args },
+      }),
     });
   },
 };
