@@ -181,8 +181,14 @@ namespace Agendamea.Cli
             int start = i;
             while (i < json.Length && char.IsDigit(json[i])) i++;
             if (i <= start) return -1;
-            int value;
-            return int.TryParse(json.Substring(start, i - start), out value) ? value : -1;
+            int value = 0;
+            for (int k = start; k < i; k++)
+            {
+                int digit = json[k] - '0';
+                if (value > (int.MaxValue - digit) / 10) return -1;
+                value = value * 10 + digit;
+            }
+            return value;
         }
 
         private static void TryEnableUtf8AndVtConsole()
