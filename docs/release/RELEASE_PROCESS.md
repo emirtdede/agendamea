@@ -21,7 +21,7 @@ npm run check:biome    # Biome lint & format check
 npm run lint           # Strict TypeScript + CJS checkJs type-check
 npm run check:licenses # Production dependency license compliance check
 npm run test:coverage  # 118 Node unit, AI, App Lock, MCP, CLI, webhook, security & 73-language tests + coverage
-npm run test:ui:coverage # 48 Vitest + React Testing Library UI tests + coverage
+npm run test:ui:coverage # 51 Vitest + React Testing Library UI tests + coverage
 npm run test:setup     # 19 .NET 10 WPF modern setup, SFX2, Zip-Slip & 73-locale tests
 npm run build          # Sync offline voice assets + build ag.exe shim + Vite bundle + esbuild server
 npm run check:budget   # Verify strict JS/CSS production bundle size budgets

@@ -152,7 +152,7 @@ For local AI and automation, Agendamea provides **One-Click Local AI Setup** wit
 ### Frontend, Testing &amp; Release Quality Gates
 
 - **React 19, TypeScript 7, Tailwind CSS v4 &amp; Vite 8** - Isolated `useSyncExternalStore` domain stores (`src/store/`), `VirtualizedTodoList`, lazy-loaded modals/overlays, single-locale boot, self-hosted WOFF2 fonts, and strict bundle budget enforcement.
-- **Automated Verification Suites** - **118 Node unit/integration/security/i18n tests** (`npm test`), **48 Vitest + React Testing Library UI tests** (`npm run test:ui`), **19 .NET 10 WPF Setup &amp; SFX2 tests** (`npm run test:setup`), **real Electron Playwright E2E smoke tests** (`npm run test:e2e`), Biome lint/format (`npm run check:biome`), strict `tsc` + `checkJs`, license compliance, and GitHub Actions CI/Release workflows.
+- **Automated Verification Suites** - **118 Node unit/integration/security/i18n tests** (`npm test`), **51 Vitest + React Testing Library UI tests** (`npm run test:ui`), **19 .NET 10 WPF Setup &amp; SFX2 tests** (`npm run test:setup`), **real Electron Playwright E2E smoke tests** (`npm run test:e2e`), Biome lint/format (`npm run check:biome`), strict `tsc` + `checkJs`, license compliance, and GitHub Actions CI/Release workflows.
 
 ---
 
@@ -161,7 +161,7 @@ For local AI and automation, Agendamea provides **One-Click Local AI Setup** wit
 ```tree
 Agendamea/
 ├── .github/workflows/
-│   ├── ci.yml                       # Automated Biome, tsc, licenses, 118 Node + 48 UI + 19 .NET tests, budgets & E2E
+│   ├── ci.yml                       # Automated Biome, tsc, licenses, 118 Node + 51 UI + 19 .NET tests, budgets & E2E
 │   └── release.yml                  # Tagged Windows x64 Modern Setup, NativeAOT Portable, Store .appx & SHA256SUMS
 ├── assets/
 │   ├── vellium-banner.svg           # Monochrome Vellium header banner
@@ -215,7 +215,7 @@ Agendamea/
 │   ├── voice/                       # RNNoise WASM, Silero VAD v5, Piper ONNX TTS & AudioWorklet capture
 │   ├── App.tsx                      # Root workspace orchestration, App Lock gate & SSE live sync
 │   └── types.ts                     # Shared TypeScript domain models
-├── tests/                           # 118 Node unit/integration/security tests, 48 Vitest UI tests & Electron E2E smoke
+├── tests/                           # 118 Node unit/integration/security tests, 51 Vitest UI tests & Electron E2E smoke
 ├── winget/manifests/                # WinGet 1.6.0 manifests (Vellium.Agendamea 1.1.0)
 ├── server.ts                        # Modular Express loopback server & zero-flash lock boot injector
 ├── electron-builder.yml             # Windows unpacked & Microsoft Store APPX/MSIX packaging config
@@ -395,7 +395,7 @@ npm run check:biome     # Biome lint & format check
 npm run lint            # Strict TypeScript + CJS checkJs type-check
 npm run check:licenses  # Production dependency license audit
 npm test                # 118 Node unit, AI, security, App Lock, 73-language, CLI, MCP & webhook tests
-npm run test:ui         # 48 Vitest + React Testing Library UI component tests
+npm run test:ui         # 51 Vitest + React Testing Library UI component tests
 npm run test:setup      # 19 .NET 10 WPF modern setup, SFX2, Zip-Slip & 73-locale tests
 npm run build           # Sync offline voice assets + ag.exe shim + Vite bundle + esbuild server
 npm run check:budget    # Production JS/CSS bundle size budget verification
@@ -536,7 +536,7 @@ git clone https://github.com/emirtdede/agendamea.git
 cd agendamea
 npm install
 
-# Kalite Kapıları ve Testler (118 Node + 48 UI + 19 .NET + Electron E2E)
+# Kalite Kapıları ve Testler (118 Node + 51 UI + 19 .NET + Electron E2E)
 npm run check:biome
 npm run lint
 npm test

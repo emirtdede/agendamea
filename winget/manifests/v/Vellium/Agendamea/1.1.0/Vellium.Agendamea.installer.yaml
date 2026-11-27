@@ -19,7 +19,7 @@ ReleaseDate: 2026-11-28
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/emirtdede/agendamea/releases/download/v1.1.0/Agendamea-Setup-1.1.0-win-x64.exe
-    InstallerSha256: DC4A10616BA072D289355C9BD151A39C66FAB2DCD870242F9C702A056006E444
+    InstallerSha256: C237307906D48DD39E9531D943FB7BDA0F41C643E304840BD37B648FA552EDC9
     AppsAndFeaturesEntries:
       - DisplayName: Agendamea
         Publisher: Vellium Teknoloji A.S.
