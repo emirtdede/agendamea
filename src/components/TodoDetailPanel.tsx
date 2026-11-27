@@ -1,5 +1,5 @@
 import { Check, Copy, Pencil, Pin, Star, Trash2, X } from 'lucide-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 import type { Category, Subtask, Todo, TodoPatch } from '../types';
 import { getCachedDateTimeFormatter } from '../utils/intlCache';
@@ -70,6 +70,8 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
   } | null>(null);
 
   const timerRef = useRef<number | null>(null);
+  const titleTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const notesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isAddingSubtaskRef = useRef(false);
   const skipUnmountFlushRef = useRef(false);
   const isMountedRef = useRef(true);
@@ -254,10 +256,29 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
     }
   };
 
+  useLayoutEffect(() => {
+    const syncHeights = () => {
+      const titleEl = titleTextareaRef.current;
+      if (titleEl && title.length >= 0) {
+        titleEl.style.height = '0px';
+        titleEl.style.height = `${Math.max(28, titleEl.scrollHeight)}px`;
+      }
+      const notesEl = notesTextareaRef.current;
+      if (notesEl && notes.length >= 0) {
+        notesEl.style.height = '0px';
+        const nextHeight = Math.min(180, Math.max(84, notesEl.scrollHeight));
+        notesEl.style.height = `${nextHeight}px`;
+      }
+    };
+    syncHeights();
+    window.addEventListener('resize', syncHeights);
+    return () => window.removeEventListener('resize', syncHeights);
+  }, [title, notes]);
+
   return (
     <aside
       aria-label={todo.title}
-      className="animate-slide-in-right fixed inset-y-0 end-0 z-30 flex w-full max-w-[380px] flex-col border-s border-[var(--border)] bg-[var(--surface)] lg:relative lg:z-auto lg:w-[368px] shrink-0"
+      className="animate-slide-in-right fixed inset-y-0 end-0 z-30 flex w-full max-w-[392px] flex-col border-s border-[var(--border)] bg-[var(--surface)] lg:relative lg:z-auto lg:w-[368px] xl:w-[392px] shrink-0"
     >
       <div
         aria-hidden="true"
@@ -342,15 +363,22 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-5 py-3.5 space-y-3.5">
         <div className="space-y-2">
-          <input
-            type="text"
+          <textarea
+            ref={titleTextareaRef}
+            rows={1}
             value={title}
             onChange={(e) => {
-              const val = e.target.value;
+              const val = e.target.value.replace(/[\r\n]+/g, ' ');
               setTitle(val);
               scheduleAutoSave(val, notes);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
             }}
             onBlur={() => {
               if (!title.trim()) {
@@ -365,12 +393,13 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
             maxLength={300}
             aria-label={t.taskTitlePlaceholder}
             placeholder={t.taskTitlePlaceholder}
-            className={`w-full bg-transparent font-display text-lg font-semibold leading-snug text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none ${
+            className={`block w-full resize-none overflow-hidden bg-transparent font-display text-lg font-semibold leading-snug text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none break-words ${
               todo.completed ? 'line-through text-[var(--text-muted)]' : ''
             }`}
           />
 
           <textarea
+            ref={notesTextareaRef}
             value={notes}
             onChange={(e) => {
               const val = e.target.value;
@@ -382,7 +411,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
             maxLength={10000}
             aria-label={t.notesPlaceholder}
             placeholder={t.notesPlaceholder}
-            className="w-full resize-y min-h-[76px] max-h-[280px] rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+            className="w-full resize-y min-h-[84px] max-h-[280px] rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
           />
         </div>
 

@@ -27,7 +27,7 @@ export function TodoScheduleSection({
   const hasAnyDate = Boolean(todo.startDate || todo.dueDate || todo.dueTime);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="space-y-1.5">
         <label
           htmlFor="detail-category-select"
