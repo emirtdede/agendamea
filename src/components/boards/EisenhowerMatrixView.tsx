@@ -1,7 +1,10 @@
+import { Plus } from 'lucide-react';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { MatrixQuadrant, Todo } from '../../types';
 import { addDaysToDateString, classifyEisenhowerQuadrant } from '../../utils/todoLogic';
+import { ContextMenu } from '../ContextMenu';
+import { InfoTooltip } from '../InfoTooltip';
 import { CompactBoardCard, type SharedBoardViewProps } from './CompactBoardCard';
 
 export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
@@ -17,9 +20,16 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
   onUpdateTodo,
   onTagClick,
   onTodoContextMenu,
+  onQuickCreateInBoard,
 }: SharedBoardViewProps) {
   const { t } = useI18n();
   const [dragOverQuadrant, setDragOverQuadrant] = useState<MatrixQuadrant | null>(null);
+  const [quadCtxMenu, setQuadCtxMenu] = useState<{
+    x: number;
+    y: number;
+    quadrant: MatrixQuadrant;
+    title: string;
+  } | null>(null);
   const tomorrowStr = useMemo(() => addDaysToDateString(todayStr, 1), [todayStr]);
 
   const quadrants = useMemo(() => {
@@ -118,76 +128,116 @@ export const EisenhowerMatrixView = React.memo(function EisenhowerMatrixView({
   };
 
   return (
-    <div data-testid="matrix-view" className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
-      {quadrants.map((q) => {
-        const isOver = dragOverQuadrant === q.id;
-        return (
-          // biome-ignore lint/a11y/noStaticElementInteractions: HTML5 matrix quadrant drop-zone container
-          <div
-            key={q.id}
-            data-testid={`matrix-quadrant-${q.id}`}
-            onDragOver={(e) => {
-              if (dragLocked) return;
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              if (dragOverQuadrant !== q.id) setDragOverQuadrant(q.id);
-            }}
-            onDragLeave={(e) => {
-              if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-              if (dragOverQuadrant === q.id) setDragOverQuadrant(null);
-            }}
-            onDrop={(e) => handleQuadrantDrop(e, q.id)}
-            className={`flex min-h-[230px] flex-col rounded-xl border p-3.5 transition-colors ${
-              isOver
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)]/30'
-                : 'border-[var(--border)] bg-[var(--surface-subtle)]/50'
-            }`}
-          >
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px] font-bold text-white"
-                  style={{ backgroundColor: q.accentColor }}
-                >
-                  {q.badge}
-                </span>
-                <h3 className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
-                  {q.title}
-                </h3>
-              </div>
-              <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 font-mono-tabular text-[11px] text-[var(--text-muted)]">
-                {q.items.length}
-              </span>
-            </div>
+    <div data-testid="matrix-view" className="space-y-3">
+      <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+        <span className="font-medium text-[var(--text-secondary)]">{t.matrixGuideTitle}</span>
+        <InfoTooltip text={t.matrixGuideTooltip} testId="matrix-guide-info" />
+      </div>
 
-            <div className="flex-1 space-y-2">
-              {q.items.length === 0 ? (
-                <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-[var(--border)] px-3 text-center text-xs text-[var(--text-muted)]">
-                  {t.emptyListTitle}
+      <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+        {quadrants.map((q) => {
+          const isOver = dragOverQuadrant === q.id;
+          return (
+            // biome-ignore lint/a11y/noStaticElementInteractions: HTML5 matrix quadrant drop-zone container
+            <div
+              key={q.id}
+              data-testid={`matrix-quadrant-${q.id}`}
+              onContextMenu={(e) => {
+                if (e.defaultPrevented || !onQuickCreateInBoard) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setQuadCtxMenu({ x: e.clientX, y: e.clientY, quadrant: q.id, title: q.title });
+              }}
+              onDragOver={(e) => {
+                if (dragLocked) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (dragOverQuadrant !== q.id) setDragOverQuadrant(q.id);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                if (dragOverQuadrant === q.id) setDragOverQuadrant(null);
+              }}
+              onDrop={(e) => handleQuadrantDrop(e, q.id)}
+              className={`flex min-h-[230px] flex-col rounded-xl border p-3.5 transition-colors ${
+                isOver
+                  ? 'border-[var(--accent)] bg-[var(--accent-soft)]/30'
+                  : 'border-[var(--border)] bg-[var(--surface-subtle)]/50'
+              }`}
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px] font-bold text-white"
+                    style={{ backgroundColor: q.accentColor }}
+                  >
+                    {q.badge}
+                  </span>
+                  <h3 className="font-display text-xs font-semibold text-[var(--text-primary)] truncate">
+                    {q.title}
+                  </h3>
                 </div>
-              ) : (
-                q.items.map((todo) => (
-                  <CompactBoardCard
-                    key={todo.id}
-                    todo={todo}
-                    category={todo.categoryId ? categoryMap.get(todo.categoryId) : undefined}
-                    todayStr={todayStr}
-                    isSelected={selectedTodoId === todo.id}
-                    dragLocked={dragLocked}
-                    onSelect={onSelectTodo}
-                    onToggleComplete={onToggleComplete}
-                    onToggleImportant={onToggleImportant}
-                    onTogglePin={onTogglePin}
-                    onTagClick={onTagClick}
-                    onDragStart={handleCardDragStart}
-                    onContextMenu={onTodoContextMenu}
-                  />
-                ))
-              )}
+                <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                  {q.items.length}
+                </span>
+              </div>
+
+              <div className="flex-1 space-y-2">
+                {q.items.length === 0 ? (
+                  <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-[var(--border)] px-3 text-center text-xs text-[var(--text-muted)]">
+                    {t.emptyListTitle}
+                  </div>
+                ) : (
+                  q.items.map((todo) => (
+                    <CompactBoardCard
+                      key={todo.id}
+                      todo={todo}
+                      category={todo.categoryId ? categoryMap.get(todo.categoryId) : undefined}
+                      todayStr={todayStr}
+                      isSelected={selectedTodoId === todo.id}
+                      dragLocked={dragLocked}
+                      onSelect={onSelectTodo}
+                      onToggleComplete={onToggleComplete}
+                      onToggleImportant={onToggleImportant}
+                      onTogglePin={onTogglePin}
+                      onTagClick={onTagClick}
+                      onDragStart={handleCardDragStart}
+                      onContextMenu={onTodoContextMenu}
+                    />
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      {quadCtxMenu && onQuickCreateInBoard && (
+        <ContextMenu
+          testId="matrix-quadrant-context-menu"
+          x={quadCtxMenu.x}
+          y={quadCtxMenu.y}
+          onClose={() => setQuadCtxMenu(null)}
+          items={[
+            {
+              id: 'add-in-quadrant',
+              label: `${t.ctxAddTaskInQuadrant} (${quadCtxMenu.title})`,
+              icon: <Plus className="h-3.5 w-3.5" />,
+              onSelect: () => {
+                if (quadCtxMenu.quadrant === 'q1') {
+                  onQuickCreateInBoard({ important: true, priority: 'high', dueDate: todayStr });
+                } else if (quadCtxMenu.quadrant === 'q2') {
+                  onQuickCreateInBoard({ important: true, priority: 'high', dueDate: tomorrowStr });
+                } else if (quadCtxMenu.quadrant === 'q3') {
+                  onQuickCreateInBoard({ important: false, priority: 'normal', dueDate: todayStr });
+                } else {
+                  onQuickCreateInBoard({ important: false, priority: 'low', dueDate: null });
+                }
+              },
+            },
+          ]}
+        />
+      )}
     </div>
   );
 });

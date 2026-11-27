@@ -1,6 +1,9 @@
 import type {
   AiModelStatus,
   AiStatusPayload,
+  AppLockAutoLockMinutes,
+  AppLockStatus,
+  AppLockType,
   AppSettings,
   BootstrapPayload,
   Category,
@@ -31,6 +34,16 @@ export class ApiLocalizedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ApiLocalizedError';
+  }
+}
+
+export class AppLockRequiredError extends Error {
+  readonly lock: AppLockStatus;
+
+  constructor(lock: AppLockStatus, message = 'APP_LOCKED') {
+    super(message);
+    this.name = 'AppLockRequiredError';
+    this.lock = lock;
   }
 }
 
@@ -73,13 +86,20 @@ async function request<T>(
 
     if (!res.ok) {
       let localizedMsg: string | null = null;
+      let lockedPayload: AppLockStatus | null = null;
       try {
         const data = await res.json();
+        if (res.status === 423 && data?.code === 'APP_LOCKED' && data?.lock) {
+          lockedPayload = data.lock as AppLockStatus;
+        }
         if (typeof data?.error === 'string' && data.error.trim()) {
           localizedMsg = data.error.trim();
         }
       } catch {
         // Ignore JSON parse error
+      }
+      if (lockedPayload) {
+        throw new AppLockRequiredError(lockedPayload, localizedMsg ?? 'APP_LOCKED');
       }
       if (localizedMsg) {
         throw new ApiLocalizedError(localizedMsg);
@@ -106,8 +126,70 @@ async function request<T>(
 
 const enc = (id: string) => encodeURIComponent(id);
 
+let prefetchedBootstrapPromise: Promise<BootstrapPayload> | null = null;
+let prefetchedBootstrapAt = 0;
+const BOOTSTRAP_PREFETCH_TTL_MS = 5_000;
+
+async function postAppLockJson<T extends { ok: boolean; code?: string }>(
+  url: string,
+  payload: Record<string, unknown>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agendamea-Source': 'ui',
+        'X-Agendamea-Lang': getActiveClientLang(),
+      },
+      body: JSON.stringify(payload),
+    });
+    const parsed = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    if (parsed && typeof parsed.ok === 'boolean') {
+      return parsed as unknown as T;
+    }
+    return {
+      ok: false,
+      code: typeof parsed?.code === 'string' ? parsed.code : `HTTP_${res.status}`,
+    } as T;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export const api = {
+  prefetchBootstrap(): void {
+    if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+    if (
+      prefetchedBootstrapPromise &&
+      Date.now() - prefetchedBootstrapAt < BOOTSTRAP_PREFETCH_TTL_MS
+    ) {
+      return;
+    }
+    const pending = request<BootstrapPayload>('/api/bootstrap');
+    prefetchedBootstrapPromise = pending;
+    prefetchedBootstrapAt = Date.now();
+    // Prevent unhandled rejection if caller doesn't consume or server is briefly unavailable
+    void pending.catch(() => {
+      if (prefetchedBootstrapPromise === pending) {
+        prefetchedBootstrapPromise = null;
+      }
+    });
+  },
+
   bootstrap(): Promise<BootstrapPayload> {
+    if (
+      prefetchedBootstrapPromise &&
+      Date.now() - prefetchedBootstrapAt < BOOTSTRAP_PREFETCH_TTL_MS
+    ) {
+      const pending = prefetchedBootstrapPromise;
+      prefetchedBootstrapPromise = null;
+      return pending;
+    }
+    prefetchedBootstrapPromise = null;
     return request<BootstrapPayload>('/api/bootstrap');
   },
 
@@ -159,23 +241,27 @@ export const api = {
     });
   },
 
-  createTodo(input: {
-    id?: string;
-    title: string;
-    notes?: string;
-    completed?: boolean;
-    important?: boolean;
-    pinned?: boolean;
-    priority?: Priority;
-    startDate?: string | null;
-    dueDate?: string | null;
-    dueTime?: string | null;
-    tags?: string[];
-    categoryId?: string | null;
-    subtasks?: Array<{ title: string; completed?: boolean }>;
-  }): Promise<Todo> {
+  createTodo(
+    input: {
+      id?: string;
+      title: string;
+      notes?: string;
+      completed?: boolean;
+      important?: boolean;
+      pinned?: boolean;
+      priority?: Priority;
+      startDate?: string | null;
+      dueDate?: string | null;
+      dueTime?: string | null;
+      tags?: string[];
+      categoryId?: string | null;
+      subtasks?: Array<{ title: string; completed?: boolean }>;
+    },
+    options?: { source?: 'ui' | 'overlay' | 'playground' },
+  ): Promise<Todo> {
     return request<Todo>('/api/todos', {
       method: 'POST',
+      headers: options?.source ? { 'X-Agendamea-Source': options.source } : undefined,
       body: JSON.stringify(input),
     });
   },
@@ -401,11 +487,62 @@ export const api = {
 
   downloadAiModel(
     modelId: string,
+    options?: { activate?: boolean },
   ): Promise<{ ok: boolean; started?: boolean; modelId?: string; error?: string; code?: string }> {
     return request(`/api/ai/models/${enc(modelId)}/download`, {
       method: 'POST',
+      body: JSON.stringify(options ?? {}),
+    });
+  },
+
+  activateAiModel(
+    modelId: string,
+  ): Promise<{ ok: boolean; modelId?: string; role?: string; error?: string }> {
+    return request(`/api/ai/models/${enc(modelId)}/activate`, {
+      method: 'POST',
       body: JSON.stringify({}),
     });
+  },
+
+  startAiOneClickSetup(options?: {
+    tier?: import('../types').AiTierId;
+    profileId?: import('../types').AiTierId;
+    customModels?: {
+      sttModelId: string;
+      llmModelId: string;
+      embedModelId: string;
+    };
+  }): Promise<{ ok: boolean; setup: import('../types').AiSetupState }> {
+    return request('/api/ai/setup', {
+      method: 'POST',
+      body: JSON.stringify(options ?? {}),
+    });
+  },
+
+  cancelAiOneClickSetup(): Promise<{ ok: boolean; setup: import('../types').AiSetupState }> {
+    return request('/api/ai/setup/cancel', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+
+  getAiSetupStatus(): Promise<{ ok: boolean; setup: import('../types').AiSetupState }> {
+    return request('/api/ai/setup/status');
+  },
+
+  warmupAiEngines(options?: { includeLlm?: boolean }): Promise<{
+    ok: boolean;
+    stt: { ok: boolean; loaded?: boolean; code?: string };
+    llm?: { ok: boolean; loaded?: boolean; code?: string };
+  }> {
+    return request(
+      '/api/ai/warmup',
+      {
+        method: 'POST',
+        body: JSON.stringify(options ?? {}),
+      },
+      AI_REINDEX_TIMEOUT_MS,
+    );
   },
 
   cancelAiModelDownload(modelId: string): Promise<{ ok: boolean; cancelled: boolean }> {
@@ -470,14 +607,58 @@ export const api = {
   },
 
   transcribeAudio(
-    pcmBase64: string,
+    pcmOrBase64: Float32Array | string,
     language?: string,
-  ): Promise<{ ok: boolean; text?: string; code?: string; message?: string }> {
+    options?: { cleanup?: boolean },
+  ): Promise<{
+    ok: boolean;
+    text?: string;
+    rawText?: string;
+    cleaned?: boolean;
+    language?: string;
+    code?: string;
+    message?: string;
+    parsed?: {
+      intent: string;
+      title: string;
+      dueDate: string | null;
+      dueTime: string | null;
+      priority: Priority;
+      important: boolean;
+      category: string | null;
+      tags: string[];
+    };
+  }> {
+    if (pcmOrBase64 instanceof Float32Array) {
+      const pcm16 = new Int16Array(pcmOrBase64.length);
+      for (let i = 0; i < pcmOrBase64.length; i += 1) {
+        const v = pcmOrBase64[i] ?? 0;
+        const clamped = Math.max(-1, Math.min(1, v));
+        pcm16[i] = clamped < 0 ? Math.round(clamped * 32768) : Math.round(clamped * 32767);
+      }
+      const params = new URLSearchParams();
+      if (language) params.set('language', language);
+      if (options?.cleanup) params.set('cleanup', '1');
+      const qs = params.toString();
+      return request(
+        `/api/ai/transcribe${qs ? `?${qs}` : ''}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength),
+        },
+        AI_STT_TIMEOUT_MS,
+      );
+    }
     return request(
       '/api/ai/transcribe',
       {
         method: 'POST',
-        body: JSON.stringify({ pcmBase64, language }),
+        body: JSON.stringify({
+          pcmBase64: pcmOrBase64,
+          language,
+          ...(options?.cleanup ? { cleanup: true } : {}),
+        }),
       },
       AI_STT_TIMEOUT_MS,
     );
@@ -604,6 +785,77 @@ export const api = {
         method: 'tools/call',
         params: { name, arguments: args },
       }),
+    });
+  },
+
+  getAppLockStatus(): Promise<AppLockStatus> {
+    return request<AppLockStatus>('/api/security/lock/status');
+  },
+
+  lockAppNow(): Promise<AppLockStatus> {
+    return request<AppLockStatus>('/api/security/lock/lock', {
+      method: 'POST',
+    });
+  },
+
+  verifyAppLock(secret: string): Promise<{
+    ok: boolean;
+    status: AppLockStatus;
+    code?: string;
+    retryAfterSeconds?: number;
+  }> {
+    return postAppLockJson('/api/security/lock/verify', { secret });
+  },
+
+  recoverAppLock(recoveryCode: string): Promise<{
+    ok: boolean;
+    status: AppLockStatus;
+    code?: string;
+    retryAfterSeconds?: number;
+  }> {
+    return postAppLockJson('/api/security/lock/recover', { recoveryCode });
+  },
+
+  setupAppLock(input: {
+    type: AppLockType;
+    secret: string;
+    autoLockMinutes?: AppLockAutoLockMinutes;
+    lockOnMinimize?: boolean;
+  }): Promise<{
+    ok: boolean;
+    recoveryCode?: string;
+    status: AppLockStatus;
+    code?: string;
+  }> {
+    return postAppLockJson('/api/security/lock/setup', input);
+  },
+
+  changeAppLock(input: { currentSecret: string; type: AppLockType; newSecret: string }): Promise<{
+    ok: boolean;
+    recoveryCode?: string;
+    status: AppLockStatus;
+    code?: string;
+    retryAfterSeconds?: number;
+  }> {
+    return postAppLockJson('/api/security/lock/change', input);
+  },
+
+  disableAppLock(currentSecret: string): Promise<{
+    ok: boolean;
+    status: AppLockStatus;
+    code?: string;
+    retryAfterSeconds?: number;
+  }> {
+    return postAppLockJson('/api/security/lock/disable', { currentSecret });
+  },
+
+  updateAppLockConfig(input: {
+    autoLockMinutes?: AppLockAutoLockMinutes;
+    lockOnMinimize?: boolean;
+  }): Promise<AppLockStatus> {
+    return request<AppLockStatus>('/api/security/lock/config', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
     });
   },
 };

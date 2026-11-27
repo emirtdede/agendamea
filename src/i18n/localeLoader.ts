@@ -1,28 +1,41 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import type { LegalDocId, LegalDocumentContent, UiDictionary } from './core/types';
 import type { LanguageCode } from './languages';
-import {
-  EN_DICTIONARY,
-  EN_LEGAL_DOCUMENTS,
-  type LegalDocId,
-  type LegalDocumentContent,
-  TR_DICTIONARY,
-  TR_LEGAL_DOCUMENTS,
-  type UiDictionary,
-} from './translations';
 
 export interface LocaleBundle {
   readonly dict: UiDictionary;
   readonly legal: Record<LegalDocId, LegalDocumentContent>;
 }
 
-const CORE_BUNDLES: Record<'tr' | 'en', LocaleBundle> = {
-  tr: { dict: TR_DICTIONARY, legal: TR_LEGAL_DOCUMENTS },
-  en: { dict: EN_DICTIONARY, legal: EN_LEGAL_DOCUMENTS },
+const EMPTY_DICT_FALLBACK = new Proxy({} as UiDictionary, {
+  get(_target, prop) {
+    return typeof prop === 'string' ? '' : undefined;
+  },
+});
+
+const EMPTY_LEGAL_DOC: LegalDocumentContent = {
+  id: 'privacy',
+  title: '',
+  subtitle: '',
+  sections: [],
 };
 
-type DynamicLocaleCode = Exclude<LanguageCode, 'tr' | 'en'>;
+const EMPTY_LEGAL_FALLBACK: Record<LegalDocId, LegalDocumentContent> = {
+  privacy: { ...EMPTY_LEGAL_DOC, id: 'privacy' },
+  terms: { ...EMPTY_LEGAL_DOC, id: 'terms' },
+  gdpr: { ...EMPTY_LEGAL_DOC, id: 'gdpr' },
+  opensource: { ...EMPTY_LEGAL_DOC, id: 'opensource' },
+  accessibility: { ...EMPTY_LEGAL_DOC, id: 'accessibility' },
+};
 
-const LOCALE_IMPORTERS: Record<DynamicLocaleCode, () => Promise<LocaleBundle>> = {
+export const EMPTY_LOCALE_BUNDLE: LocaleBundle = {
+  dict: EMPTY_DICT_FALLBACK,
+  legal: EMPTY_LEGAL_FALLBACK,
+};
+
+const LOCALE_IMPORTERS: Record<LanguageCode, () => Promise<LocaleBundle>> = {
+  tr: () => import('./locales/tr'),
+  en: () => import('./locales/en'),
   de: () => import('./locales/de'),
   fr: () => import('./locales/fr'),
   es: () => import('./locales/es'),
@@ -96,13 +109,10 @@ const LOCALE_IMPORTERS: Record<DynamicLocaleCode, () => Promise<LocaleBundle>> =
   cy: () => import('./locales/cy'),
 };
 
-const loadedBundles = new Map<LanguageCode, LocaleBundle>([
-  ['tr', CORE_BUNDLES.tr],
-  ['en', CORE_BUNDLES.en],
-]);
-
+const loadedBundles = new Map<LanguageCode, LocaleBundle>();
 const inFlightLoads = new Map<LanguageCode, Promise<LocaleBundle>>();
 const listeners = new Set<() => void>();
+let lastLoadedLang: LanguageCode | null = null;
 let storeVersion = 0;
 
 function notifyLocaleLoaded(): void {
@@ -114,6 +124,12 @@ function notifyLocaleLoaded(): void {
       // Ignore subscriber errors
     }
   }
+}
+
+export function seedLoadedLocaleBundle(lang: LanguageCode, bundle: LocaleBundle): void {
+  loadedBundles.set(lang, bundle);
+  lastLoadedLang = lang;
+  notifyLocaleLoaded();
 }
 
 export function subscribeLocaleLoaded(listener: () => void): () => void {
@@ -131,8 +147,17 @@ export function isLocaleLoaded(lang: LanguageCode): boolean {
   return loadedBundles.has(lang);
 }
 
+export function getLoadedLocaleCodes(): LanguageCode[] {
+  return Array.from(loadedBundles.keys());
+}
+
 export function getCachedLocaleBundle(lang: LanguageCode): LocaleBundle {
-  return loadedBundles.get(lang) ?? CORE_BUNDLES.en;
+  return (
+    loadedBundles.get(lang) ??
+    (lastLoadedLang ? loadedBundles.get(lastLoadedLang) : undefined) ??
+    loadedBundles.get('en') ??
+    EMPTY_LOCALE_BUNDLE
+  );
 }
 
 export function getCachedDictionary(lang: LanguageCode): UiDictionary {
@@ -154,21 +179,23 @@ export function loadLocaleBundle(lang: LanguageCode): Promise<LocaleBundle> {
   if (pending) {
     return pending;
   }
-  const importer = LOCALE_IMPORTERS[lang as DynamicLocaleCode];
-  if (!importer) {
-    return Promise.resolve(CORE_BUNDLES.en);
-  }
+  const importer = LOCALE_IMPORTERS[lang] ?? LOCALE_IMPORTERS.en;
   const promise = importer()
     .then((mod) => {
       const bundle: LocaleBundle = { dict: mod.dict, legal: mod.legal };
       loadedBundles.set(lang, bundle);
+      lastLoadedLang = lang;
       inFlightLoads.delete(lang);
       notifyLocaleLoaded();
       return bundle;
     })
-    .catch(() => {
+    .catch(async () => {
       inFlightLoads.delete(lang);
-      return CORE_BUNDLES.en;
+      if (lang !== 'en') {
+        const fallback = loadedBundles.get('en') ?? (await loadLocaleBundle('en'));
+        return fallback;
+      }
+      return EMPTY_LOCALE_BUNDLE;
     });
   inFlightLoads.set(lang, promise);
   return promise;
@@ -194,7 +221,7 @@ export function useResolvedLocaleBundle(lang: LanguageCode): {
   return useMemo(() => {
     void version;
     const loaded = loadedBundles.get(lang);
-    const active = loaded ?? CORE_BUNDLES.en;
+    const active = loaded ?? getCachedLocaleBundle(lang);
     return {
       dict: active.dict,
       legalDocs: active.legal,

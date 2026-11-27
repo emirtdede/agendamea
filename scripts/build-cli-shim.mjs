@@ -42,7 +42,14 @@ function tryBuildWithFrameworkCsc() {
   if (!csc) return false;
 
   const iconPath = path.join(rootDir, 'electron-resources', 'icon.ico');
-  const args = ['/nologo', '/target:exe', '/platform:x64', '/optimize+', `/out:${outExe}`];
+  const args = [
+    '/nologo',
+    '/target:exe',
+    '/platform:x64',
+    '/optimize+',
+    '/highentropyva+',
+    `/out:${outExe}`,
+  ];
   if (fs.existsSync(iconPath)) {
     args.push(`/win32icon:${iconPath}`);
   }

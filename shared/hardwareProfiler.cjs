@@ -180,6 +180,146 @@ function getDiskFreeBytes(targetDir, statfsFn = null) {
   }
 }
 
+function parseRegQueryHexBytes(type, rawVal) {
+  const clean = String(rawVal || '').trim();
+  if (!clean) return 0;
+  if (type === 'REG_QWORD' || type === 'REG_DWORD') {
+    const num = Number.parseInt(clean, clean.startsWith('0x') ? 16 : 10);
+    return Number.isFinite(num) && num > 0 ? num : 0;
+  }
+  if (type === 'REG_BINARY') {
+    // Little-endian hex bytes (8 bytes -> uint64, 4 bytes -> uint32)
+    const hex = clean.replace(/\s+/g, '');
+    if (hex.length >= 16) {
+      const buf = Buffer.from(hex.slice(0, 16), 'hex');
+      const bi = buf.readBigUInt64LE(0);
+      return Number(bi);
+    }
+    if (hex.length >= 8) {
+      const buf = Buffer.from(hex.slice(0, 8), 'hex');
+      return buf.readUInt32LE(0);
+    }
+  }
+  return 0;
+}
+
+function parseRegQueryGpuOutput(rawStdout) {
+  const text = String(rawStdout || '');
+  if (!text) return [];
+  const blocks = text.split(/\r?\n(?=HKEY_)/);
+  const candidates = [];
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/);
+    const header = (lines[0] || '').trim();
+    if (!/\\0\d{3}$/i.test(header)) continue;
+    let name = '';
+    let qwBytes = 0;
+    let msBytes = 0;
+    for (let i = 1; i < lines.length; i += 1) {
+      const m = /^\s+([^\s]+)\s+(REG_[A-Z_]+)\s+(.*)$/.exec(lines[i]);
+      if (!m) continue;
+      const [, key, type, val] = m;
+      if (key === 'DriverDesc') {
+        name = val.trim();
+      } else if (key === 'HardwareInformation.qwMemorySize') {
+        qwBytes = parseRegQueryHexBytes(type, val);
+      } else if (key === 'HardwareInformation.MemorySize') {
+        msBytes = parseRegQueryHexBytes(type, val);
+      }
+    }
+    const vramBytes = qwBytes > 0 ? qwBytes : msBytes;
+    if ((!name && !(vramBytes > 0)) || isVirtualOrBasicDisplay(name)) continue;
+    candidates.push({
+      name: name || 'GPU',
+      vendor: normalizeVendor(name),
+      vramBytes: Number.isFinite(vramBytes) && vramBytes > 0 ? vramBytes : 0,
+      source: 'registry-64bit',
+    });
+  }
+  return candidates;
+}
+
+function runFastRegGpuProbe(timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let child = null;
+    const finish = (res) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(res);
+    };
+    const timer = setTimeout(() => {
+      try {
+        if (child && typeof child.kill === 'function') child.kill();
+      } catch {
+        // Ignore
+      }
+      finish({ ok: false, gpus: [] });
+    }, timeoutMs);
+    timer.unref?.();
+    try {
+      child = execFile(
+        'reg.exe',
+        [
+          'query',
+          'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}',
+          '/s',
+          '/f',
+          'MemorySize',
+        ],
+        { windowsHide: true, timeout: timeoutMs, maxBuffer: 512 * 1024 },
+        (err1, memOut) => {
+          if (err1) {
+            finish({ ok: false, gpus: [] });
+            return;
+          }
+          child = execFile(
+            'reg.exe',
+            [
+              'query',
+              'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}',
+              '/s',
+              '/v',
+              'DriverDesc',
+            ],
+            { windowsHide: true, timeout: timeoutMs, maxBuffer: 512 * 1024 },
+            (err2, descOut) => {
+              if (err2) {
+                finish({ ok: false, gpus: [] });
+                return;
+              }
+              // Merge DriverDesc + MemorySize lines per subkey block
+              const byKey = new Map();
+              const ingest = (raw) => {
+                for (const block of String(raw || '').split(/\r?\n(?=HKEY_)/)) {
+                  const lines = block.split(/\r?\n/);
+                  const hdr = (lines[0] || '').trim();
+                  if (!/\\0\d{3}$/i.test(hdr)) continue;
+                  const existing = byKey.get(hdr) || [hdr];
+                  for (let i = 1; i < lines.length; i += 1) {
+                    if (lines[i].trim()) existing.push(lines[i]);
+                  }
+                  byKey.set(hdr, existing);
+                }
+              };
+              ingest(descOut);
+              ingest(memOut);
+              const merged = Array.from(byKey.values())
+                .map((arr) => arr.join('\n'))
+                .join('\n');
+              const parsed = parseRegQueryGpuOutput(merged);
+              finish({ ok: parsed.length > 0, gpus: parsed });
+            },
+          );
+        },
+      );
+    } catch {
+      finish({ ok: false, gpus: [] });
+    }
+  });
+}
+
 function runPowerShellGpuProbe(execFn, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const runner = execFn || execFile;
   return new Promise((resolve) => {
@@ -261,11 +401,22 @@ async function profileHardware(options = {}) {
   let fallbackReason = null;
 
   if (platform === 'win32') {
-    const probe = await runPowerShellGpuProbe(options.execFn, timeoutMs);
-    if (probe.ok) {
-      gpus = parseGpuProbeOutput(probe.stdout);
-    } else {
-      fallbackReason = probe.reason || 'powershell_error';
+    // Use fast ~30ms native reg.exe probe in production (preserve custom execFn PowerShell path for tests)
+    let regHit = false;
+    if (!options.execFn) {
+      const fast = await runFastRegGpuProbe(Math.min(timeoutMs, 1500));
+      if (fast.ok && fast.gpus.length > 0) {
+        gpus = fast.gpus;
+        regHit = true;
+      }
+    }
+    if (!regHit) {
+      const probe = await runPowerShellGpuProbe(options.execFn, timeoutMs);
+      if (probe.ok) {
+        gpus = parseGpuProbeOutput(probe.stdout);
+      } else {
+        fallbackReason = probe.reason || 'powershell_error';
+      }
     }
   } else {
     fallbackReason = 'non_windows';

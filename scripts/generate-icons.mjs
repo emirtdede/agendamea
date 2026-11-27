@@ -102,21 +102,22 @@ const markLightSvg = `<?xml version="1.0" encoding="UTF-8"?>
 
 const markDarkSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect x="16" y="16" width="480" height="480" rx="112" fill="#ffffff" />
-  ${monogramPaths('#09090b', '#09090b')}
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="#111114" stroke="#ffffff" stroke-opacity="0.18" stroke-width="6" />
+  ${monogramPaths('#fafafa', '#fafafa')}
 </svg>
 `;
 
-/** Horizontal brand lockups (Light & Dark themes) */
+/** Horizontal brand lockups (Light & Dark themes - default dark obsidian emblem) */
 function horizontalLogoSvg(mode) {
   const isDark = mode === 'dark';
-  const tileFill = isDark ? '#ffffff' : '#09090b';
-  const glyphStroke = isDark ? '#09090b' : '#ffffff';
+  const tileFill = isDark ? '#111114' : '#09090b';
+  const tileStroke = isDark ? ' stroke="#ffffff" stroke-opacity="0.18" stroke-width="8"' : '';
+  const glyphStroke = '#ffffff';
   const textFill = isDark ? '#fafafa' : '#09090b';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160" width="640" height="160">
   <g transform="translate(20 20) scale(0.234375)">
-    <rect x="16" y="16" width="480" height="480" rx="112" fill="${tileFill}" />
+    <rect x="16" y="16" width="480" height="480" rx="112" fill="${tileFill}"${tileStroke} />
     ${monogramPaths(glyphStroke, glyphStroke)}
   </g>
   <text
@@ -202,8 +203,8 @@ const ogImageSvg = `<?xml version="1.0" encoding="UTF-8"?>
   <rect width="1200" height="630" fill="url(#og-bg)" />
   <rect x="44" y="44" width="1112" height="542" rx="32" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2" />
   <g transform="translate(116 205) scale(0.42)">
-    <rect x="16" y="16" width="480" height="480" rx="112" fill="#ffffff" />
-    ${monogramPaths('#09090b', '#09090b')}
+    <rect x="16" y="16" width="480" height="480" rx="112" fill="#18181b" stroke="#ffffff" stroke-opacity="0.18" stroke-width="8" />
+    ${monogramPaths('#fafafa', '#fafafa')}
   </g>
   <text
     x="376"

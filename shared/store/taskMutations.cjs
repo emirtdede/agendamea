@@ -273,15 +273,58 @@ async function completeTask(selector, completedOpt) {
 }
 
 async function batchCompleteTasks(selectors, completedOpt) {
-  const { bootstrap } = await getBootstrap();
-  const targets = selectors.map((sel) => resolveTaskSelector(bootstrap.todos, sel));
-  const seen = new Set();
-  const results = [];
-  for (const target of targets) {
-    if (seen.has(target.id)) continue;
-    seen.add(target.id);
-    const nextCompleted = completedOpt === undefined ? !target.completed : Boolean(completedOpt);
-    results.push(await updateTask(target.id, { completed: nextCompleted }));
+  const baseUrl = await resolveApiBaseUrl();
+  if (baseUrl) {
+    const boot = await httpRequest(baseUrl, 'GET', '/api/bootstrap');
+    const targets = selectors.map((sel) => resolveTaskSelector(boot.todos, sel));
+    const seen = new Set();
+    const results = [];
+    for (const target of targets) {
+      if (seen.has(target.id)) continue;
+      seen.add(target.id);
+      const nextCompleted = completedOpt === undefined ? !target.completed : Boolean(completedOpt);
+      results.push(
+        await httpRequest(baseUrl, 'PATCH', `/api/todos/${encodeURIComponent(target.id)}`, {
+          completed: nextCompleted,
+        }),
+      );
+    }
+    return results;
+  }
+
+  const { results, settings } = withOfflineDb((db) => {
+    const boot = getBootstrapOffline(db);
+    const targets = selectors.map((sel) => resolveTaskSelector(boot.todos, sel));
+    const seen = new Set();
+    const uniqueTargets = [];
+    for (const target of targets) {
+      if (!seen.has(target.id)) {
+        seen.add(target.id);
+        uniqueTargets.push(target);
+      }
+    }
+    const now = new Date().toISOString();
+    const stmt = db.prepare('UPDATE todos SET completed = ?, updated_at = ? WHERE id = ?');
+    db.transaction(() => {
+      for (const target of uniqueTargets) {
+        const nextCompleted =
+          completedOpt === undefined ? !target.completed : Boolean(completedOpt);
+        stmt.run(nextCompleted ? 1 : 0, now, target.id);
+      }
+    })();
+    const updatedRows = uniqueTargets.map((t) =>
+      db.prepare('SELECT * FROM todos WHERE id = ?').get(t.id),
+    );
+    const hydrated = attachSubtasksOffline(db, updatedRows.filter(Boolean));
+    flushOfflineAutoSync(db);
+    return { results: hydrated, settings: readSettingsOffline(db) };
+  });
+  for (const item of results) {
+    await dispatchConfiguredWebhookOffline(
+      settings,
+      item.completed ? 'todo.completed' : 'todo.updated',
+      item,
+    );
   }
   return results;
 }
@@ -294,15 +337,53 @@ async function pinTask(selector, pinnedOpt) {
 }
 
 async function batchPinTasks(selectors, pinnedOpt) {
-  const { bootstrap } = await getBootstrap();
-  const targets = selectors.map((sel) => resolveTaskSelector(bootstrap.todos, sel));
-  const seen = new Set();
-  const results = [];
-  for (const target of targets) {
-    if (seen.has(target.id)) continue;
-    seen.add(target.id);
-    const nextPinned = pinnedOpt === undefined ? !target.pinned : Boolean(pinnedOpt);
-    results.push(await updateTask(target.id, { pinned: nextPinned }));
+  const baseUrl = await resolveApiBaseUrl();
+  if (baseUrl) {
+    const boot = await httpRequest(baseUrl, 'GET', '/api/bootstrap');
+    const targets = selectors.map((sel) => resolveTaskSelector(boot.todos, sel));
+    const seen = new Set();
+    const results = [];
+    for (const target of targets) {
+      if (seen.has(target.id)) continue;
+      seen.add(target.id);
+      const nextPinned = pinnedOpt === undefined ? !target.pinned : Boolean(pinnedOpt);
+      results.push(
+        await httpRequest(baseUrl, 'PATCH', `/api/todos/${encodeURIComponent(target.id)}`, {
+          pinned: nextPinned,
+        }),
+      );
+    }
+    return results;
+  }
+
+  const { results, settings } = withOfflineDb((db) => {
+    const boot = getBootstrapOffline(db);
+    const targets = selectors.map((sel) => resolveTaskSelector(boot.todos, sel));
+    const seen = new Set();
+    const uniqueTargets = [];
+    for (const target of targets) {
+      if (!seen.has(target.id)) {
+        seen.add(target.id);
+        uniqueTargets.push(target);
+      }
+    }
+    const now = new Date().toISOString();
+    const stmt = db.prepare('UPDATE todos SET pinned = ?, updated_at = ? WHERE id = ?');
+    db.transaction(() => {
+      for (const target of uniqueTargets) {
+        const nextPinned = pinnedOpt === undefined ? !target.pinned : Boolean(pinnedOpt);
+        stmt.run(nextPinned ? 1 : 0, now, target.id);
+      }
+    })();
+    const updatedRows = uniqueTargets.map((t) =>
+      db.prepare('SELECT * FROM todos WHERE id = ?').get(t.id),
+    );
+    const hydrated = attachSubtasksOffline(db, updatedRows.filter(Boolean));
+    flushOfflineAutoSync(db);
+    return { results: hydrated, settings: readSettingsOffline(db) };
+  });
+  for (const item of results) {
+    await dispatchConfiguredWebhookOffline(settings, 'todo.updated', item);
   }
   return results;
 }
@@ -336,14 +417,53 @@ async function deleteTask(selector) {
 }
 
 async function batchDeleteTasks(selectors) {
-  const { bootstrap } = await getBootstrap();
-  const targets = selectors.map((sel) => resolveTaskSelector(bootstrap.todos, sel));
-  const seen = new Set();
-  const results = [];
-  for (const target of targets) {
-    if (seen.has(target.id)) continue;
-    seen.add(target.id);
-    results.push(await deleteTask(target.id));
+  const baseUrl = await resolveApiBaseUrl();
+  if (baseUrl) {
+    const boot = await httpRequest(baseUrl, 'GET', '/api/bootstrap');
+    const targets = selectors.map((sel) => resolveTaskSelector(boot.todos, sel));
+    const seen = new Set();
+    const results = [];
+    for (const target of targets) {
+      if (seen.has(target.id)) continue;
+      seen.add(target.id);
+      await httpRequest(baseUrl, 'DELETE', `/api/todos/${encodeURIComponent(target.id)}`);
+      results.push({ ok: true, id: target.id, title: target.title, movedToTrash: true });
+    }
+    return results;
+  }
+
+  const { results, deletedTargets, settings } = withOfflineDb((db) => {
+    const boot = getBootstrapOffline(db);
+    const targets = selectors.map((sel) => resolveTaskSelector(boot.todos, sel));
+    const seen = new Set();
+    const uniqueTargets = [];
+    for (const target of targets) {
+      if (!seen.has(target.id)) {
+        seen.add(target.id);
+        uniqueTargets.push(target);
+      }
+    }
+    const now = new Date().toISOString();
+    const stmt = db.prepare('UPDATE todos SET deleted_at = ?, updated_at = ? WHERE id = ?');
+    db.transaction(() => {
+      for (const found of uniqueTargets) {
+        stmt.run(now, now, found.id);
+      }
+    })();
+    flushOfflineAutoSync(db);
+    return {
+      results: uniqueTargets.map((found) => ({
+        ok: true,
+        id: found.id,
+        title: found.title,
+        movedToTrash: true,
+      })),
+      deletedTargets: uniqueTargets.map((found) => ({ ...found, deletedAt: now })),
+      settings: readSettingsOffline(db),
+    };
+  });
+  for (const target of deletedTargets) {
+    await dispatchConfiguredWebhookOffline(settings, 'todo.deleted', target);
   }
   return results;
 }

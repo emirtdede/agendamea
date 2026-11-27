@@ -304,7 +304,7 @@ test('QA: Zero language leakage across all 73 languages, UI components, color na
     .readdirSync(localesDir)
     .filter((f) => f.endsWith('.ts'))
     .map((f) => path.join(localesDir, f));
-  assert.equal(localeFiles.length, 71, 'Expected 71 non-core locale modules in src/i18n/locales');
+  assert.equal(localeFiles.length, 73, 'Expected all 73 lazy locale modules in src/i18n/locales');
   for (const absFile of localeFiles) {
     const srcText = fs.readFileSync(absFile, 'utf8');
     assert.ok(

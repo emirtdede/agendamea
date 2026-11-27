@@ -514,3 +514,22 @@ test('Neural Audio Stack (RNNoise WASM + Silero VAD v5 ONNX) & Multiple Voice/Ch
     assert.equal(/[\u2013\u2014]/.test(src), false, `Em/en-dash found in ${rel}`);
   }
 });
+
+test('Natural Turkish & English scheduled dictation without explicit "ekle/add" parses directly as add_task', () => {
+  const fixedNow = new Date(2026, 10, 27, 9, 0, 0);
+  const trNatural = voiceIntentParser.parseVoiceIntent('Yarın saat 15:00 doktor randevusu', {
+    now: fixedNow,
+  });
+  assert.equal(trNatural.intent, 'add_task');
+  assert.equal(trNatural.payload.dueDate, '2026-11-28');
+  assert.equal(trNatural.payload.dueTime, '15:00');
+  assert.equal(trNatural.payload.title, 'doktor randevusu');
+
+  const enNatural = voiceIntentParser.parseVoiceIntent('Tomorrow at 14:30 dentist appointment', {
+    now: fixedNow,
+  });
+  assert.equal(enNatural.intent, 'add_task');
+  assert.equal(enNatural.payload.dueDate, '2026-11-28');
+  assert.equal(enNatural.payload.dueTime, '14:30');
+  assert.equal(enNatural.payload.title, 'dentist appointment');
+});

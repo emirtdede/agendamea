@@ -39,6 +39,7 @@ export interface WorkspaceUiState {
   selectedTodoId: string | null;
   isSettingsOpen: boolean;
   settingsInitialTab: SettingsTabId;
+  isCommandPaletteOpen: boolean;
   isWelcomeOpen: boolean;
   isCloseModalOpen: boolean;
   isMobileSidebarOpen: boolean;
@@ -61,6 +62,7 @@ export interface WorkspaceUiStore extends SelectorStore<WorkspaceUiState> {
   closeSettings: () => void;
   setIsSettingsOpen: (open: boolean) => void;
   setSettingsInitialTab: (tab: SettingsTabId) => void;
+  setIsCommandPaletteOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setIsWelcomeOpen: (open: boolean) => void;
   setIsCloseModalOpen: (open: boolean) => void;
   setIsMobileSidebarOpen: (open: boolean) => void;
@@ -86,6 +88,7 @@ function getInitialWorkspaceUiState(): WorkspaceUiState {
     selectedTodoId: null,
     isSettingsOpen: false,
     settingsInitialTab: 'appearance',
+    isCommandPaletteOpen: false,
     isWelcomeOpen: false,
     isCloseModalOpen: false,
     isMobileSidebarOpen: false,
@@ -141,6 +144,10 @@ export function createWorkspaceUiStore(): WorkspaceUiStore {
   const setIsSettingsOpen = (isSettingsOpen: boolean) => base.patchState({ isSettingsOpen });
   const setSettingsInitialTab = (settingsInitialTab: SettingsTabId) =>
     base.patchState({ settingsInitialTab });
+  const setIsCommandPaletteOpen = (open: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof open === 'function' ? open(base.getState().isCommandPaletteOpen) : open;
+    base.patchState({ isCommandPaletteOpen: next });
+  };
   const setIsWelcomeOpen = (isWelcomeOpen: boolean) => base.patchState({ isWelcomeOpen });
   const setIsCloseModalOpen = (isCloseModalOpen: boolean) => base.patchState({ isCloseModalOpen });
   const setIsMobileSidebarOpen = (isMobileSidebarOpen: boolean) =>
@@ -185,6 +192,7 @@ export function createWorkspaceUiStore(): WorkspaceUiStore {
   const dismissModals = () => {
     base.patchState({
       isSettingsOpen: false,
+      isCommandPaletteOpen: false,
       isWelcomeOpen: false,
       isCloseModalOpen: false,
     });
@@ -206,6 +214,7 @@ export function createWorkspaceUiStore(): WorkspaceUiStore {
     closeSettings,
     setIsSettingsOpen,
     setSettingsInitialTab,
+    setIsCommandPaletteOpen,
     setIsWelcomeOpen,
     setIsCloseModalOpen,
     setIsMobileSidebarOpen,

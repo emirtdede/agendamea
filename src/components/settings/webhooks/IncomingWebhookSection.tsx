@@ -58,29 +58,25 @@ export function IncomingWebhookSection({
   const { t } = useI18n();
 
   return (
-    <div className="bg-[var(--canvas)]/50 p-4 space-y-3">
+    <div className="pt-1 space-y-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-baseline gap-2">
           <span className="text-xs font-semibold text-[var(--text-primary)]">
             {t.docsWebhookIncomingTitle}
           </span>
-          <span
-            dir="ltr"
-            className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono-tabular text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            {`127.0.0.1:${runtimePort} · ${t.webhookIncomingOnlineBadge}`}
+          <span dir="ltr" className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+            · 127.0.0.1:{runtimePort} · {t.webhookIncomingOnlineBadge}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
             data-testid="docs-webhook-incoming-test-btn"
             disabled={isTestingIncoming}
             onClick={() => void onTestIncoming()}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-45 transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-45 transition-colors whitespace-nowrap"
           >
-            <Activity className="h-3 w-3 text-[var(--accent)]" />
+            <Activity className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             <span>{t.webhookIncomingTestBtn}</span>
           </button>
           {!hideToggle && (
@@ -98,10 +94,10 @@ export function IncomingWebhookSection({
         <div
           role={incomingTestResult.ok ? 'status' : 'alert'}
           data-testid="docs-webhook-incoming-test-result"
-          className={`flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-xs font-medium leading-snug animate-fade-in ${
+          className={`flex items-start justify-between gap-2 border-s-2 ps-3 py-1 text-xs font-medium leading-snug animate-fade-in ${
             incomingTestResult.ok
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-              : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+              ? 'border-[var(--text-primary)] text-[var(--text-primary)]'
+              : 'border-red-500/70 text-red-600 dark:text-red-400'
           }`}
         >
           <span className="min-w-0 flex-1 break-words">{incomingTestResult.text}</span>
@@ -109,7 +105,7 @@ export function IncomingWebhookSection({
             type="button"
             onClick={() => setIncomingTestResult(null)}
             aria-label={t.closeMenu}
-            className="shrink-0 rounded p-0.5 opacity-75 hover:opacity-100"
+            className="shrink-0 p-0.5 opacity-75 hover:opacity-100"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -119,27 +115,27 @@ export function IncomingWebhookSection({
       {!isIncomingActive && (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11.5px] text-amber-700 dark:text-amber-300"
+          className="flex items-start gap-2 border-s-2 border-amber-500/70 ps-3 py-1 text-[11.5px] text-amber-700 dark:text-amber-300"
         >
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           <span>{t.webhookIncomingDisabledWarn}</span>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         <input
           type={revealIncomingSecret ? 'text' : 'password'}
           data-testid="docs-webhook-incoming-secret-input"
           value={incomingSecretDraft}
           onChange={(e) => setIncomingSecretDraft(e.target.value)}
           placeholder={t.webhookIncomingSecretPlaceholder}
-          className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 font-mono-tabular text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none"
+          className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-transparent px-3 font-mono-tabular text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--text-secondary)] focus:outline-none"
         />
         <button
           type="button"
           aria-label={t.webhookRevealSecretLabel}
           onClick={() => setRevealIncomingSecret((prev) => !prev)}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors"
         >
           {revealIncomingSecret ? (
             <EyeOff className="h-3.5 w-3.5" />
@@ -151,38 +147,38 @@ export function IncomingWebhookSection({
           type="button"
           data-testid="docs-webhook-generate-secret-btn"
           onClick={() => onGenerateIncomingSecret(generateSecureWebhookKey())}
-          className="inline-flex h-9 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors whitespace-nowrap shrink-0"
         >
-          <KeyRound className="h-3.5 w-3.5 text-[var(--accent)]" />
+          <KeyRound className="h-3.5 w-3.5 text-[var(--text-muted)]" />
           <span>{t.webhookGenerateSecretBtn}</span>
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1 overflow-x-auto">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)]/70 pb-1.5">
+        <div className="flex flex-wrap items-center gap-3 overflow-x-auto">
           {INCOMING_ACTION_TABS.map((act) => (
             <button
               key={act}
               type="button"
               onClick={() => setIncomingActionTab(act)}
-              className={`rounded-md border px-2 py-0.5 font-mono-tabular text-[11px] transition-colors ${
+              className={`-mb-1.5 border-b-2 pb-1.5 font-mono-tabular text-[11px] transition-colors ${
                 incomingActionTab === act
-                  ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
-                  : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  ? 'border-[var(--text-primary)] text-[var(--text-primary)] font-semibold'
+                  : 'border-transparent text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]'
               }`}
             >
               {act}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
             onClick={() => setIncomingShellTab('curl')}
-            className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+            className={`text-[11px] font-medium transition-colors ${
               incomingShellTab === 'curl'
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'
+                ? 'text-[var(--text-primary)] underline underline-offset-4'
+                : 'text-[var(--text-muted)] ag-hover-glow'
             }`}
           >
             {t.webhookShellCurl}
@@ -190,10 +186,10 @@ export function IncomingWebhookSection({
           <button
             type="button"
             onClick={() => setIncomingShellTab('powershell')}
-            className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+            className={`text-[11px] font-medium transition-colors ${
               incomingShellTab === 'powershell'
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)]'
+                ? 'text-[var(--text-primary)] underline underline-offset-4'
+                : 'text-[var(--text-muted)] ag-hover-glow'
             }`}
           >
             {t.webhookShellPowerShell}
@@ -202,12 +198,12 @@ export function IncomingWebhookSection({
             type="button"
             data-testid="docs-copy-incoming-webhook-btn"
             onClick={() => void onCopy('incoming-webhook', incomingCommandSnippet)}
-            className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
           >
             {copiedId === 'incoming-webhook' ? (
-              <Check className="h-3 w-3 text-emerald-500" />
+              <Check className="h-3 w-3" />
             ) : (
-              <Copy className="h-3 w-3 text-[var(--accent)]" />
+              <Copy className="h-3 w-3 text-[var(--text-muted)]" />
             )}
             <span>{copiedId === 'incoming-webhook' ? t.docsCopiedLabel : t.docsCopyButton}</span>
           </button>
@@ -217,7 +213,7 @@ export function IncomingWebhookSection({
       <code
         dir="ltr"
         data-testid="docs-webhook-incoming-snippet"
-        className="block overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-start font-mono-tabular text-[11px] text-[var(--text-secondary)] select-text whitespace-pre-wrap break-all"
+        className="block overflow-x-auto rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-start font-mono-tabular text-[11px] text-[var(--text-secondary)] select-text whitespace-pre-wrap break-all"
       >
         {incomingCommandSnippet}
       </code>
@@ -228,14 +224,14 @@ export function IncomingWebhookSection({
         </p>
         <pre
           dir="ltr"
-          className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono-tabular text-[10.5px] text-[var(--text-muted)]"
+          className="overflow-x-auto rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 font-mono-tabular text-[10.5px] text-[var(--text-muted)]"
         >
           {`{ "ok": true, "action": "${incomingActionTab}", "port": ${runtimePort} }`}
         </pre>
       </div>
 
-      <div className="flex items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--text-muted)]">
-        <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--accent)]" />
+      <div className="flex items-start gap-2 text-[11px] text-[var(--text-muted)]">
+        <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--text-muted)]" />
         <span>{t.webhookLocalhostHint}</span>
       </div>
     </div>

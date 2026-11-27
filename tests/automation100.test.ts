@@ -671,11 +671,11 @@ test('T-4.1 & T-4.2: Schema v5, Standard Webhooks v1 HMAC signing, Discord/Slack
     false,
   );
 
-  // 4. Schema v5 tables & idempotent reminder dedup
+  // 4. Schema v6 tables & idempotent reminder dedup
   const db = new TodoDatabase(':memory:');
   try {
     const version = Number(db.getRawDb().pragma('user_version', { simple: true }));
-    assert.equal(version, 5);
+    assert.equal(version, 6);
     assert.equal(db.claimReminderDispatch('t1', 'due', '2026-11-23T12:00'), true);
     assert.equal(
       db.claimReminderDispatch('t1', 'due', '2026-11-23T12:00'),

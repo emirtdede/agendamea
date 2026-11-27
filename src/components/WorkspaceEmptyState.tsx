@@ -49,7 +49,7 @@ export const WorkspaceEmptyState = React.memo(function WorkspaceEmptyState({
         <button
           type="button"
           onClick={onClearSearchAndFilters}
-          className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-4 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+          className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-4 py-2 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow transition-colors"
         >
           {t.clearSearch}
         </button>

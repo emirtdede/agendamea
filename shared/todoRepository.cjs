@@ -121,8 +121,9 @@ function attachSubtasks(db, todoRows, options = {}) {
 }
 
 function getActiveCategories(db) {
-  return db
-    .prepare(
+  return sqliteCore
+    .prepareCached(
+      db,
       'SELECT * FROM categories WHERE deleted_at IS NULL ORDER BY pinned DESC, sort_order ASC, created_at ASC',
     )
     .all()
@@ -130,39 +131,53 @@ function getActiveCategories(db) {
 }
 
 function getTrashedCategories(db) {
-  return db
-    .prepare('SELECT * FROM categories WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC')
+  return sqliteCore
+    .prepareCached(
+      db,
+      'SELECT * FROM categories WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC',
+    )
     .all()
     .map(mapCategoryRow);
 }
 
 function getActiveTodos(db, options = {}) {
-  const rows = db
-    .prepare(
+  const rows = sqliteCore
+    .prepareCached(
+      db,
       'SELECT * FROM todos WHERE deleted_at IS NULL ORDER BY pinned DESC, sort_order ASC, created_at DESC',
     )
     .all();
   return attachSubtasks(db, rows, options);
 }
 
+function getScheduledActiveTodos(db, options = {}) {
+  const rows = sqliteCore
+    .prepareCached(
+      db,
+      'SELECT * FROM todos WHERE deleted_at IS NULL AND completed = 0 AND due_date IS NOT NULL AND due_time IS NOT NULL',
+    )
+    .all();
+  return attachSubtasks(db, rows, options);
+}
+
 function getTrashedTodos(db, options = {}) {
-  const rows = db
-    .prepare('SELECT * FROM todos WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC')
+  const rows = sqliteCore
+    .prepareCached(db, 'SELECT * FROM todos WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC')
     .all();
   return attachSubtasks(db, rows, options);
 }
 
 function getTodoById(db, id, options = {}) {
-  const row = db.prepare('SELECT * FROM todos WHERE id = ?').get(id);
+  const row = sqliteCore.prepareCached(db, 'SELECT * FROM todos WHERE id = ?').get(id);
   if (!row) return null;
-  const subtaskRows = db
-    .prepare('SELECT * FROM subtasks WHERE todo_id = ? ORDER BY sort_order ASC')
+  const subtaskRows = sqliteCore
+    .prepareCached(db, 'SELECT * FROM subtasks WHERE todo_id = ? ORDER BY sort_order ASC')
     .all(id);
   return mapTodoRow(row, subtaskRows.map(mapSubtaskRow), options);
 }
 
 function getCategoryById(db, id) {
-  const row = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
+  const row = sqliteCore.prepareCached(db, 'SELECT * FROM categories WHERE id = ?').get(id);
   return row ? mapCategoryRow(row) : null;
 }
 
@@ -225,6 +240,7 @@ module.exports = {
   getActiveCategories,
   getTrashedCategories,
   getActiveTodos,
+  getScheduledActiveTodos,
   getTrashedTodos,
   getTodoById,
   getCategoryById,

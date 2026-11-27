@@ -3,7 +3,9 @@ import {
   CalendarPlus,
   Check,
   Copy,
+  CopyPlus,
   Eye,
+  Flag,
   Pin,
   Star,
   Sun,
@@ -123,7 +125,47 @@ export function useWorkspaceContextMenus({
             },
           ]
         : []),
+      { id: 'div-priority', divider: true },
+      ...(
+        [
+          { id: 'high' as Priority, label: t.priorityHigh },
+          { id: 'normal' as Priority, label: t.priorityNormal },
+          { id: 'low' as Priority, label: t.priorityLow },
+        ] as const
+      )
+        .filter((p) => p.id !== targetTodo.priority)
+        .map((p) => ({
+          id: `priority-${p.id}`,
+          label: `${t.ctxPriorityPrefix}: ${p.label}`,
+          icon: <Flag className="h-3.5 w-3.5" />,
+          onSelect: () => void onUpdateTodo(targetTodo.id, { priority: p.id }),
+        })),
       { id: 'div-actions', divider: true },
+      {
+        id: 'duplicate-todo',
+        label: t.ctxDuplicateTask,
+        icon: <CopyPlus className="h-3.5 w-3.5" />,
+        onSelect: () => {
+          void onAddTodo({
+            title: targetTodo.title,
+            priority: targetTodo.priority,
+            startDate: targetTodo.startDate ?? null,
+            dueDate: targetTodo.dueDate,
+            dueTime: targetTodo.dueTime ?? null,
+            categoryId: targetTodo.categoryId,
+            important: targetTodo.important,
+          })
+            .then((created) => {
+              if (created) {
+                onSelectTodoId(created.id);
+                onShowInfoToast(tRef.current.ctxDuplicatedToast, 'info');
+              }
+            })
+            .catch(() => {
+              // Error toast handled inside onAddTodo
+            });
+        },
+      },
       {
         id: 'copy-title',
         label: t.ctxCopyTitle,
@@ -154,6 +196,7 @@ export function useWorkspaceContextMenus({
     onToggleTodoPin,
     onToggleTodoImportant,
     onUpdateTodo,
+    onAddTodo,
     onShowInfoToast,
     tRef,
     onDeleteTodo,

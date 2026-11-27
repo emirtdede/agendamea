@@ -80,14 +80,38 @@ function createBackendManager(deps) {
   let backendStabilityTimer = null;
   let restartTimer = null;
   let reusedExternalDaemon = false;
+  let ipcReadyFlag = false;
+  let ipcReadyResolvers = [];
 
-  const getRuntimeRoot = () => resolveRuntimeRoot(electronDir);
+  const notifyIpcReady = () => {
+    ipcReadyFlag = true;
+    const pending = ipcReadyResolvers;
+    ipcReadyResolvers = [];
+    for (const fn of pending) {
+      try {
+        fn(true);
+      } catch {
+        // Ignore resolver error
+      }
+    }
+  };
+
+  let cachedRuntimeRoot = null;
+  const getRuntimeRoot = () => {
+    if (!cachedRuntimeRoot) {
+      cachedRuntimeRoot = resolveRuntimeRoot(electronDir);
+    }
+    return cachedRuntimeRoot;
+  };
 
   function lockCriticalRuntimeFiles() {
     const runtimeRoot = getRuntimeRoot();
+    const exeDir = path.dirname(process.execPath);
     const targets = [
       path.join(runtimeRoot, 'dist', 'index.html'),
+      path.join(runtimeRoot, 'dist', 'voice-worklet.js'),
       path.join(runtimeRoot, 'dist-server', 'server.mjs'),
+      path.join(exeDir, 'icudtl.dat'),
     ];
     for (const target of targets) {
       try {
@@ -149,25 +173,46 @@ function createBackendManager(deps) {
     }
 
     const localeInfo = getInitialLocaleInfo();
+    ipcReadyFlag = false;
+    ipcReadyResolvers = [];
+
+    /** @type {NodeJS.ProcessEnv} */
+    const childEnv = {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      NODE_ENV: 'production',
+      HOST: '127.0.0.1',
+      PORT: String(port),
+      AGENDAMEA_DATA_DIR: userDataDir,
+      AGENDAMEA_APP_ROOT: runtimeRoot,
+      AGENDAMEA_INITIAL_LOCALE: localeInfo.preferred,
+      AGENDAMEA_WINDOWS_STORE: process.windowsStore ? '1' : '',
+    };
+    if (localeInfo.installerLocale) {
+      childEnv.AGENDAMEA_INSTALLER_LOCALE = localeInfo.installerLocale;
+    }
 
     const proc = spawn(process.execPath, args, {
       cwd: userDataDir,
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: '1',
-        NODE_ENV: 'production',
-        HOST: '127.0.0.1',
-        PORT: String(port),
-        AGENDAMEA_DATA_DIR: userDataDir,
-        AGENDAMEA_APP_ROOT: runtimeRoot,
-        AGENDAMEA_INITIAL_LOCALE: localeInfo.preferred,
-      },
+      env: childEnv,
       stdio: ['ignore', 'ignore', stderrTarget, 'ipc'],
       windowsHide: true,
     });
     serverProcess = proc;
     activePort = port;
     writeRuntimePortFile(userDataDir, port);
+
+    proc.on('message', (msg) => {
+      const payload = /** @type {{ type?: unknown } | null} */ (msg);
+      if (
+        payload &&
+        typeof payload === 'object' &&
+        payload.type === 'ready' &&
+        serverProcess === proc
+      ) {
+        notifyIpcReady();
+      }
+    });
 
     if (backendStabilityTimer) {
       clearTimeout(backendStabilityTimer);
@@ -260,53 +305,116 @@ function createBackendManager(deps) {
   }
 
   async function waitForServer(url, timeoutMs = 15000) {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      if (serverProcess && serverProcess.exitCode !== null) {
-        return false;
+    if (reusedExternalDaemon || ipcReadyFlag) return true;
+    const deadline = Date.now() + timeoutMs;
+    let settled = false;
+    let activeAbort = null;
+
+    const ipcSignalPromise = new Promise((resolve) => {
+      if (ipcReadyFlag) {
+        resolve(true);
+        return;
       }
-      try {
-        const res = await fetch(`${url}/api/health`, {
-          signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(1000) : undefined,
-        });
-        if (res.ok) return true;
-      } catch {
-        // Wait for server readiness
+      ipcReadyResolvers.push(() => {
+        if (!settled) {
+          settled = true;
+          try {
+            activeAbort?.abort();
+          } catch {
+            // Ignore abort error
+          }
+          resolve(true);
+        }
+      });
+    });
+
+    const httpPollPromise = (async () => {
+      // Give IPC ready signal a brief head-start before firing HTTP probes
+      await new Promise((r) => setTimeout(r, 40));
+      while (!settled && Date.now() < deadline) {
+        if (ipcReadyFlag) return true;
+        if (serverProcess && serverProcess.exitCode !== null) {
+          return false;
+        }
+        const ctrl = new AbortController();
+        activeAbort = ctrl;
+        const probeTimer = setTimeout(() => ctrl.abort(), 400);
+        probeTimer.unref?.();
+        try {
+          const res = await fetch(`${url}/api/health`, { signal: ctrl.signal });
+          clearTimeout(probeTimer);
+          if (res.ok) return true;
+        } catch {
+          clearTimeout(probeTimer);
+          if (settled || ipcReadyFlag) return true;
+        } finally {
+          if (activeAbort === ctrl) activeAbort = null;
+        }
+        if (settled || ipcReadyFlag) return true;
+        await new Promise((r) => setTimeout(r, 60));
       }
-      await new Promise((r) => setTimeout(r, 150));
+      return ipcReadyFlag;
+    })();
+
+    const result = await Promise.race([ipcSignalPromise, httpPollPromise]);
+    settled = true;
+    try {
+      activeAbort?.abort();
+    } catch {
+      // Ignore abort error
     }
-    return false;
+    return Boolean(result);
+  }
+
+  function isPidAlive(pid) {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (err) {
+      return /** @type {NodeJS.ErrnoException} */ (err)?.code === 'EPERM';
+    }
   }
 
   async function detectOrAllocatePort() {
     let port = null;
-    try {
-      const existingPortFile = path.join(app.getPath('userData'), 'runtime-port.json');
-      if (fs.existsSync(existingPortFile)) {
-        const meta = JSON.parse(fs.readFileSync(existingPortFile, 'utf8'));
-        const existingPort = Number(meta?.port);
-        if (Number.isInteger(existingPort) && existingPort > 0 && existingPort < 65536) {
-          const probeRes = await fetch(`http://127.0.0.1:${existingPort}/api/health`, {
-            signal:
-              typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(700) : undefined,
-          });
-          if (probeRes.ok) {
-            const health = await probeRes.json().catch(() => null);
-            if (
-              health &&
-              health.ok === true &&
-              typeof health.version === 'string' &&
-              (health.app === 'Agendamea' || health.headless === true)
-            ) {
-              port = existingPort;
-              activePort = existingPort;
-              reusedExternalDaemon = true;
+    if (!process.env.PORT) {
+      try {
+        const existingPortFile = path.join(app.getPath('userData'), 'runtime-port.json');
+        if (fs.existsSync(existingPortFile)) {
+          const meta = JSON.parse(fs.readFileSync(existingPortFile, 'utf8'));
+          const existingPort = Number(meta?.port);
+          const recordedPid = Number(meta?.pid);
+          // Skip 700ms HTTP probe completely if recorded PID is already dead
+          if (Number.isInteger(recordedPid) && recordedPid > 0 && !isPidAlive(recordedPid)) {
+            try {
+              fs.rmSync(existingPortFile, { force: true });
+            } catch {
+              // Ignore stale cleanup failure
+            }
+          } else if (Number.isInteger(existingPort) && existingPort > 0 && existingPort < 65536) {
+            const probeRes = await fetch(`http://127.0.0.1:${existingPort}/api/health`, {
+              signal:
+                typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(450) : undefined,
+            });
+            if (probeRes.ok) {
+              const health = await probeRes.json().catch(() => null);
+              if (
+                health &&
+                health.ok === true &&
+                typeof health.version === 'string' &&
+                (health.app === 'Agendamea' || health.headless === true)
+              ) {
+                port = existingPort;
+                activePort = existingPort;
+                reusedExternalDaemon = true;
+              }
             }
           }
         }
+      } catch {
+        // No live daemon; launch managed backend
       }
-    } catch {
-      // No live daemon; launch managed backend
     }
 
     if (!port) {

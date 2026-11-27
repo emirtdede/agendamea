@@ -31,8 +31,10 @@ import {
   parseIcsToBackupPayload,
 } from '../../utils/exportFormats';
 import { formatByteSize as formatBytes } from '../../utils/formatBytes';
+import { InfoTooltip } from '../InfoTooltip';
 import { CloudSyncCard } from './data/CloudSyncCard';
 import { ResetDataSection } from './data/ResetDataSection';
+import { SettingsAdvancedSection } from './SettingsAdvancedSection';
 
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
@@ -61,6 +63,7 @@ export interface DataBackupSettingsTabProps {
     variant?: 'info' | 'error';
   }) => void;
   formatTimestamp: (iso: string | null) => string;
+  revealSettingId?: string;
 }
 
 export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
@@ -76,6 +79,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
   onResetAllData,
   onNotifyCloudSync,
   formatTimestamp,
+  revealSettingId,
 }: DataBackupSettingsTabProps) {
   const { lang, meta, t } = useI18n();
   const [isOneDriveBusy, setIsOneDriveBusy] = useState(false);
@@ -518,20 +522,23 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
     }
   };
 
+  const forceAdvancedOpen =
+    revealSettingId === 'data-danger-zone' || revealSettingId === 'data-reset';
+
   return (
-    <section aria-label={t.dataAndBackupTitle} className="space-y-4">
-      {/* Local Storage Footprint Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+    <section aria-label={t.dataAndBackupTitle} className="space-y-5 pb-4 animate-tab-enter">
+      {/* Local Storage Footprint Strip */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 px-4 py-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="inline-flex items-center gap-1.5 font-medium text-[var(--text-primary)]">
-            <HardDrive className="h-3.5 w-3.5 text-[var(--accent)]" />
+            <HardDrive className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             <span>
               {totalTodoCount} {t.localRecordsBadge}
             </span>
           </span>
           {sysInfo && (
             <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
-              SQLite: {formatBytes(sysInfo.dbSizeBytes)}
+              SQLite · {formatBytes(sysInfo.dbSizeBytes)}
             </span>
           )}
         </div>
@@ -540,9 +547,9 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
             type="button"
             data-testid="data-open-folder-btn"
             onClick={() => void window.agendameaWindow?.openDataFolder?.()}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]"
           >
-            <FolderOpen className="h-3 w-3 text-[var(--accent)]" />
+            <FolderOpen className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             <span>{t.aboutOpenDataFolderButton}</span>
           </button>
         )}
@@ -552,14 +559,14 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         <div
           role="alert"
           data-testid="data-import-error-banner"
-          className="sticky top-2 z-20 flex items-start justify-between gap-2.5 rounded-xl border border-red-500/40 bg-[var(--surface)] px-3.5 py-2.5 text-xs font-medium text-red-600 dark:text-red-400 shadow-md animate-fade-in"
+          className="sticky top-2 z-20 flex items-start justify-between gap-2.5 border-s-2 border-red-500/70 bg-[var(--canvas)]/95 ps-3 pe-2 py-2 text-xs font-medium text-red-600 dark:text-red-400 animate-fade-in"
         >
           <span className="min-w-0 flex-1 break-words leading-snug">{importError}</span>
           <button
             type="button"
             onClick={() => setImportError(null)}
             aria-label={t.closeMenu}
-            className="shrink-0 rounded-md p-0.5 text-red-600/80 hover:bg-red-500/15 hover:text-red-600 dark:text-red-400/80 dark:hover:text-red-300 transition-colors"
+            className="shrink-0 p-0.5 text-red-600/80 ag-hover-danger-glow hover:text-red-600 dark:text-red-400/80 dark:hover:text-red-300 transition-colors"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -571,7 +578,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         <div
           role="dialog"
           aria-label={t.dataEncryptedBackupTitle}
-          className="rounded-xl border border-[var(--accent)]/40 bg-[var(--accent-soft)] p-4 space-y-2.5 animate-fade-in"
+          className="border-s-2 border-[var(--text-primary)] ps-4 py-2 space-y-2.5 animate-fade-in"
         >
           <p className="text-xs font-semibold text-[var(--text-primary)]">
             {t.dataDecryptPromptTitle}:{' '}
@@ -584,12 +591,12 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
               value={decryptPassphrase}
               onChange={(e) => setDecryptPassphrase(e.target.value)}
               placeholder={t.dataEncryptPassphrasePlaceholder}
-              className="min-w-[200px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--accent)]"
+              className="min-w-[200px] flex-1 rounded-lg border border-[var(--border)] bg-transparent px-3 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--text-secondary)]"
             />
             <button
               type="button"
               onClick={() => setPendingEncrypted(null)}
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)]"
+              className="px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow"
             >
               {t.cancelButton}
             </button>
@@ -597,7 +604,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
               type="button"
               data-testid="data-decrypt-confirm-btn"
               onClick={() => void handleDecryptEncryptedImport()}
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold ag-hover-accent-glow"
               style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               {t.dataDecryptUnlockButton}
@@ -610,18 +617,18 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         <div
           role="alertdialog"
           aria-label={t.backupRestoreTitle}
-          className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3.5 space-y-2.5 animate-fade-in"
+          className="border-s-2 border-amber-500/70 ps-4 py-2 space-y-2.5 animate-fade-in"
         >
           <p className="text-xs leading-relaxed text-[var(--text-primary)] break-words">
             <strong className="break-all">{pendingImport.fileName}</strong> ({pendingImport.summary}
             )
           </p>
-          <div className="flex items-center justify-end gap-1.5">
+          <div className="flex items-center justify-end gap-3">
             <button
               type="button"
               disabled={isImporting}
               onClick={() => onPendingImportChange(null)}
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
+              className="text-xs font-medium text-[var(--text-secondary)] ag-hover-glow disabled:opacity-40"
             >
               {t.cancelButton}
             </button>
@@ -629,7 +636,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
               type="button"
               disabled={isImporting}
               onClick={() => void handleConfirmImport()}
-              className="rounded-lg px-3 py-1 text-xs font-medium transition-opacity disabled:opacity-40"
+              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity ag-hover-accent-glow disabled:opacity-40"
               style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
               {isImporting ? t.restoringButton : t.overwriteAndRestore}
@@ -638,18 +645,22 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         </div>
       )}
 
-      {/* Card 1: Multi-Format Export & Universal Import */}
+      {/* Card 1: Backup & Restore (Primary JSON Export + Universal Restore) */}
       <section
         aria-label={t.backupRestoreTitle}
         data-setting-id="data-export-import"
-        className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-4 space-y-3.5"
+        className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:p-5 space-y-4"
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-[var(--text-primary)]">{t.backupRestoreTitle}</p>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.dataMultiFormatDesc}</p>
+          <div className="min-w-0 flex-1 space-y-1">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t.backupRestoreTitle}
+            </h3>
+            <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+              {t.dataMultiFormatDesc}
+            </p>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <input
               ref={fileInputRef}
               type="file"
@@ -663,103 +674,41 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
               data-testid="data-universal-import-btn"
               disabled={isImporting}
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow disabled:opacity-40 transition whitespace-nowrap"
             >
-              <Upload className="h-3.5 w-3.5" />
+              <Upload className="h-3.5 w-3.5 text-[var(--text-muted)]" />
               <span>{isImporting ? t.restoringButton : t.restoreButton}</span>
             </button>
           </div>
         </div>
 
-        {/* Export Format Buttons */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* Primary Export Button */}
+        <div className="flex flex-wrap items-center gap-3 pt-0.5">
           <button
             type="button"
             disabled={isExportingBackup}
             data-testid="download-backup-link"
             onClick={() => void handleDownloadExport('json')}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold ag-hover-accent-glow disabled:opacity-40 transition"
+            style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
             {backupDownloaded ? (
-              <Check className="h-3.5 w-3.5 text-emerald-500" />
+              <Check className="h-3.5 w-3.5" />
             ) : isExportingBackup ? (
-              <RefreshCw className="h-3.5 w-3.5 animate-spin text-[var(--accent)]" />
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Download className="h-3.5 w-3.5" />
             )}
             <span>{t.downloadBackupButton} (JSON)</span>
           </button>
-          <button
-            type="button"
-            data-testid="export-csv-btn"
-            disabled={isExportingBackup}
-            onClick={() => void handleDownloadExport('csv')}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-          >
-            <Download className="h-3 w-3" />
-            <span>CSV</span>
-          </button>
-          <button
-            type="button"
-            data-testid="export-md-btn"
-            disabled={isExportingBackup}
-            onClick={() => void handleDownloadExport('md')}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-          >
-            <Download className="h-3 w-3" />
-            <span>Markdown</span>
-          </button>
-          <button
-            type="button"
-            data-testid="export-ics-btn"
-            disabled={isExportingBackup}
-            onClick={() => void handleDownloadExport('ics')}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-          >
-            <Download className="h-3 w-3" />
-            <span>iCalendar (.ics)</span>
-          </button>
-          <button
-            type="button"
-            data-testid="export-encrypted-toggle-btn"
-            onClick={() => setEncryptOpen((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:opacity-90"
-          >
-            <Lock className="h-3 w-3 text-[var(--accent)]" />
-            <span>{t.dataEncryptedBackupButton}</span>
-          </button>
         </div>
-
-        {encryptOpen && (
-          <div className="animate-accordion flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-3">
-            <input
-              type="password"
-              data-testid="data-encrypt-passphrase-input"
-              value={encryptPassphrase}
-              onChange={(e) => setEncryptPassphrase(e.target.value)}
-              placeholder={t.dataEncryptPassphrasePlaceholder}
-              className="min-w-[200px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--accent)]"
-            />
-            <button
-              type="button"
-              data-testid="data-encrypt-download-btn"
-              disabled={isExportingBackup}
-              onClick={() => void handleDownloadEncryptedBackup()}
-              className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold"
-              style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
-            >
-              <Lock className="h-3 w-3" />
-              <span>{t.dataEncryptDownloadButton}</span>
-            </button>
-          </div>
-        )}
       </section>
 
       {/* Card 2: Multi-Cloud Sync & Snapshot History */}
       <section
         aria-label={t.cloudSyncSectionTitle}
         data-setting-id="data-cloud"
-        className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
+        className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:p-5 space-y-5"
       >
         <CloudSyncCard
           oneDriveStatus={oneDriveStatus}
@@ -790,18 +739,21 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
 
         {/* Rolling Cloud / Local Backup Snapshot History */}
         {cloudSnapshots.length > 0 && (
-          <div className="px-4 py-3.5 space-y-2.5" data-testid="data-snapshot-history">
+          <div
+            className="border-t border-[var(--border)]/70 pt-4 space-y-2.5"
+            data-testid="data-snapshot-history"
+          >
             <div className="flex items-center gap-2">
-              <History className="h-4 w-4 text-[var(--accent)]" />
-              <p className="text-xs font-semibold text-[var(--text-primary)]">
+              <History className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
                 {t.dataSnapshotHistoryTitle} ({cloudSnapshots.length})
               </p>
             </div>
-            <div className="max-h-48 divide-y divide-[var(--border)] overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--canvas)]">
+            <div className="max-h-48 divide-y divide-[var(--border)]/60 overflow-y-auto border-y border-[var(--border)]/70">
               {cloudSnapshots.map((snap) => (
                 <div
                   key={snap.fileName}
-                  className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs"
+                  className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-xs"
                 >
                   <div className="min-w-0">
                     <p className="font-mono-tabular font-medium text-[var(--text-primary)] truncate">
@@ -816,7 +768,7 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
                     type="button"
                     disabled={restoringFileName !== null}
                     onClick={() => void handleRestoreSpecificSnapshot(snap.fileName)}
-                    className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-40"
                   >
                     <RotateCcw className="h-3 w-3" />
                     <span>
@@ -832,60 +784,141 @@ export const DataBackupSettingsTab = React.memo(function DataBackupSettingsTab({
         )}
       </section>
 
-      {/* Card 3: Isolated Red-Accented Danger Zone */}
-      {onResetAllData && (
-        <section
-          aria-label={t.dataDangerZoneTitle}
-          data-setting-id="data-danger-zone"
-          data-testid="data-danger-zone-card"
-          className="overflow-hidden rounded-xl border border-red-500/35 bg-red-500/[0.04]"
-        >
-          <div className="flex items-center gap-2 border-b border-red-500/25 bg-red-500/10 px-4 py-2.5">
-            <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0" />
-            <h3 className="font-display text-xs font-semibold text-red-700 dark:text-red-300">
-              {t.dataDangerZoneTitle}
+      {/* Advanced Data Options: CSV/MD/ICS/AES-256 Encrypted Backup & Danger Zone */}
+      <SettingsAdvancedSection
+        forceOpen={forceAdvancedOpen}
+        testId="data-advanced-section"
+        toggleTestId="data-advanced-toggle"
+      >
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:p-5 space-y-3">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t.dataExportMoreLabel}
             </h3>
+            <InfoTooltip text={t.dataEncryptedTooltip} testId="data-encrypted-info" />
           </div>
-          <div data-setting-id="data-reset">
-            <ResetDataSection
-              confirmResetOpen={confirmResetOpen}
-              resetIncludeSettings={resetIncludeSettings}
-              isResettingData={isResettingData}
-              isImporting={isImporting}
-              onOpenConfirm={() => setConfirmResetOpen(true)}
-              onCancelConfirm={() => {
-                setConfirmResetOpen(false);
-                setResetIncludeSettings(false);
-              }}
-              onToggleIncludeSettings={setResetIncludeSettings}
-              onConfirmReset={() => {
-                void (async () => {
-                  if (isResettingData) return;
-                  setIsResettingData(true);
-                  setImportError(null);
-                  try {
-                    await onResetAllData(resetIncludeSettings);
-                    if (isMountedRef.current) {
-                      setConfirmResetOpen(false);
-                      setResetIncludeSettings(false);
-                      const refreshed = await api.getOneDriveStatus().catch(() => null);
-                      if (isMountedRef.current && refreshed) {
-                        onOneDriveStatusChange(refreshed);
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              data-testid="export-csv-btn"
+              disabled={isExportingBackup}
+              onClick={() => void handleDownloadExport('csv')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow"
+            >
+              <Download className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <span>CSV</span>
+            </button>
+            <button
+              type="button"
+              data-testid="export-md-btn"
+              disabled={isExportingBackup}
+              onClick={() => void handleDownloadExport('md')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow"
+            >
+              <Download className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <span>Markdown</span>
+            </button>
+            <button
+              type="button"
+              data-testid="export-ics-btn"
+              disabled={isExportingBackup}
+              onClick={() => void handleDownloadExport('ics')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow"
+            >
+              <Download className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <span>iCalendar (.ics)</span>
+            </button>
+            <button
+              type="button"
+              data-testid="export-encrypted-toggle-btn"
+              onClick={() => setEncryptOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow"
+            >
+              <Lock className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <span>{t.dataEncryptedBackupButton}</span>
+            </button>
+          </div>
+
+          {encryptOpen && (
+            <div className="animate-accordion flex flex-wrap items-center gap-2 border-t border-[var(--border)]/60 pt-3">
+              <input
+                type="password"
+                data-testid="data-encrypt-passphrase-input"
+                value={encryptPassphrase}
+                onChange={(e) => setEncryptPassphrase(e.target.value)}
+                placeholder={t.dataEncryptPassphrasePlaceholder}
+                className="min-w-[200px] flex-1 rounded-lg border border-[var(--border)] bg-transparent px-3 py-1.5 text-xs text-[var(--text-primary)] focus:border-[var(--text-secondary)]"
+              />
+              <button
+                type="button"
+                data-testid="data-encrypt-download-btn"
+                disabled={isExportingBackup}
+                onClick={() => void handleDownloadEncryptedBackup()}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ag-hover-accent-glow"
+                style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
+              >
+                <Lock className="h-3 w-3" />
+                <span>{t.dataEncryptDownloadButton}</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Section 3: Danger Zone Card */}
+        {onResetAllData && (
+          <section
+            aria-label={t.dataDangerZoneTitle}
+            data-setting-id="data-danger-zone"
+            data-testid="data-danger-zone-card"
+            className="rounded-xl border border-red-500/30 bg-[var(--surface)]/75 p-4 sm:p-5 space-y-3"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0" />
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-red-600 dark:text-red-400">
+                {t.dataDangerZoneTitle}
+              </h3>
+            </div>
+            <div data-setting-id="data-reset">
+              <ResetDataSection
+                confirmResetOpen={confirmResetOpen}
+                resetIncludeSettings={resetIncludeSettings}
+                isResettingData={isResettingData}
+                isImporting={isImporting}
+                onOpenConfirm={() => setConfirmResetOpen(true)}
+                onCancelConfirm={() => {
+                  setConfirmResetOpen(false);
+                  setResetIncludeSettings(false);
+                }}
+                onToggleIncludeSettings={setResetIncludeSettings}
+                onConfirmReset={() => {
+                  void (async () => {
+                    if (isResettingData) return;
+                    setIsResettingData(true);
+                    setImportError(null);
+                    try {
+                      await onResetAllData(resetIncludeSettings);
+                      if (isMountedRef.current) {
+                        setConfirmResetOpen(false);
+                        setResetIncludeSettings(false);
+                        const refreshed = await api.getOneDriveStatus().catch(() => null);
+                        if (isMountedRef.current && refreshed) {
+                          onOneDriveStatusChange(refreshed);
+                        }
                       }
+                    } catch (err) {
+                      if (isMountedRef.current) {
+                        setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
+                      }
+                    } finally {
+                      if (isMountedRef.current) setIsResettingData(false);
                     }
-                  } catch (err) {
-                    if (isMountedRef.current) {
-                      setImportError(localizeErrorMessage(err, t.operationFailedToast, lang, t));
-                    }
-                  } finally {
-                    if (isMountedRef.current) setIsResettingData(false);
-                  }
-                })();
-              }}
-            />
-          </div>
-        </section>
-      )}
+                  })();
+                }}
+              />
+            </div>
+          </section>
+        )}
+      </SettingsAdvancedSection>
     </section>
   );
 });

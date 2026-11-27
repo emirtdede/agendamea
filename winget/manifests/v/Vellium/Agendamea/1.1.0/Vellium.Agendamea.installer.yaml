@@ -15,10 +15,15 @@ InstallerSwitches:
   SilentWithProgress: /P
   InstallLocation: /DIR="<INSTALLPATH>"
 UpgradeBehavior: install
-ReleaseDate: 2026-11-22
+ReleaseDate: 2026-11-28
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/emirtdede/agendamea/releases/download/v1.1.0/Agendamea-Setup-1.1.0-win-x64.exe
-    InstallerSha256: 39660F98CF8CCD5982B4BD73A33DC1F5E11F476ED5BD7A529CE87312CA68D7A5
+    InstallerSha256: AA53F3AB01B5C39301C385D188F82764553BC4B10E0F5680D434003CC540F088
+    AppsAndFeaturesEntries:
+      - DisplayName: Agendamea
+        Publisher: Vellium Teknoloji A.S.
+        DisplayVersion: 1.1.0
+        InstallerType: exe
 ManifestType: installer
 ManifestVersion: 1.6.0

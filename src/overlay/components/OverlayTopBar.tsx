@@ -6,6 +6,7 @@ export type OverlayPhase =
   | 'preparing'
   | 'listening'
   | 'processing'
+  | 'preview'
   | 'result'
   | 'confirm'
   | 'disambiguate'
@@ -66,7 +67,7 @@ export function OverlayTopBar({
           data-testid="overlay-mic-btn"
           onClick={onMicClick}
           aria-label={t.overlayListeningLabel}
-          className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-all ${
+          className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${
             phase === 'listening'
               ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/35 ring-4 ring-rose-500/20'
               : phase === 'preparing' || phase === 'processing'
@@ -115,7 +116,7 @@ export function OverlayTopBar({
                     return (
                       <span
                         key={bar.id}
-                        className="w-[3px] rounded-full bg-rose-400 transition-all duration-75"
+                        className="w-[3px] rounded-full bg-rose-400 transition-[height] duration-75"
                         style={{ height: `${pct}%` }}
                       />
                     );

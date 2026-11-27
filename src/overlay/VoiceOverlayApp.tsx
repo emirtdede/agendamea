@@ -1,7 +1,8 @@
 import { Mic } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../api/client';
+import { AppLockRequiredError, api } from '../api/client';
+import { localizeErrorMessage } from '../i18n/core/errorLocalizer';
 import { readInitialLanguage } from '../i18n/I18nContext';
 import { getLanguageMeta, type LanguageCode } from '../i18n/languages';
 import {
@@ -9,7 +10,6 @@ import {
   loadLocaleBundle,
   useResolvedLocaleBundle,
 } from '../i18n/localeLoader';
-import { localizeErrorMessage } from '../i18n/translations';
 import type {
   NotificationChannelsMap,
   VoiceAskResponse,
@@ -26,16 +26,6 @@ import { VoiceAudioCapture, VoiceVadController } from '../voice/audioCapture';
 import { speakLocalTextAsync, stopSpeaking } from '../voice/ttsPlayer';
 import { OverlayResultPanels } from './components/OverlayResultPanels';
 import { type OverlayPhase, OverlayTopBar } from './components/OverlayTopBar';
-
-function float32ToBase64(pcm: Float32Array): string {
-  const bytes = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
-  let binary = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
 
 export function VoiceOverlayApp() {
   const [language, setLanguage] = useState<LanguageCode>(() => readInitialLanguage().code);
@@ -56,6 +46,8 @@ export function VoiceOverlayApp() {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isKeyboardMode, setIsKeyboardMode] = useState<boolean>(false);
   const [keyboardInput, setKeyboardInput] = useState<string>('');
+  const [previewTitle, setPreviewTitle] = useState<string>('');
+  const [isConfirmingPreview, setIsConfirmingPreview] = useState<boolean>(false);
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [missingVoicePack, setMissingVoicePack] = useState<boolean>(false);
   const [isDismissed, setIsDismissed] = useState<boolean>(false);
@@ -74,6 +66,7 @@ export function VoiceOverlayApp() {
     ...DEFAULT_NOTIFICATION_CHANNELS,
   });
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewInputRef = useRef<HTMLInputElement>(null);
 
   const { dict: t } = useResolvedLocaleBundle(language);
 
@@ -106,6 +99,34 @@ export function VoiceOverlayApp() {
       hideTimerRef.current = null;
     }
   }, []);
+
+  const resetOverlayLocally = useCallback(() => {
+    requestSeqRef.current += 1;
+    clearAutoHide();
+    stopSpeaking();
+    setIsSpeaking(false);
+    captureRef.current?.stop();
+    setRmsLevel(0);
+    setResponse(null);
+    setTranscript('');
+    setErrorMessage('');
+    setKeyboardInput('');
+    setPreviewTitle('');
+    setIsConfirmingPreview(false);
+    setIsKeyboardMode(false);
+    setMissingVoicePack(false);
+    setPhase('idle');
+    void window.agendameaWindow?.notifyOverlayListening?.(false);
+  }, [clearAutoHide]);
+
+  const dismissOverlay = useCallback(() => {
+    resetOverlayLocally();
+    if (window.agendameaWindow?.hideVoiceOverlay) {
+      void window.agendameaWindow.hideVoiceOverlay();
+    } else {
+      setIsDismissed(true);
+    }
+  }, [resetOverlayLocally]);
 
   const openKeyboardFallback = useCallback(() => {
     setIsKeyboardMode(true);
@@ -197,10 +218,13 @@ export function VoiceOverlayApp() {
         );
       }
       return settings;
-    } catch {
+    } catch (err) {
+      if (err instanceof AppLockRequiredError) {
+        dismissOverlay();
+      }
       return null;
     }
-  }, []);
+  }, [dismissOverlay]);
 
   useEffect(() => {
     void refreshSettings();
@@ -214,6 +238,7 @@ export function VoiceOverlayApp() {
       if (res.status === 'confirmation_required') {
         setPhase('confirm');
         clearAutoHide();
+        void window.agendameaWindow?.setOverlayFocusable?.(true);
         return;
       }
       if (
@@ -223,6 +248,19 @@ export function VoiceOverlayApp() {
       ) {
         setPhase('disambiguate');
         clearAutoHide();
+        void window.agendameaWindow?.setOverlayFocusable?.(true);
+        return;
+      }
+      if (res.status === 'preview') {
+        setPreviewTitle((res.payload?.title || res.displayText || '').trim());
+        setPhase('preview');
+        clearAutoHide();
+        void window.agendameaWindow?.setOverlayFocusable?.(true);
+        if (focusTimerRef.current !== null) window.clearTimeout(focusTimerRef.current);
+        focusTimerRef.current = window.setTimeout(() => {
+          focusTimerRef.current = null;
+          previewInputRef.current?.focus();
+        }, 40);
         return;
       }
 
@@ -298,6 +336,10 @@ export function VoiceOverlayApp() {
         handleAskResult(res);
       } catch (err) {
         if (!isMountedRef.current || seq !== requestSeqRef.current) return;
+        if (err instanceof AppLockRequiredError) {
+          dismissOverlay();
+          return;
+        }
         setPhase('error');
         setErrorMessage(
           localizeErrorMessage(err, activeDict.operationFailedToast, activeLang, activeDict),
@@ -305,7 +347,7 @@ export function VoiceOverlayApp() {
         openKeyboardFallback();
       }
     },
-    [clearAutoHide, handleAskResult, openKeyboardFallback],
+    [clearAutoHide, dismissOverlay, handleAskResult, openKeyboardFallback],
   );
 
   const processRecordedPcm = useCallback(
@@ -327,7 +369,7 @@ export function VoiceOverlayApp() {
       }
       setPhase('processing');
       try {
-        const stt = await api.transcribeAudio(float32ToBase64(pcm), sttLang);
+        const stt = await api.transcribeAudio(pcm, sttLang);
         if (!isMountedRef.current || seq !== requestSeqRef.current) return;
         if (!stt.ok || !stt.text) {
           const sttErrorMap: Record<string, string> = {
@@ -348,6 +390,10 @@ export function VoiceOverlayApp() {
         await runUtterance(stt.text, { languageOverride: activeLang });
       } catch (err) {
         if (!isMountedRef.current || seq !== requestSeqRef.current) return;
+        if (err instanceof AppLockRequiredError) {
+          dismissOverlay();
+          return;
+        }
         setPhase('error');
         setErrorMessage(
           localizeErrorMessage(err, activeDict.operationFailedToast, activeLang, activeDict),
@@ -355,7 +401,7 @@ export function VoiceOverlayApp() {
         openKeyboardFallback();
       }
     },
-    [openKeyboardFallback, runUtterance],
+    [dismissOverlay, openKeyboardFallback, runUtterance],
   );
 
   const startListening = useCallback(
@@ -423,8 +469,10 @@ export function VoiceOverlayApp() {
           setPhase('error');
           setErrorMessage(
             code === 'MIC_DENIED' || code === 'MIC_NOT_FOUND' || code === 'MIC_ERROR'
-              ? activeDict.operationFailedToast
-              : message || activeDict.operationFailedToast,
+              ? activeDict.overlayNoSpeechHint
+              : code === 'WORKLET_ERROR' || code === 'INSECURE_CONTEXT'
+                ? activeDict.sttErrorUnavailable
+                : message || activeDict.operationFailedToast,
           );
           void window.agendameaWindow?.notifyOverlayListening?.(false);
           openKeyboardFallback();
@@ -459,37 +507,17 @@ export function VoiceOverlayApp() {
     else setPhase('idle');
   }, [processRecordedPcm]);
 
-  const dismissOverlay = useCallback(() => {
-    requestSeqRef.current += 1;
-    clearAutoHide();
-    stopSpeaking();
-    setIsSpeaking(false);
-    captureRef.current?.stop();
-    setRmsLevel(0);
-    setResponse(null);
-    setTranscript('');
-    setErrorMessage('');
-    setKeyboardInput('');
-    setIsKeyboardMode(false);
-    setMissingVoicePack(false);
-    setPhase('idle');
-    void window.agendameaWindow?.notifyOverlayListening?.(false);
-    if (window.agendameaWindow?.hideVoiceOverlay) {
-      void window.agendameaWindow.hideVoiceOverlay();
-    } else {
-      setIsDismissed(true);
-    }
-  }, [clearAutoHide]);
-
   const overlayHandlersRef = useRef({
     refreshSettings,
     startListening,
     stopListeningAndProcess,
+    resetOverlayLocally,
   });
   overlayHandlersRef.current = {
     refreshSettings,
     startListening,
     stopListeningAndProcess,
+    resetOverlayLocally,
   };
 
   useEffect(() => {
@@ -498,6 +526,10 @@ export function VoiceOverlayApp() {
         void (async () => {
           const fresh = await overlayHandlersRef.current.refreshSettings();
           if (!isMountedRef.current) return;
+          if (!fresh) {
+            // If backend is locked (423) or unreachable, refuse to start microphone capture
+            return;
+          }
           await overlayHandlersRef.current.startListening({
             autoStopMs:
               typeof fresh?.voiceAutoStopMs === 'number' ? fresh.voiceAutoStopMs : undefined,
@@ -510,6 +542,8 @@ export function VoiceOverlayApp() {
         })();
       } else if (payload?.action === 'stop') {
         overlayHandlersRef.current.stopListeningAndProcess();
+      } else if (payload?.action === 'cancel') {
+        overlayHandlersRef.current.resetOverlayLocally();
       }
     });
     window.agendameaWindow?.notifyOverlayReady?.();
@@ -548,6 +582,61 @@ export function VoiceOverlayApp() {
     setIsKeyboardMode(false);
     void runUtterance(clean);
   };
+
+  const handleConfirmPreviewAdd = useCallback(
+    async (e?: React.FormEvent) => {
+      e?.preventDefault();
+      const clean = previewTitle.trim();
+      if (!clean || isConfirmingPreview) return;
+      const activeDict = getCachedDictionary(settingsRef.current.language);
+      setIsConfirmingPreview(true);
+      setErrorMessage('');
+      try {
+        const created = await api.createTodo(
+          {
+            title: clean,
+            dueDate: response?.payload?.dueDate ?? null,
+            dueTime: response?.payload?.dueTime ?? null,
+            priority: response?.payload?.priority ?? 'normal',
+            important: Boolean(response?.payload?.important),
+            pinned: Boolean(response?.payload?.pinned),
+            tags: response?.payload?.tags ?? [],
+          },
+          { source: 'overlay' },
+        );
+        if (!isMountedRef.current) return;
+        setPreviewTitle('');
+        const display = `${activeDict.aiLiveTestTaskAdded}: ${created.title}`;
+        handleAskResult({
+          ok: true,
+          status: 'executed',
+          intent: 'add_task',
+          mutated: true,
+          todo: created,
+          spokenText: display,
+          displayText: display,
+        });
+      } catch (err) {
+        if (!isMountedRef.current) return;
+        if (err instanceof AppLockRequiredError) {
+          dismissOverlay();
+          return;
+        }
+        setPhase('error');
+        setErrorMessage(
+          localizeErrorMessage(
+            err,
+            activeDict.operationFailedToast,
+            settingsRef.current.language,
+            activeDict,
+          ),
+        );
+      } finally {
+        if (isMountedRef.current) setIsConfirmingPreview(false);
+      }
+    },
+    [dismissOverlay, handleAskResult, isConfirmingPreview, previewTitle, response?.payload],
+  );
 
   if (isDismissed) {
     return (
@@ -616,9 +705,15 @@ export function VoiceOverlayApp() {
           missingVoicePack={missingVoicePack}
           isKeyboardMode={isKeyboardMode}
           keyboardInput={keyboardInput}
+          previewTitle={previewTitle}
+          isConfirmingPreview={isConfirmingPreview}
           inputRef={inputRef}
+          previewInputRef={previewInputRef}
           onChangeKeyboardInput={setKeyboardInput}
+          onChangePreviewTitle={setPreviewTitle}
           onKeyboardSubmit={handleKeyboardSubmit}
+          onConfirmPreviewAdd={(e) => void handleConfirmPreviewAdd(e)}
+          onRetryDictation={() => void startListening()}
           onDismiss={dismissOverlay}
           onConfirmAction={(confirmToken) => void runUtterance('', { confirmToken })}
           onSelectCandidate={(selectedTodoId) => void runUtterance('', { selectedTodoId })}

@@ -152,6 +152,9 @@ export function createWebhookService(options: {
           lastStatusCode: lastResult.statusCode ?? null,
           lastError: lastResult.error ?? '',
         });
+        if (lastResult.retriable) {
+          hasPendingOutboxHint = true;
+        }
       } catch {
         // Non-fatal outbox enqueue failure
       }
@@ -274,12 +277,25 @@ export function createWebhookService(options: {
   }
 
   let outboxTickBusy = false;
+  let hasPendingOutboxHint = true;
   async function processWebhookOutboxTick(): Promise<void> {
     if (outboxTickBusy) return;
+    const settings = db.getSettings();
+    // Skip SQLite polling completely when webhooks are disabled and no pending outbox entries remain
+    if (!settings.webhookEnabled && !hasPendingOutboxHint) return;
     outboxTickBusy = true;
     try {
-      const settings = db.getSettings();
       const due = db.getDueWebhookOutbox(new Date().toISOString(), 10);
+      if (due.length === 0) {
+        if (!settings.webhookEnabled) {
+          const pendingRow = db
+            .getRawDb()
+            .prepare("SELECT 1 AS has_pending FROM webhook_outbox WHERE status = 'pending' LIMIT 1")
+            .get();
+          hasPendingOutboxHint = Boolean(pendingRow);
+        }
+        return;
+      }
       const activeListenPort = getActiveListenPort();
       for (const item of due) {
         const ov = settings.webhookEndpointOverrides?.[item.targetUrl];
@@ -362,7 +378,7 @@ export function createWebhookService(options: {
         Math.max(1, Math.min(180, Number(settings.notificationLeadMinutes) || 15)) * 60_000;
       const nowMs = Date.now();
       const stalePastBoundMs = nowMs - 15 * 60_000;
-      const todos = db.getTodos();
+      const todos = db.getScheduledActiveTodos();
       let dispatchedThisTick = 0;
 
       for (const todo of todos) {

@@ -147,8 +147,8 @@ export function registerSecurityMiddleware(options: {
 
   app.disable('x-powered-by');
 
-  // Non-mutating localized error message middleware (73 languages)
-  app.use((req, res, next) => {
+  // Non-mutating localized error message middleware (73 languages), scoped strictly to /api
+  app.use('/api', (req, res, next) => {
     const origJson = res.json.bind(res);
     const resolveReqLang = (): string => {
       const hdrLang =
@@ -259,7 +259,7 @@ export function registerSecurityMiddleware(options: {
     if (process.env.NODE_ENV === 'production' && !process.env.CSP_HEADER_VALUE) {
       res.setHeader(
         'Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' data: blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
       );
     }
     next();

@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { usePreferencesSelector } from '../store/preferencesStore';
 import type { Category, Todo } from '../types';
-import { TodoItem } from './TodoItem';
+import { TodoItemView } from './TodoItem';
 
-export const TODO_VIRTUALIZATION_THRESHOLD = 150;
+export const TODO_VIRTUALIZATION_THRESHOLD = 60;
 const ESTIMATED_ROW_HEIGHT_PX = 68;
-const OVERSCAN_ROWS = 12;
+const OVERSCAN_ROWS = 10;
 
 interface VirtualizedTodoListProps {
   todos: Todo[];
@@ -62,6 +63,8 @@ export const VirtualizedTodoList = React.memo(function VirtualizedTodoList({
   onContextMenu,
 }: VirtualizedTodoListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const timeFormat = usePreferencesSelector((s) => s.timeFormat, Object.is);
+  const colorBlindShapes = usePreferencesSelector((s) => s.colorBlindShapes, Object.is);
   const shouldVirtualize = todos.length >= TODO_VIRTUALIZATION_THRESHOLD;
   const [range, setRange] = useState<{ start: number; end: number }>({
     start: 0,
@@ -133,11 +136,13 @@ export const VirtualizedTodoList = React.memo(function VirtualizedTodoList({
     >
       {topSpacerPx > 0 && <div aria-hidden="true" style={{ height: `${topSpacerPx}px` }} />}
       {slice.map((todo) => (
-        <TodoItem
+        <TodoItemView
           key={todo.id}
           todo={todo}
           category={todo.categoryId ? categoryMap.get(todo.categoryId) : undefined}
           todayStr={todayStr}
+          timeFormat={timeFormat}
+          colorBlindShapes={colorBlindShapes}
           isSelected={selectedTodoId === todo.id}
           canDrag={canDrag}
           isDragging={draggedTodoId === todo.id}

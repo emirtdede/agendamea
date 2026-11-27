@@ -1,12 +1,15 @@
 'use strict';
 
 const store = require('../shared/localStore.cjs');
-const { getAppLogger } = require('../shared/logger.cjs');
 const { TOOLS, STATIC_RESOURCES, RESOURCE_TEMPLATES, PROMPTS } = require('./toolSchemas.cjs');
 const { readResource, getPrompt } = require('./resources.cjs');
 const { executeTool } = require('./toolExecutor.cjs');
 
-const mcpLog = () => getAppLogger('mcp');
+let _loggerMod = null;
+const mcpLog = () => {
+  if (!_loggerMod) _loggerMod = require('../shared/logger.cjs');
+  return _loggerMod.getAppLogger('mcp');
+};
 
 const SERVER_NAME = 'agendamea';
 const SERVER_VERSION = store.APP_VERSION;

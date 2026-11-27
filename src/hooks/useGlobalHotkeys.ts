@@ -1,4 +1,5 @@
 import { type RefObject, useEffect } from 'react';
+import { appLockStore } from '../store/appLockStore';
 import { preferencesStore } from '../store/preferencesStore';
 import { shortcutStore } from '../store/shortcutStore';
 import { workspaceUiStore } from '../store/workspaceUiStore';
@@ -8,20 +9,23 @@ import { getNextZoomPreset, getPrevZoomPreset } from '../utils/themes';
 interface UseGlobalHotkeysOptions {
   quickAddRef: RefObject<HTMLInputElement | null>;
   focusSidebarSearch: () => void;
+  openCommandPalette: () => void;
   keyboardReorderRef: RefObject<((direction: 'up' | 'down') => void) | null>;
 }
 
 /**
- * Registers global keyboard shortcuts for zoom, search, escape cascade,
+ * Registers global keyboard shortcuts for zoom, command palette, search, escape cascade,
  * layout switching, task creation, and Alt+Arrow task reordering.
  */
 export function useGlobalHotkeys({
   quickAddRef,
   focusSidebarSearch,
+  openCommandPalette,
   keyboardReorderRef,
 }: UseGlobalHotkeysOptions): void {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (appLockStore.getState().locked) return;
       const ui = workspaceUiStore.getState();
       const target = e.target as HTMLElement | null;
       const isTypingField = Boolean(
@@ -54,11 +58,15 @@ export function useGlobalHotkeys({
       }
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        if (ui.isSettingsOpen || ui.isWelcomeOpen || ui.isCloseModalOpen) {
+        if (ui.isWelcomeOpen || ui.isCloseModalOpen) {
           return;
         }
         e.preventDefault();
-        focusSidebarSearch();
+        openCommandPalette();
+        return;
+      }
+
+      if (ui.isCommandPaletteOpen) {
         return;
       }
 
@@ -132,5 +140,5 @@ export function useGlobalHotkeys({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusSidebarSearch, keyboardReorderRef, quickAddRef]);
+  }, [focusSidebarSearch, keyboardReorderRef, openCommandPalette, quickAddRef]);
 }

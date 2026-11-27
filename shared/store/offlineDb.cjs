@@ -137,9 +137,18 @@ async function getPreferredLanguage() {
     return String(process.env.AGENDAMEA_CLI_LANG).trim().toLowerCase();
   }
   try {
-    const { bootstrap } = await getBootstrap();
-    if (typeof bootstrap?.settings?.language === 'string' && bootstrap.settings.language) {
-      return bootstrap.settings.language.toLowerCase();
+    const baseUrl = await resolveApiBaseUrl();
+    if (baseUrl) {
+      const settings = await httpRequest(baseUrl, 'GET', '/api/settings');
+      if (typeof settings?.language === 'string' && settings.language) {
+        return settings.language.toLowerCase();
+      }
+    } else {
+      const lang = withOfflineDb((db) => {
+        const row = db.prepare("SELECT value FROM settings WHERE key = 'language'").get();
+        return typeof row?.value === 'string' && row.value ? row.value.toLowerCase() : null;
+      });
+      if (lang) return lang;
     }
   } catch {
     // Fall back to system locale

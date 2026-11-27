@@ -2,8 +2,20 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { APP_USER_MODEL_ID, readSavedActiveIcon } = require('../iconGenerator.cjs');
-const cliInstaller = require('../../shared/cliInstaller.cjs');
+
+const APP_USER_MODEL_ID = 'dev.vellium.agendamea';
+let _iconGeneratorMod = null;
+let _cliInstallerMod = null;
+
+function getIconGenerator() {
+  if (!_iconGeneratorMod) _iconGeneratorMod = require('../iconGenerator.cjs');
+  return _iconGeneratorMod;
+}
+
+function getCliInstaller() {
+  if (!_cliInstallerMod) _cliInstallerMod = require('../../shared/cliInstaller.cjs');
+  return _cliInstallerMod;
+}
 
 function createTrayAndShellManager({
   app,
@@ -20,6 +32,10 @@ function createTrayAndShellManager({
   performFullQuit,
 }) {
   let tray = null;
+  let cachedIcons = null;
+  let cachedIconsRoot = null;
+  let lastJumpListSignature = '';
+  let jumpListTimer = null;
   let trayLabels = {
     openLabel: 'Open Agendamea',
     newTaskLabel: 'New Task',
@@ -28,6 +44,11 @@ function createTrayAndShellManager({
     importantLabel: 'Important',
     quitLabel: 'Quit',
   };
+
+  function invalidateIconCache() {
+    cachedIcons = null;
+    cachedIconsRoot = null;
+  }
 
   function resolveFallbackIconPath(runtimeRoot) {
     const defaultRoot = path.join(electronDir, '..');
@@ -74,14 +95,17 @@ function createTrayAndShellManager({
   }
 
   function resolveStartupIcons(runtimeRoot) {
+    if (cachedIcons && cachedIconsRoot === runtimeRoot) {
+      return cachedIcons;
+    }
     const userDataDir = app.getPath('userData');
-    const saved = readSavedActiveIcon(userDataDir);
+    const saved = getIconGenerator().readSavedActiveIcon(userDataDir);
     if (saved?.icoPath && fs.existsSync(saved.icoPath)) {
       const savedNotifPng =
         saved.notifPngPath && fs.existsSync(saved.notifPngPath) ? saved.notifPngPath : null;
       const savedPng =
         saved.trayPngPath && fs.existsSync(saved.trayPngPath) ? saved.trayPngPath : null;
-      return {
+      cachedIcons = {
         icoPath: saved.icoPath,
         trayPath: savedPng || saved.icoPath,
         notifPngPath:
@@ -90,14 +114,18 @@ function createTrayAndShellManager({
           savedPng ||
           saved.icoPath,
       };
+      cachedIconsRoot = runtimeRoot;
+      return cachedIcons;
     }
     const fallback = resolveFallbackIconPath(runtimeRoot);
     const fallbackPng = resolveFallbackNotificationPngPath(runtimeRoot);
-    return {
+    cachedIcons = {
       icoPath: fallback,
       trayPath: fallbackPng || fallback,
       notifPngPath: fallbackPng || fallback,
     };
+    cachedIconsRoot = runtimeRoot;
+    return cachedIcons;
   }
 
   function buildTrayImage(iconPath) {
@@ -109,12 +137,15 @@ function createTrayAndShellManager({
     return img.resize({ width: 16, height: 16, quality: 'best' });
   }
 
-  function rebuildWindowsJumpList() {
+  function applyWindowsJumpListNow() {
     if (process.platform !== 'win32' || typeof app.setUserTasks !== 'function') return;
     try {
       const exePath = process.execPath;
       const { icoPath } = resolveStartupIcons(getRuntimeRoot());
       const iconPath = icoPath && fs.existsSync(icoPath) ? icoPath : exePath;
+      const nextSig = `${exePath}|${iconPath}|${trayLabels.newTaskLabel}|${trayLabels.todayLabel}|${trayLabels.importantLabel}`;
+      if (nextSig === lastJumpListSignature) return;
+      lastJumpListSignature = nextSig;
       app.setUserTasks([
         {
           program: exePath,
@@ -144,6 +175,16 @@ function createTrayAndShellManager({
     } catch {
       // Ignore jump list error on restricted shells
     }
+  }
+
+  function rebuildWindowsJumpList() {
+    if (process.platform !== 'win32' || typeof app.setUserTasks !== 'function') return;
+    if (jumpListTimer) clearTimeout(jumpListTimer);
+    jumpListTimer = setTimeout(() => {
+      jumpListTimer = null;
+      applyWindowsJumpListNow();
+    }, 180);
+    jumpListTimer.unref?.();
   }
 
   function rebuildTrayMenu() {
@@ -198,6 +239,10 @@ function createTrayAndShellManager({
   }
 
   function destroyTray() {
+    if (jumpListTimer) {
+      clearTimeout(jumpListTimer);
+      jumpListTimer = null;
+    }
     if (tray) {
       try {
         tray.destroy();
@@ -210,7 +255,7 @@ function createTrayAndShellManager({
 
   function updateTrayLabels(labels) {
     if (labels && typeof labels === 'object') {
-      trayLabels = {
+      const next = {
         openLabel:
           typeof labels.openLabel === 'string' && labels.openLabel.trim()
             ? labels.openLabel.trim()
@@ -236,6 +281,15 @@ function createTrayAndShellManager({
             ? labels.quitLabel.trim()
             : trayLabels.quitLabel,
       };
+      const changed =
+        next.openLabel !== trayLabels.openLabel ||
+        next.newTaskLabel !== trayLabels.newTaskLabel ||
+        next.dictateLabel !== trayLabels.dictateLabel ||
+        next.todayLabel !== trayLabels.todayLabel ||
+        next.importantLabel !== trayLabels.importantLabel ||
+        next.quitLabel !== trayLabels.quitLabel;
+      if (!changed) return;
+      trayLabels = next;
       rebuildTrayMenu();
       rebuildWindowsJumpList();
     }
@@ -299,6 +353,7 @@ function createTrayAndShellManager({
   function syncExistingCliShimsOnStartup() {
     if (process.platform !== 'win32') return;
     try {
+      const cliInstaller = getCliInstaller();
       const binDir = cliInstaller.getCliBinDir();
       if (
         fs.existsSync(path.join(binDir, 'ag.exe')) ||
@@ -318,6 +373,7 @@ function createTrayAndShellManager({
   return {
     getTray: () => tray,
     resolveStartupIcons,
+    invalidateIconCache,
     buildTrayImage,
     rebuildWindowsJumpList,
     rebuildTrayMenu,

@@ -1,6 +1,7 @@
 import type express from 'express';
 import type { TodoDatabase } from '../src/db/database.ts';
 import type { AiRuntimeService } from './services/aiRuntime.ts';
+import type { AppLockService } from './services/appLock.ts';
 import type { CloudSyncService } from './services/cloudSync.ts';
 import type { WebhookService } from './services/webhooks.ts';
 
@@ -19,4 +20,5 @@ export interface ServerContext {
   cloudSync: CloudSyncService;
   webhooks: WebhookService;
   aiRuntime: AiRuntimeService;
+  appLock: AppLockService;
 }

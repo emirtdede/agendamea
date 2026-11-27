@@ -82,15 +82,21 @@ namespace Agendamea.Cli
                 return RunPipedProcess(mcpExec, cfg.McpScript, mcpRest, mcpUseElectronAsNode, isMcpMode: true);
             }
 
-            // Fast CLI path: if system node.exe exists, try direct console inheritance first (real TTY + ~45ms start).
-            // If node returns exit code 86 (offline better-sqlite3 Electron ABI mismatch), seamlessly fall back to Agendamea.exe.
+            // Fast CLI path: if system node.exe exists AND either the desktop daemon is live (HTTP mode)
+            // or the command doesn't touch offline SQLite, run node.exe directly (~45ms start + real TTY).
+            // When offline SQLite is needed, skip the wasted node.exe ABI-mismatch boot + 450ms port sweep
+            // and launch Agendamea.exe (ELECTRON_RUN_AS_NODE=1) directly on the first try!
             string systemNode = FindSystemNode();
             bool preferElectron = string.Equals(
                 Environment.GetEnvironmentVariable("AGENDAMEA_FORCE_ELECTRON_CLI"),
                 "1",
                 StringComparison.Ordinal);
 
-            if (!preferElectron && !string.IsNullOrEmpty(systemNode))
+            bool hasExeTarget = !string.IsNullOrEmpty(cfg.ExecPath) && File.Exists(cfg.ExecPath);
+            bool needsOnlyNodeNoDb = IsFastNodeOnlyCommand(args);
+            bool liveDaemonPresent = HasLiveDesktopDaemon();
+
+            if (!preferElectron && !string.IsNullOrEmpty(systemNode) && (needsOnlyNodeNoDb || liveDaemonPresent || !hasExeTarget))
             {
                 int nodeCode = RunDirectConsoleProcess(systemNode, cfg.CliScript, args);
                 if (nodeCode != ABI_FALLBACK_EXIT_CODE)
@@ -99,7 +105,7 @@ namespace Agendamea.Cli
                 }
             }
 
-            if (string.IsNullOrEmpty(cfg.ExecPath) || !File.Exists(cfg.ExecPath))
+            if (!hasExeTarget)
             {
                 if (!string.IsNullOrEmpty(systemNode))
                 {
@@ -112,6 +118,71 @@ namespace Agendamea.Cli
             // Electron GUI-subsystem executable requires raw byte pipe forwarding so cmd.exe/PowerShell/pipes receive stdout/stderr.
             bool useElectronAsNode = !IsNodeExecutable(cfg.ExecPath);
             return RunPipedProcess(cfg.ExecPath, cfg.CliScript, args, useElectronAsNode, isMcpMode: false);
+        }
+
+        private static bool IsFastNodeOnlyCommand(string[] args)
+        {
+            if (args == null || args.Length == 0) return false;
+            string first = (args[0] ?? string.Empty).ToLowerInvariant();
+            return first == "-v" || first == "--version" || first == "version" ||
+                   first == "-h" || first == "--help" || first == "help" ||
+                   first == "completion" || first == "__complete";
+        }
+
+        private static bool HasLiveDesktopDaemon()
+        {
+            if (string.Equals(Environment.GetEnvironmentVariable("AGENDAMEA_FORCE_OFFLINE"), "1", StringComparison.Ordinal))
+            {
+                return false;
+            }
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AGENDAMEA_URL")) ||
+                !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AGENDAMEA_PORT")))
+            {
+                return true;
+            }
+            try
+            {
+                string customDataDir = Environment.GetEnvironmentVariable("AGENDAMEA_DATA_DIR");
+                string dataDir = !string.IsNullOrEmpty(customDataDir)
+                    ? customDataDir
+                    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Agendamea");
+                string portFile = Path.Combine(dataDir, "runtime-port.json");
+                if (!File.Exists(portFile)) return false;
+                string raw = File.ReadAllText(portFile, Encoding.UTF8);
+                int pid = ExtractJsonInt(raw, "pid");
+                if (pid <= 0) return true;
+                try
+                {
+                    using (Process p = Process.GetProcessById(pid))
+                    {
+                        return !p.HasExited;
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static int ExtractJsonInt(string json, string key)
+        {
+            string pattern = "\"" + key + "\"";
+            int keyIdx = json.IndexOf(pattern, StringComparison.Ordinal);
+            if (keyIdx < 0) return -1;
+            int colonIdx = json.IndexOf(':', keyIdx + pattern.Length);
+            if (colonIdx < 0) return -1;
+            int i = colonIdx + 1;
+            while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
+            int start = i;
+            while (i < json.Length && char.IsDigit(json[i])) i++;
+            if (i <= start) return -1;
+            int value;
+            return int.TryParse(json.Substring(start, i - start), out value) ? value : -1;
         }
 
         private static void TryEnableUtf8AndVtConsole()

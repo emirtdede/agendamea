@@ -35,6 +35,27 @@ export {
   VoiceVadController,
 };
 
+export function float32ToInt16Pcm(samples: Float32Array): Int16Array {
+  const pcm16 = new Int16Array(samples.length);
+  for (let i = 0; i < samples.length; i += 1) {
+    const v = samples[i] ?? 0;
+    const clamped = Math.max(-1, Math.min(1, v));
+    pcm16[i] = clamped < 0 ? Math.round(clamped * 32768) : Math.round(clamped * 32767);
+  }
+  return pcm16;
+}
+
+export function float32ToBase64(samples: Float32Array): string {
+  const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const slice = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode(...slice);
+  }
+  return btoa(binary);
+}
+
 export interface AudioInputDeviceInfo {
   deviceId: string;
   label: string;
@@ -404,10 +425,23 @@ export class VoiceAudioCapture {
         audioConstraints.deviceId = { ideal: callbacks.deviceId };
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-        video: false,
-      });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: false,
+        });
+      } catch (micErr) {
+        const errName = micErr instanceof DOMException ? micErr.name : '';
+        if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+          throw micErr;
+        }
+        // Retry with bare audio constraints when a selected device ID or DSP flag is rejected by the driver
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+      }
       if (seq !== this.startSeq) {
         for (const track of stream.getTracks()) {
           track.stop();
@@ -416,8 +450,13 @@ export class VoiceAudioCapture {
       }
       this.stream = stream;
 
-      // 48 kHz matches RNNoise's native processing rate cleanly
-      const audioCtx = new AudioContext({ sampleRate: 48000 });
+      // 48 kHz matches RNNoise's native processing rate cleanly; fall back to device native rate if rejected
+      let audioCtx: AudioContext;
+      try {
+        audioCtx = new AudioContext({ sampleRate: 48000 });
+      } catch {
+        audioCtx = new AudioContext();
+      }
       this.audioCtx = audioCtx;
       if (audioCtx.state === 'suspended') {
         await audioCtx.resume();
@@ -427,24 +466,43 @@ export class VoiceAudioCapture {
         return false;
       }
 
-      // Initialize AudioWorklet + RNNoise WASM + Silero VAD v5 ONNX in parallel
-      const silero = new SileroVadEngine();
-      const [, rnnoise, sileroReady] = await Promise.all([
-        audioCtx.audioWorklet.addModule('/voice-worklet.js'),
-        useNoiseFilter ? createRnnoiseNode(audioCtx) : Promise.resolve(null),
-        silero.init(),
+      // Start AudioWorklet + RNNoise immediately (never block mic capture waiting for 10 MB Silero ONNX WASM!)
+      const canUseRnnoise = useNoiseFilter && Math.abs(audioCtx.sampleRate - 48000) < 100;
+      const [, rnnoise] = await Promise.all([
+        audioCtx.audioWorklet.addModule('/voice-worklet.js').catch((workletErr) => {
+          const wrapped = new Error(
+            workletErr instanceof Error ? workletErr.message : 'WORKLET_ERROR',
+          );
+          wrapped.name = 'WorkletError';
+          throw wrapped;
+        }),
+        canUseRnnoise ? createRnnoiseNode(audioCtx) : Promise.resolve(null),
       ]);
 
       if (seq !== this.startSeq) {
         rnnoise?.destroy();
-        silero.dispose();
         this.cleanup();
         return false;
       }
 
       this.rnnoiseHandle = rnnoise;
-      this.sileroVad = sileroReady ? silero : null;
+      this.sileroVad = null;
       this.frameQueue = Promise.resolve();
+
+      // Load Silero VAD v5 ONNX in background and attach seamlessly once ready
+      const silero = new SileroVadEngine();
+      void silero
+        .init()
+        .then((ready) => {
+          if (ready && this.active && seq === this.startSeq) {
+            this.sileroVad = silero;
+          } else {
+            silero.dispose();
+          }
+        })
+        .catch(() => {
+          silero.dispose();
+        });
 
       this.sourceNode = audioCtx.createMediaStreamSource(stream);
       this.workletNode = new AudioWorkletNode(audioCtx, 'agendamea-voice-processor', {
@@ -490,13 +548,13 @@ export class VoiceAudioCapture {
               if (!this.active || seq !== this.startSeq || !this.vad) return;
               const vadRes = this.vad.pushFrame(pcmChunk, neuralProb);
               if (vadRes.action !== 'continue') {
-                const finalPcm = this.stop();
                 const reason =
                   vadRes.action === 'auto_stop_silence'
                     ? 'silence'
                     : vadRes.action === 'auto_stop_no_speech'
                       ? 'no_speech'
                       : 'max_duration';
+                const finalPcm = this.stop({ includeFullFallback: reason !== 'no_speech' });
                 callbacks.onAutoStop?.(finalPcm, reason);
               }
             } finally {
@@ -541,20 +599,24 @@ export class VoiceAudioCapture {
       if (seq !== this.startSeq) {
         return false;
       }
-      const name = err instanceof DOMException ? err.name : 'MIC_ERROR';
+      const name = err instanceof Error ? err.name : 'MIC_ERROR';
       const code =
-        name === 'NotAllowedError' || name === 'PermissionDeniedError'
-          ? 'MIC_DENIED'
-          : name === 'NotFoundError'
-            ? 'MIC_NOT_FOUND'
-            : 'MIC_ERROR';
+        name === 'WorkletError'
+          ? 'WORKLET_ERROR'
+          : name === 'NotAllowedError' || name === 'PermissionDeniedError'
+            ? 'MIC_DENIED'
+            : name === 'NotFoundError'
+              ? 'MIC_NOT_FOUND'
+              : 'MIC_ERROR';
       console.error('[VoiceAudioCapture] microphone start error:', err);
       const safeMessage =
-        code === 'MIC_DENIED'
-          ? 'Microphone permission denied.'
-          : code === 'MIC_NOT_FOUND'
-            ? 'No microphone device found.'
-            : 'Microphone unavailable.';
+        code === 'WORKLET_ERROR'
+          ? 'Audio worklet unavailable.'
+          : code === 'MIC_DENIED'
+            ? 'Microphone permission denied.'
+            : code === 'MIC_NOT_FOUND'
+              ? 'No microphone device found.'
+              : 'Microphone unavailable.';
       callbacks.onError?.(code, safeMessage);
       return false;
     } finally {
@@ -562,9 +624,11 @@ export class VoiceAudioCapture {
     }
   }
 
-  stop(): Float32Array {
+  stop(options?: { includeFullFallback?: boolean }): Float32Array {
     this.startSeq += 1;
-    const pcm = this.vad ? this.vad.getMergedPcm() : new Float32Array(0);
+    const pcm = this.vad
+      ? this.vad.getMergedPcm({ includeFullFallback: options?.includeFullFallback ?? true })
+      : new Float32Array(0);
     this.cleanup();
     return pcm;
   }

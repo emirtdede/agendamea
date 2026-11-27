@@ -1,7 +1,7 @@
-import { Check, Globe, Search } from 'lucide-react';
+import { Check, Globe, RotateCw, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
-import { type LanguageCode, SUPPORTED_LANGUAGES } from '../../i18n/languages';
+import { getLanguageMeta, type LanguageCode, SUPPORTED_LANGUAGES } from '../../i18n/languages';
 import { matchesLocaleQuery } from '../../utils/todoLogic';
 
 interface WelcomeLanguageStepProps {
@@ -10,8 +10,12 @@ interface WelcomeLanguageStepProps {
 }
 
 export function WelcomeLanguageStep({ title, desc }: WelcomeLanguageStepProps) {
-  const { lang, onChangeLanguage, t, meta } = useI18n();
+  const { lang, pendingLanguage, onChangeLanguage, onRestartApp, t, meta } = useI18n();
   const [langSearch, setLangSearch] = useState('');
+  const pendingMeta = useMemo(
+    () => (pendingLanguage ? getLanguageMeta(pendingLanguage) : null),
+    [pendingLanguage],
+  );
 
   const filteredLanguages = useMemo(() => {
     const q = langSearch.trim();
@@ -72,6 +76,30 @@ export function WelcomeLanguageStep({ title, desc }: WelcomeLanguageStepProps) {
           <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
         </div>
       </div>
+
+      {pendingMeta && pendingLanguage !== lang && (
+        <div
+          data-testid="welcome-language-pending-banner"
+          className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-[11px] shrink-0"
+        >
+          <span className="text-[var(--text-secondary)] truncate">
+            {t.langRestartPendingBanner}{' '}
+            <strong className="font-semibold text-[var(--text-primary)]">
+              {pendingMeta.nativeName}
+            </strong>
+          </span>
+          {onRestartApp && (
+            <button
+              type="button"
+              onClick={() => void onRestartApp()}
+              className="shrink-0 inline-flex items-center gap-1 rounded-md bg-[var(--accent)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent-fg)] transition-opacity hover:opacity-90"
+            >
+              <RotateCw className="h-3 w-3" />
+              <span>{t.langRestartNowButton}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       <div
         role="listbox"

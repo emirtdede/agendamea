@@ -3,11 +3,22 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const pino = require('pino');
 
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
 const MAX_ROTATED_FILES = 3;
 const ROTATION_CHECK_INTERVAL_MS = 10_000;
+const ASYNC_BUFFER_FLUSH_BYTES = 4096;
+const ASYNC_FLUSH_INTERVAL_MS = 250;
+
+const LEVEL_VALUES = {
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  fatal: 60,
+  silent: Infinity,
+};
 
 const REDACT_PATHS = [
   'secret',
@@ -30,6 +41,17 @@ const REDACT_PATHS = [
   'headers["x-agendamea-secret"]',
 ];
 
+const REDACT_KEYS = new Set([
+  'secret',
+  'webhooksecret',
+  'webhookincomingsecret',
+  'authorization',
+  'token',
+  'apikey',
+  'password',
+  'x-agendamea-secret',
+]);
+
 /**
  * Strips OS user profile directories and inline bearer/webhook secrets from strings.
  * @param {unknown} value
@@ -37,13 +59,23 @@ const REDACT_PATHS = [
  */
 function sanitizeTextForLog(value) {
   let str = typeof value === 'string' ? value : String(value ?? '');
-  str = str.replace(/[A-Za-z]:\\Users\\[^\\/:*?"<>|\r\n]+/gi, (match) => {
-    const drive = match.slice(0, 2);
-    return `${drive}\\Users\\<REDACTED>`;
-  });
-  str = str.replace(/\/(?:Users|home)\/[^/\s:'"]+/g, '/<USER>/<REDACTED>');
-  str = str.replace(/whsec_[A-Za-z0-9+/=_-]+/g, 'whsec_[REDACTED]');
-  str = str.replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]');
+  if (
+    str.indexOf('\\Users\\') !== -1 ||
+    str.indexOf('\\users\\') !== -1 ||
+    str.indexOf('/Users/') !== -1 ||
+    str.indexOf('/home/') !== -1 ||
+    str.indexOf('whsec_') !== -1 ||
+    str.indexOf('Bearer ') !== -1 ||
+    str.indexOf('bearer ') !== -1
+  ) {
+    str = str.replace(/[A-Za-z]:\\Users\\[^\\/:*?"<>|\r\n]+/gi, (match) => {
+      const drive = match.slice(0, 2);
+      return `${drive}\\Users\\<REDACTED>`;
+    });
+    str = str.replace(/\/(?:Users|home)\/[^/\s:'"]+/g, '/<USER>/<REDACTED>');
+    str = str.replace(/whsec_[A-Za-z0-9+/=_-]+/g, 'whsec_[REDACTED]');
+    str = str.replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]');
+  }
   return str;
 }
 
@@ -65,7 +97,6 @@ function resolveLogDir(explicitDataDir) {
 
 /**
  * Rotates `<base>.log` -> `<base>.1.log` .. `<base>.3.log` safely on Windows NTFS.
- * Caller MUST close active file handles before invoking this function.
  * @param {string} filePath
  */
 function rotateLogFileSync(filePath) {
@@ -99,61 +130,6 @@ function rotateLogFileSync(filePath) {
 }
 
 /**
- * Creates a Windows-safe non-worker Pino file destination with size rotation.
- * Avoids `pino.transport()` worker threads so Electron app.asar & esbuild single-file bundles stay rock solid.
- * @param {string} filePath
- */
-function createRotatingDestination(filePath) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  rotateLogFileSync(filePath);
-  let dest = pino.destination({ dest: filePath, sync: true, mkdir: true });
-  let lastCheckAt = Date.now();
-
-  const maybeRotate = () => {
-    const now = Date.now();
-    if (now - lastCheckAt < ROTATION_CHECK_INTERVAL_MS) return;
-    lastCheckAt = now;
-    try {
-      if (!fs.existsSync(filePath)) return;
-      const stat = fs.statSync(filePath);
-      if (stat.size < MAX_LOG_BYTES) return;
-      if (typeof dest.flushSync === 'function') dest.flushSync();
-      if (typeof dest.end === 'function') dest.end();
-      rotateLogFileSync(filePath);
-      dest = pino.destination({ dest: filePath, sync: true, mkdir: true });
-    } catch {
-      // Keep existing destination active if rotation could not acquire NTFS lock
-    }
-  };
-
-  return {
-    write(chunk) {
-      maybeRotate();
-      try {
-        dest.write(sanitizeTextForLog(chunk));
-      } catch {
-        // Never allow log disk failure to crash the desktop app
-      }
-    },
-    flushSync() {
-      try {
-        if (typeof dest.flushSync === 'function') dest.flushSync();
-      } catch {
-        // Ignore already-closed stream
-      }
-    },
-    close() {
-      try {
-        if (typeof dest.flushSync === 'function') dest.flushSync();
-        if (typeof dest.end === 'function') dest.end();
-      } catch {
-        // Ignore already-closed stream
-      }
-    },
-  };
-}
-
-/**
  * Formats an Error object with redacted user paths for structured NDJSON logs.
  * @param {unknown} err
  */
@@ -172,11 +148,260 @@ function serializeSafeError(err) {
   return { message: sanitizeTextForLog(err) };
 }
 
-/** @type {Map<string, { logger: import('pino').Logger, dest: { flushSync: () => void, close: () => void } | null }>} */
+/**
+ * Redacts sensitive keys up to depth 3 without mutating caller objects.
+ * @param {unknown} value
+ * @param {number} depth
+ * @returns {unknown}
+ */
+function redactValue(value, depth = 0) {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return value;
+  }
+  if (value instanceof Error) {
+    return serializeSafeError(value);
+  }
+  if (depth >= 3) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactValue(item, depth + 1));
+  }
+  /** @type {Record<string, unknown>} */
+  const out = {};
+  for (const [k, v] of Object.entries(/** @type {Record<string, unknown>} */ (value))) {
+    const lower = k.toLowerCase();
+    if (REDACT_KEYS.has(lower)) {
+      out[k] = '[REDACTED]';
+    } else if ((lower === 'err' || lower === 'error') && v !== undefined && v !== null) {
+      out[k] = serializeSafeError(v);
+    } else if (v && typeof v === 'object') {
+      out[k] = redactValue(v, depth + 1);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/**
+ * Zero-dependency buffered async rotating file destination (safe on Windows NTFS).
+ * Accumulates log chunks in memory and flushes asynchronously to avoid blocking the event loop.
+ * @param {string} filePath
+ */
+function createRotatingDestination(filePath) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  rotateLogFileSync(filePath);
+
+  let buffer = '';
+  let bufferedBytes = 0;
+  let lastCheckAt = Date.now();
+  let flushingAsync = false;
+  let closed = false;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let flushTimer = null;
+
+  const maybeRotate = () => {
+    const now = Date.now();
+    if (now - lastCheckAt < ROTATION_CHECK_INTERVAL_MS) return;
+    lastCheckAt = now;
+    try {
+      if (!fs.existsSync(filePath)) return;
+      const stat = fs.statSync(filePath);
+      if (stat.size >= MAX_LOG_BYTES) {
+        rotateLogFileSync(filePath);
+      }
+    } catch {
+      // Non-fatal rotation guard
+    }
+  };
+
+  const clearTimer = () => {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+  };
+
+  const flushAsync = () => {
+    clearTimer();
+    if (closed || flushingAsync || bufferedBytes === 0) return;
+    const payload = buffer;
+    buffer = '';
+    bufferedBytes = 0;
+    flushingAsync = true;
+    maybeRotate();
+    fs.appendFile(filePath, payload, 'utf8', () => {
+      flushingAsync = false;
+      if (!closed && bufferedBytes > 0) {
+        if (bufferedBytes >= ASYNC_BUFFER_FLUSH_BYTES) {
+          flushAsync();
+        } else {
+          scheduleFlush();
+        }
+      }
+    });
+  };
+
+  const scheduleFlush = () => {
+    if (closed || flushTimer || bufferedBytes === 0) return;
+    flushTimer = setTimeout(flushAsync, ASYNC_FLUSH_INTERVAL_MS);
+    flushTimer.unref?.();
+  };
+
+  const flushSync = () => {
+    clearTimer();
+    if (bufferedBytes === 0) return;
+    const payload = buffer;
+    buffer = '';
+    bufferedBytes = 0;
+    maybeRotate();
+    try {
+      fs.appendFileSync(filePath, payload, 'utf8');
+    } catch {
+      // Never allow log disk failure to crash the desktop app
+    }
+  };
+
+  return {
+    write(chunk, immediate = false) {
+      if (closed) return;
+      const safe = sanitizeTextForLog(chunk);
+      buffer += safe;
+      bufferedBytes += Buffer.byteLength(safe, 'utf8');
+      if (immediate) {
+        flushSync();
+      } else if (bufferedBytes >= ASYNC_BUFFER_FLUSH_BYTES) {
+        flushAsync();
+      } else {
+        scheduleFlush();
+      }
+    },
+    flushSync,
+    close() {
+      if (closed) return;
+      flushSync();
+      closed = true;
+      clearTimer();
+    },
+  };
+}
+
+/**
+ * Safely serializes an NDJSON log record, tolerating circular references.
+ * @param {Record<string, unknown>} record
+ * @returns {string}
+ */
+function safeJsonLine(record) {
+  try {
+    return `${JSON.stringify(record)}\n`;
+  } catch {
+    const seen = new WeakSet();
+    return `${JSON.stringify(record, (_k, val) => {
+      if (typeof val === 'bigint') return String(val);
+      if (val && typeof val === 'object') {
+        if (seen.has(val)) return '[Circular]';
+        seen.add(val);
+      }
+      return val;
+    })}\n`;
+  }
+}
+
+/**
+ * @typedef {{
+ *   level: string;
+ *   trace: (objOrMsg?: unknown, msg?: string) => void;
+ *   debug: (objOrMsg?: unknown, msg?: string) => void;
+ *   info: (objOrMsg?: unknown, msg?: string) => void;
+ *   warn: (objOrMsg?: unknown, msg?: string) => void;
+ *   error: (objOrMsg?: unknown, msg?: string) => void;
+ *   fatal: (objOrMsg?: unknown, msg?: string) => void;
+ *   child: (bindings?: Record<string, unknown>) => AppLoggerInstance;
+ * }} AppLoggerInstance
+ */
+
+/**
+ * Builds a Pino-compatible structured NDJSON logger instance with zero external dependencies.
+ * @param {{
+ *   level: string;
+ *   baseBindings: Record<string, unknown>;
+ *   writer: { write: (chunk: string, immediate?: boolean) => void };
+ * }} cfg
+ * @returns {AppLoggerInstance}
+ */
+function buildLoggerInstance(cfg) {
+  let currentLevel = String(cfg.level || 'info').toLowerCase();
+  let threshold =
+    LEVEL_VALUES[/** @type {keyof typeof LEVEL_VALUES} */ (currentLevel)] ?? LEVEL_VALUES.info;
+
+  const emit = (lvlNum, objOrMsg, msg) => {
+    if (lvlNum < threshold) return;
+    /** @type {Record<string, unknown>} */
+    const record = {
+      level: lvlNum,
+      time: new Date().toISOString(),
+      ...cfg.baseBindings,
+    };
+
+    if (objOrMsg !== undefined && objOrMsg !== null) {
+      if (objOrMsg instanceof Error) {
+        record.err = serializeSafeError(objOrMsg);
+        record.msg = typeof msg === 'string' ? msg : objOrMsg.message;
+      } else if (typeof objOrMsg === 'object' && !Array.isArray(objOrMsg)) {
+        const redacted = /** @type {Record<string, unknown>} */ (redactValue(objOrMsg, 0));
+        Object.assign(record, redacted);
+        if (typeof msg === 'string') {
+          record.msg = msg;
+        }
+      } else {
+        record.msg = typeof msg === 'string' ? `${String(objOrMsg)} ${msg}` : String(objOrMsg);
+      }
+    } else if (typeof msg === 'string') {
+      record.msg = msg;
+    }
+
+    const line = safeJsonLine(record);
+    cfg.writer.write(line, lvlNum >= LEVEL_VALUES.error);
+  };
+
+  /** @type {AppLoggerInstance} */
+  const instance = {
+    get level() {
+      return currentLevel;
+    },
+    set level(next) {
+      currentLevel = String(next || 'info').toLowerCase();
+      threshold =
+        LEVEL_VALUES[/** @type {keyof typeof LEVEL_VALUES} */ (currentLevel)] ?? LEVEL_VALUES.info;
+    },
+    trace: (a, b) => emit(LEVEL_VALUES.trace, a, b),
+    debug: (a, b) => emit(LEVEL_VALUES.debug, a, b),
+    info: (a, b) => emit(LEVEL_VALUES.info, a, b),
+    warn: (a, b) => emit(LEVEL_VALUES.warn, a, b),
+    error: (a, b) => emit(LEVEL_VALUES.error, a, b),
+    fatal: (a, b) => emit(LEVEL_VALUES.fatal, a, b),
+    child(bindings = {}) {
+      const safeBindings =
+        bindings && typeof bindings === 'object'
+          ? /** @type {Record<string, unknown>} */ (redactValue(bindings, 0))
+          : {};
+      return buildLoggerInstance({
+        level: currentLevel,
+        baseBindings: { ...cfg.baseBindings, ...safeBindings },
+        writer: cfg.writer,
+      });
+    },
+  };
+
+  return instance;
+}
+
+/** @type {Map<string, { logger: AppLoggerInstance, dest: { flushSync: () => void, close: () => void } | null }>} */
 const LOGGER_CACHE = new Map();
 
 /**
- * Creates or returns a structured Pino NDJSON logger scoped to a single process file (`main.log`, `server.log`, etc.).
+ * Creates or returns a structured NDJSON logger scoped to a single process file (`main.log`, `server.log`, etc.).
  * @param {{ processName?: string, dataDir?: string, level?: string, disableFile?: boolean }} [options]
  */
 function createAppLogger(options = {}) {
@@ -192,38 +417,34 @@ function createAppLogger(options = {}) {
   const filePath = path.join(logDir, `${processName || 'app'}.log`);
 
   let destination = null;
-  /** @type {import('pino').DestinationStream} */
-  let stream = process.stderr;
+  let writer = {
+    write(chunk) {
+      try {
+        process.stderr.write(sanitizeTextForLog(chunk));
+      } catch {
+        // Ignore broken pipe
+      }
+    },
+  };
+
   if (!options.disableFile && level !== 'silent') {
     try {
       destination = createRotatingDestination(filePath);
-      stream = destination;
+      writer = destination;
     } catch {
       destination = null;
-      stream = process.stderr;
     }
   }
 
-  const logger = pino(
-    {
+  const logger = buildLoggerInstance({
+    level,
+    baseBindings: {
+      pid: process.pid,
+      component: processName || 'app',
       name: `agendamea:${processName || 'app'}`,
-      level,
-      redact: {
-        paths: REDACT_PATHS,
-        censor: '[REDACTED]',
-      },
-      serializers: {
-        err: serializeSafeError,
-        error: serializeSafeError,
-      },
-      timestamp: pino.stdTimeFunctions.isoTime,
-      base: {
-        pid: process.pid,
-        component: processName || 'app',
-      },
     },
-    stream,
-  );
+    writer,
+  });
 
   return {
     logger,

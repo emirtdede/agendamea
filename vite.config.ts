@@ -140,30 +140,22 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2,xml}'],
-          globIgnores: ['**/icons/windows/**', '**/voice-assets/**'],
+          globIgnores: [
+            '**/icons/windows/**',
+            '**/voice-assets/**',
+            '**/assets/[a-z][a-z]-*.js',
+            '**/assets/[a-z][a-z]-[A-Z][A-Z]-*.js',
+            '**/assets/ort-wasm-*.wasm',
+          ],
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
             {
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+              urlPattern: /\/assets\/[a-z]{2}(?:-[A-Z]{2})?-[A-Za-z0-9_-]+\.js$/i,
               handler: 'CacheFirst',
               options: {
-                cacheName: 'google-fonts-cache',
+                cacheName: 'agendamea-active-locale-cache',
                 expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365,
-                },
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-              },
-            },
-            {
-              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'gstatic-fonts-cache',
-                expiration: {
-                  maxEntries: 10,
+                  maxEntries: 6,
                   maxAgeSeconds: 60 * 60 * 24 * 365,
                 },
                 cacheableResponse: {
@@ -193,6 +185,17 @@ export default defineConfig(() => {
           const distAssets = path.resolve(distDir, 'src/assets');
           if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
             fs.cpSync(srcAssets, distAssets, { recursive: true, force: true });
+          }
+          // Remove duplicate 14.8 MB ort-wasm binary from dist/assets/ since runtime
+          // loads exclusively from /voice-assets/ort-wasm-simd-threaded.wasm
+          const hashedAssetsDir = path.join(distDir, 'assets');
+          const voiceWasmPath = path.join(distDir, 'voice-assets', 'ort-wasm-simd-threaded.wasm');
+          if (fs.existsSync(hashedAssetsDir) && fs.existsSync(voiceWasmPath)) {
+            for (const file of fs.readdirSync(hashedAssetsDir)) {
+              if (/^ort-wasm-.*\.wasm$/i.test(file)) {
+                fs.rmSync(path.join(hashedAssetsDir, file), { force: true });
+              }
+            }
           }
         },
       },
@@ -224,7 +227,7 @@ export default defineConfig(() => {
               },
               {
                 name: 'i18n-core',
-                test: /src[\\/]i18n[\\/](?!locales[\\/])/,
+                test: /src[\\/]i18n[\\/](?:languages|I18nContext|localeLoader|core[\\/]errorLocalizer)\.tsx?$/,
                 priority: 20,
               },
             ],

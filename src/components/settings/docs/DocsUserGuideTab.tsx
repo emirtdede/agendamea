@@ -64,9 +64,7 @@ export const DocsUserGuideTab = React.memo(function DocsUserGuideTab({
   searchQuery: string;
 }) {
   const { t } = useI18n();
-  const [sampleInput, setSampleInput] = useState(
-    'Prepare quarterly deck @tomorrow 14:30 ! * #finance /Work',
-  );
+  const [sampleInput, setSampleInput] = useState(() => t.guidePlaygroundSample);
 
   const parsed = useMemo(() => parseQuickAddPreview(sampleInput), [sampleInput]);
 
@@ -121,15 +119,15 @@ export const DocsUserGuideTab = React.memo(function DocsUserGuideTab({
 
   return (
     <div className="space-y-5" data-testid="docs-tab-guide">
-      {/* Interactive Quick Add / CLI Natural-Language Playground */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
+      {/* Interactive Quick Add / Natural-Language Playground Card */}
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-5 sm:px-6 space-y-3.5">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-[var(--accent)]" />
-          <h4 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+          <Sparkles className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
             {t.docsPlaygroundTitle}
           </h4>
         </div>
-        <p className="text-xs text-[var(--text-muted)]">{t.docsPlaygroundDesc}</p>
+        <p className="text-xs leading-relaxed text-[var(--text-muted)]">{t.docsPlaygroundDesc}</p>
 
         <input
           type="text"
@@ -137,128 +135,105 @@ export const DocsUserGuideTab = React.memo(function DocsUserGuideTab({
           value={sampleInput}
           onChange={(e) => setSampleInput(e.target.value)}
           aria-label={t.docsPlaygroundTitle}
-          className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 font-mono-tabular text-xs text-[var(--text-primary)] focus:border-[var(--accent)]"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)]/60 px-3 py-2 font-mono-tabular text-xs text-[var(--text-primary)] focus:border-[var(--text-secondary)]"
         />
 
-        {/* Preset Quick Chips */}
-        <div className="flex flex-wrap gap-1.5">
-          {[
-            'Pay invoice @today 17:00 ! #bills /Finance',
-            'Sprint planning @2026-12-01..2026-12-03 ^ * #team /Work',
-            'Buy coffee beans @tomorrow #home',
-          ].map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              onClick={() => setSampleInput(preset)}
-              className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 font-mono-tabular text-[10.5px] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)] transition-colors"
-            >
-              {preset}
-            </button>
-          ))}
+        {/* Preset Quick Examples (Borderless Mono Links) */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          {[t.guidePlaygroundPreset1, t.guidePlaygroundPreset2, t.guidePlaygroundPreset3].map(
+            (preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setSampleInput(preset)}
+                className="font-mono-tabular text-[11px] text-[var(--text-muted)] underline decoration-[var(--border)] underline-offset-4 ag-hover-glow hover:text-[var(--text-primary)]"
+              >
+                {preset}
+              </button>
+            ),
+          )}
         </div>
 
-        {/* Live Parsed Output Card */}
+        {/* Live Parsed Output Preview */}
         <div
           data-testid="docs-playground-output"
-          className="rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-3 space-y-2"
+          className="rounded-lg border border-[var(--border)]/70 bg-[var(--canvas)]/55 px-3.5 py-2.5 space-y-1.5"
         >
           <p className="text-xs font-semibold text-[var(--text-primary)]">
             {parsed.title || t.docsPlaygroundEmptyTitle}
           </p>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--text-secondary)]">
             {parsed.category && (
-              <span className="rounded-md bg-[var(--accent-soft)] px-2 py-0.5 font-medium text-[var(--accent)]">
+              <span className="font-mono-tabular font-medium text-[var(--text-primary)]">
                 /{parsed.category}
               </span>
             )}
             {parsed.dueToken && (
-              <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 font-mono-tabular text-[var(--text-secondary)]">
-                <Calendar className="h-3 w-3 text-[var(--accent)]" />
+              <span className="inline-flex items-center gap-1 font-mono-tabular">
+                <Calendar className="h-3 w-3 text-[var(--text-muted)]" />
                 {parsed.dueToken}
                 {parsed.dueTime ? ` · ${parsed.dueTime}` : ''}
               </span>
             )}
             {!parsed.dueToken && parsed.dueTime && (
-              <span className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 font-mono-tabular text-[var(--text-secondary)]">
-                {parsed.dueTime}
-              </span>
+              <span className="font-mono-tabular">{parsed.dueTime}</span>
             )}
             {parsed.priority !== 'normal' && (
-              <span
-                className={`rounded-md px-2 py-0.5 font-semibold ${
-                  parsed.priority === 'high'
-                    ? 'bg-red-500/15 text-red-600 dark:text-red-400'
-                    : 'bg-[var(--surface-subtle)] text-[var(--text-muted)]'
-                }`}
-              >
+              <span className="font-medium text-[var(--text-primary)]">
                 {parsed.priority === 'high' ? t.priorityHigh : t.priorityLow}
               </span>
             )}
-            {parsed.important && (
-              <span className="rounded-md bg-amber-500/15 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-400">
-                * {t.important}
-              </span>
-            )}
-            {parsed.pinned && (
-              <span className="rounded-md bg-[var(--surface-subtle)] px-2 py-0.5 font-medium text-[var(--text-secondary)]">
-                ^ {t.pinLabel}
-              </span>
-            )}
+            {parsed.important && <span className="font-medium">* {t.important}</span>}
+            {parsed.pinned && <span className="font-medium">^ {t.pinLabel}</span>}
             {parsed.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[var(--text-secondary)]"
-              >
-                <Tag className="h-2.5 w-2.5" />#{tag}
+              <span key={tag} className="inline-flex items-center gap-1 font-mono-tabular">
+                <Tag className="h-2.5 w-2.5 text-[var(--text-muted)]" />#{tag}
               </span>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Syntax Reference Grid */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-        <div className="border-b border-[var(--border)] px-4 py-2.5">
-          <h4 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+      {/* Syntax Reference & Voice Dictation Examples Card */}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70">
+        {/* Syntax Reference List */}
+        <section className="p-5 sm:px-6 space-y-3">
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
             {t.docsSyntaxTableTitle}
           </h4>
-        </div>
-        <div className="divide-y divide-[var(--border)]">
-          {filteredTokens.map((item) => (
-            <div
-              key={item.token}
-              className="flex flex-col gap-1 px-4 py-2 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <code className="font-mono-tabular text-[11.5px] font-semibold text-[var(--accent)]">
-                {item.token}
-              </code>
-              <span className="text-xs text-[var(--text-muted)]">{item.desc}</span>
-            </div>
-          ))}
-        </div>
-      </section>
+          <div className="divide-y divide-[var(--border)]/60">
+            {filteredTokens.map((item) => (
+              <div
+                key={item.token}
+                className="flex flex-col gap-1 py-2.5 first:pt-1 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <code className="font-mono-tabular text-[12px] font-medium text-[var(--text-primary)]">
+                  {item.token}
+                </code>
+                <span className="text-xs text-[var(--text-muted)]">{item.desc}</span>
+              </div>
+            ))}
+          </div>
+        </section>
 
-      {/* Voice Dictation Examples */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-2.5">
-        <div className="flex items-center gap-2">
-          <Mic className="h-4 w-4 text-[var(--accent)]" />
-          <h4 className="font-display text-xs font-semibold text-[var(--text-primary)]">
-            {t.docsVoiceExamplesTitle}
-          </h4>
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {voiceExamples.map((ex) => (
-            <div
-              key={ex.label}
-              className="rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2"
-            >
-              <p className="text-[11px] font-semibold text-[var(--text-secondary)]">{ex.label}</p>
-              <p className="mt-0.5 text-xs italic text-[var(--text-primary)]">"{ex.cmd}"</p>
-            </div>
-          ))}
-        </div>
-      </section>
+        {/* Voice Dictation Examples */}
+        <section className="p-5 sm:px-6 space-y-3">
+          <div className="flex items-center gap-2">
+            <Mic className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+            <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t.docsVoiceExamplesTitle}
+            </h4>
+          </div>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 pt-1">
+            {voiceExamples.map((ex) => (
+              <div key={ex.label} className="space-y-0.5">
+                <p className="text-[11px] font-medium text-[var(--text-muted)]">{ex.label}</p>
+                <p className="text-xs italic text-[var(--text-primary)]">"{ex.cmd}"</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 });

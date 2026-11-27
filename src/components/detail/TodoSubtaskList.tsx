@@ -70,7 +70,7 @@ export function TodoSubtaskList({
               e.preventDefault();
               onOpenContextMenu(e, sub);
             }}
-            className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-[var(--surface-hover)] transition-colors"
+            className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 ag-hover-glow transition-colors"
           >
             <button
               type="button"
@@ -149,7 +149,7 @@ export function TodoSubtaskList({
           type="submit"
           disabled={!newSubtaskTitle.trim() || isAddingSubtask}
           aria-label={t.addButton}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-35"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] ag-hover-card-glow hover:text-[var(--text-primary)] disabled:opacity-35"
         >
           <Plus className="h-4 w-4" />
         </button>

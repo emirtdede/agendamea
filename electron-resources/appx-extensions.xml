@@ -1,0 +1,3 @@
+        <desktop:Extension Category="windows.startupTask" Executable="app\Agendamea.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="AgendameaStartup" Enabled="false" DisplayName="Agendamea" />
+        </desktop:Extension>

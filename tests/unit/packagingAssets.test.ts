@@ -150,6 +150,13 @@ test('QA: Windows 11 Electron installer/uninstaller assets, BMP headers, UTF-8 B
   assert.ok(builderYml.includes('installerSidebar: electron-resources/installerSidebar.bmp'));
   assert.ok(builderYml.includes('uninstallerSidebar: electron-resources/uninstallerSidebar.bmp'));
   assert.ok(builderYml.includes('installerHeader: electron-resources/installerHeader.bmp'));
+  assert.ok(
+    builderYml.includes('unpackDirName: true'),
+    'portable.unpackDirName must be true so second portable launches unpack into isolated $PLUGINSDIR instead of wiping active runtime files',
+  );
+  const electronMainSrc = fs.readFileSync(path.join(root, 'electron', 'main.cjs'), 'utf8');
+  assert.ok(electronMainSrc.includes('PORTABLE_EXECUTABLE_FILE'));
+  assert.ok(electronMainSrc.includes('icudtl.dat'));
 
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.equal(pkg.main, 'electron/main.cjs');
@@ -175,6 +182,13 @@ test('QA: Custom HEX theme tokens, dynamic App Icon generator (.ico), accessibil
   const darkCustom = buildCustomThemeTokens('#14b8a6', 'dark');
   assert.equal(lightCustom.accent, '#14b8a6');
   assert.ok(darkCustom.canvas.startsWith('#') && darkCustom.accentFg.startsWith('#'));
+
+  const obsidianDarkMatch = resolveAppIconColors('match-theme', 'obsidian', 'dark');
+  assert.equal(obsidianDarkMatch.bg, '#111114');
+  assert.equal(obsidianDarkMatch.fg, '#fafafa');
+  const obsidianLightManual = resolveAppIconColors('obsidian-light', 'obsidian', 'dark');
+  assert.equal(obsidianLightManual.bg, '#fafafa');
+  assert.equal(obsidianLightManual.fg, '#111114');
 
   const iconMatch = resolveAppIconColors('match-theme', 'custom', 'dark', '#ff4d8d');
   assert.equal(iconMatch.bg, '#ff4d8d');

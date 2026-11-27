@@ -104,11 +104,24 @@ export function SidebarCategoryList({
               title={
                 cat.pinned ? `${cat.name} (${t.pinLabel} · ${count})` : `${cat.name} (${count})`
               }
-              className={`relative mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-150 ${
-                isActive ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--surface-hover)]'
+              className={`group relative mx-auto flex h-9 w-9 items-center justify-center rounded-lg ag-hover-glow ${
+                isActive ? 'ag-minimal-active' : ''
               }`}
             >
-              <ColorDot color={cat.color} size="md" />
+              <span
+                className={`inline-flex items-center justify-center rounded-full transition-transform duration-150 ${
+                  isActive ? 'scale-125' : 'group-hover:scale-115'
+                }`}
+                style={
+                  isActive
+                    ? {
+                        boxShadow: `0 0 12px 2px ${cat.color}`,
+                      }
+                    : undefined
+                }
+              >
+                <ColorDot color={cat.color} size="md" />
+              </span>
               {cat.pinned && (
                 <span
                   aria-hidden="true"
@@ -148,7 +161,7 @@ export function SidebarCategoryList({
                 <button
                   type="button"
                   onClick={onCancelEdit}
-                  className="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                  className="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow"
                 >
                   {t.cancelButton}
                 </button>
@@ -178,7 +191,7 @@ export function SidebarCategoryList({
                 <button
                   type="button"
                   onClick={() => onRequestDelete(null)}
-                  className="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                  className="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow"
                 >
                   {t.cancelButton}
                 </button>
@@ -267,7 +280,7 @@ export function SidebarCategoryList({
               setCatDropTarget(null);
             }}
             className={`group relative flex items-center rounded-lg transition-colors duration-150 ${
-              isActive ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--surface-hover)]'
+              isActive ? 'bg-[var(--accent-soft)]' : 'ag-hover-glow'
             } ${isDraggingCat ? 'opacity-45' : ''}`}
           >
             {dropPos === 'before' && (
@@ -321,10 +334,10 @@ export function SidebarCategoryList({
                 title={cat.pinned ? t.unpinLabel : t.pinLabel}
                 className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
                   cat.pinned
-                    ? 'text-[var(--accent)] hover:bg-[var(--surface)]'
+                    ? 'text-[var(--accent)] ag-hover-glow'
                     : isActive
-                      ? 'text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
-                      : 'flex md:hidden md:group-hover:flex md:group-focus-within:flex text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+                      ? 'text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]'
+                      : 'flex md:hidden md:group-hover:flex md:group-focus-within:flex text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]'
                 }`}
               >
                 <Pin className={`h-3 w-3 ${cat.pinned ? 'fill-current' : ''}`} />
@@ -335,7 +348,7 @@ export function SidebarCategoryList({
                   type="button"
                   onClick={() => onStartEdit(cat)}
                   aria-label={cat.name}
-                  className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-primary)]"
+                  className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]"
                 >
                   <Pencil className="h-3 w-3" />
                 </button>
@@ -344,7 +357,7 @@ export function SidebarCategoryList({
                   onClick={() => onRequestDelete(cat.id)}
                   aria-label={`${t.deleteToTrashButton}: ${cat.name}`}
                   title={t.deleteToTrashButton}
-                  className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-red-500"
+                  className="flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] ag-hover-danger-glow hover:text-red-500"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>

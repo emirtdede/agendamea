@@ -68,6 +68,8 @@ const SETTING_KEYS = Object.freeze([
   'voiceSensitivity',
   'listDensity',
   'fontFamily',
+  'fontScale',
+  'readableSpacing',
   'recentCustomColors',
   'colorBlindShapes',
   'strongFocusRing',
@@ -90,6 +92,10 @@ const SETTING_KEYS = Object.freeze([
   'dailyDigestTime',
   'voiceDictationLanguage',
   'aiExternalBaseUrl',
+  'appLockEnabled',
+  'appLockType',
+  'appLockAutoLockMinutes',
+  'appLockOnMinimize',
 ]);
 
 module.exports = {

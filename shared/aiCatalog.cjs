@@ -194,6 +194,94 @@ const TIER_BUNDLES = Object.freeze({
   }),
 });
 
+/**
+ * Hardware-aware ready profiles:
+ * - CPU / No-GPU (2 profiles): cpu-light, cpu-balanced
+ * - Discrete GPU (5 tiers): gpu-very-weak, gpu-weak, gpu-balanced, gpu-strong, gpu-ultra
+ */
+const AI_PROFILE_PRESETS = Object.freeze({
+  'cpu-light': Object.freeze({
+    id: 'cpu-light',
+    group: 'cpu',
+    legacyTier: 'tier-light',
+    sttModelId: 'whisper-base-q5_1',
+    llmModelId: 'qwen3-0.6b-q8_0',
+    embedModelId: 'multilingual-e5-small-q8_0',
+    minRamGb: 4,
+    minVramGb: 0,
+  }),
+  'cpu-balanced': Object.freeze({
+    id: 'cpu-balanced',
+    group: 'cpu',
+    legacyTier: 'tier-light',
+    sttModelId: 'whisper-small-q5_1',
+    llmModelId: 'qwen3-1.7b-q8_0',
+    embedModelId: 'multilingual-e5-small-q8_0',
+    minRamGb: 8,
+    minVramGb: 0,
+  }),
+  'gpu-very-weak': Object.freeze({
+    id: 'gpu-very-weak',
+    group: 'gpu',
+    legacyTier: 'tier-light',
+    sttModelId: 'whisper-base-q5_1',
+    llmModelId: 'qwen3-0.6b-q8_0',
+    embedModelId: 'multilingual-e5-small-q8_0',
+    minRamGb: 4,
+    minVramGb: 2,
+  }),
+  'gpu-weak': Object.freeze({
+    id: 'gpu-weak',
+    group: 'gpu',
+    legacyTier: 'tier-light',
+    sttModelId: 'whisper-small-q5_1',
+    llmModelId: 'qwen3-1.7b-q8_0',
+    embedModelId: 'multilingual-e5-small-q8_0',
+    minRamGb: 8,
+    minVramGb: 4,
+  }),
+  'gpu-balanced': Object.freeze({
+    id: 'gpu-balanced',
+    group: 'gpu',
+    legacyTier: 'tier-medium',
+    sttModelId: 'whisper-small-q5_1',
+    llmModelId: 'qwen3-4b-q4_k_m',
+    embedModelId: 'multilingual-e5-small-q8_0',
+    minRamGb: 12,
+    minVramGb: 6,
+  }),
+  'gpu-strong': Object.freeze({
+    id: 'gpu-strong',
+    group: 'gpu',
+    legacyTier: 'tier-medium',
+    sttModelId: 'whisper-large-v3-turbo-q5_0',
+    llmModelId: 'qwen3-4b-q4_k_m',
+    embedModelId: 'qwen3-embedding-0.6b-q8_0',
+    minRamGb: 16,
+    minVramGb: 8,
+  }),
+  'gpu-ultra': Object.freeze({
+    id: 'gpu-ultra',
+    group: 'gpu',
+    legacyTier: 'tier-strong',
+    sttModelId: 'whisper-large-v3-turbo-q5_0',
+    llmModelId: 'qwen3-8b-q4_k_m',
+    embedModelId: 'qwen3-embedding-0.6b-q8_0',
+    minRamGb: 16,
+    minVramGb: 12,
+  }),
+});
+
+const AI_PROFILE_ORDER = Object.freeze([
+  'cpu-light',
+  'cpu-balanced',
+  'gpu-very-weak',
+  'gpu-weak',
+  'gpu-balanced',
+  'gpu-strong',
+  'gpu-ultra',
+]);
+
 function buildDownloadUrl(model) {
   if (!model?.repo || !model.commit || !model.file) {
     throw new Error('Invalid model catalog specification.');
@@ -241,7 +329,7 @@ function validateCatalogIntegrity(catalog = MODEL_CATALOG) {
 }
 
 function getTierBundle(tierId) {
-  const bundle = TIER_BUNDLES[tierId] || TIER_BUNDLES['tier-light'];
+  const bundle = TIER_BUNDLES[tierId] || AI_PROFILE_PRESETS[tierId] || TIER_BUNDLES['tier-light'];
   const stt = MODELS_BY_ID[bundle.sttModelId];
   const llm = MODELS_BY_ID[bundle.llmModelId];
   const embed = MODELS_BY_ID[bundle.embedModelId];
@@ -252,6 +340,78 @@ function getTierBundle(tierId) {
     embed,
     totalBytes: (stt?.bytes || 0) + (llm?.bytes || 0) + (embed?.bytes || 0),
     modelIds: [bundle.sttModelId, bundle.llmModelId, bundle.embedModelId],
+  };
+}
+
+function getProfilePreset(profileId) {
+  const preset = AI_PROFILE_PRESETS[profileId];
+  if (!preset) return getTierBundle(profileId);
+  const stt = MODELS_BY_ID[preset.sttModelId];
+  const llm = MODELS_BY_ID[preset.llmModelId];
+  const embed = MODELS_BY_ID[preset.embedModelId];
+  return {
+    ...preset,
+    stt,
+    llm,
+    embed,
+    totalBytes: (stt?.bytes || 0) + (llm?.bytes || 0) + (embed?.bytes || 0),
+    modelIds: [preset.sttModelId, preset.llmModelId, preset.embedModelId],
+  };
+}
+
+function recommendProfileForHardware(profile) {
+  const ramGb = Number(profile?.ramGb || 0);
+  const vramGb = Number(profile?.vramGb || 0);
+  const hasDiscreteGpu = Boolean(profile?.hasDiscreteGpu) && vramGb >= 2;
+  if (!hasDiscreteGpu) {
+    return {
+      group: 'cpu',
+      profileId: ramGb >= 10 ? 'cpu-balanced' : 'cpu-light',
+    };
+  }
+  if (vramGb >= 12 && ramGb >= 16) return { group: 'gpu', profileId: 'gpu-ultra' };
+  if (vramGb >= 8 && ramGb >= 16) return { group: 'gpu', profileId: 'gpu-strong' };
+  if (vramGb >= 6 && ramGb >= 12) return { group: 'gpu', profileId: 'gpu-balanced' };
+  if (vramGb >= 4 && ramGb >= 8) return { group: 'gpu', profileId: 'gpu-weak' };
+  return { group: 'gpu', profileId: 'gpu-very-weak' };
+}
+
+function validateCustomProfileSelection(selection) {
+  const sttId = typeof selection?.sttModelId === 'string' ? selection.sttModelId.trim() : '';
+  const llmId = typeof selection?.llmModelId === 'string' ? selection.llmModelId.trim() : '';
+  const embedId = typeof selection?.embedModelId === 'string' ? selection.embedModelId.trim() : '';
+
+  const stt = sttId ? MODELS_BY_ID[sttId] : null;
+  const llm = llmId ? MODELS_BY_ID[llmId] : null;
+  const embed = embedId ? MODELS_BY_ID[embedId] : null;
+
+  const missingRoles = [];
+  if (stt?.role !== 'stt') missingRoles.push('stt');
+  if (llm?.role !== 'llm') missingRoles.push('llm');
+  if (embed?.role !== 'embed') missingRoles.push('embed');
+
+  if (missingRoles.length > 0) {
+    return {
+      ok: false,
+      code: 'CUSTOM_PROFILE_INCOMPLETE',
+      missingRoles,
+      totalBytes: 0,
+      modelIds: [],
+    };
+  }
+
+  return {
+    ok: true,
+    code: null,
+    missingRoles: [],
+    sttModelId: stt.id,
+    llmModelId: llm.id,
+    embedModelId: embed.id,
+    stt,
+    llm,
+    embed,
+    totalBytes: (stt.bytes || 0) + (llm.bytes || 0) + (embed.bytes || 0),
+    modelIds: [stt.id, llm.id, embed.id],
   };
 }
 
@@ -374,6 +534,33 @@ function selectTierRecommendation(profile, externalBackends = null) {
     };
   });
 
+  const recProfile = recommendProfileForHardware(profile);
+  const profiles = AI_PROFILE_ORDER.map((pid) => {
+    const preset = getProfilePreset(pid);
+    const fit = evaluateModelFit(
+      {
+        minRamGb: preset.minRamGb,
+        minVramGb: preset.group === 'gpu' ? preset.minVramGb : 0,
+        bytes: preset.totalBytes,
+      },
+      profile,
+    );
+    return {
+      id: preset.id,
+      group: preset.group,
+      legacyTier: preset.legacyTier,
+      minRamGb: preset.minRamGb,
+      minVramGb: preset.minVramGb,
+      sttModelId: preset.sttModelId,
+      llmModelId: preset.llmModelId,
+      embedModelId: preset.embedModelId,
+      totalBytes: preset.totalBytes,
+      recommended: preset.id === recProfile.profileId,
+      fitsHardware: fit.fitsHardware,
+      warningCode: fit.warningCode,
+    };
+  });
+
   const recommendedOptions = [];
   if (ollamaHasModels) {
     recommendedOptions.push({
@@ -405,6 +592,8 @@ function selectTierRecommendation(profile, externalBackends = null) {
 
   return {
     recommendedTier: hardwareTier,
+    recommendedProfileId: recProfile.profileId,
+    recommendedProfileGroup: recProfile.group,
     primaryOptionId: ollamaHasModels
       ? 'external-ollama'
       : lmHasModels
@@ -425,6 +614,7 @@ function selectTierRecommendation(profile, externalBackends = null) {
       downloadBytes: 0,
     },
     tiers,
+    profiles,
     models: modelsWithFit,
     recommendedOptions,
   };
@@ -435,10 +625,15 @@ module.exports = {
   MODEL_CATALOG,
   MODELS_BY_ID,
   TIER_BUNDLES,
+  AI_PROFILE_PRESETS,
+  AI_PROFILE_ORDER,
   buildDownloadUrl,
   assertAllowedModelLicense,
   validateCatalogIntegrity,
   getTierBundle,
+  getProfilePreset,
+  recommendProfileForHardware,
+  validateCustomProfileSelection,
   evaluateModelFit,
   detectExternalBackends,
   selectTierRecommendation,

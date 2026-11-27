@@ -20,8 +20,10 @@ import type {
   NotificationProfileId,
 } from '../../types';
 import { NOTIFICATION_EVENT_KEYS, NOTIFICATION_LEAD_OPTIONS } from '../../utils/notifications';
+import { InfoTooltip } from '../InfoTooltip';
 import { SelectField } from '../SelectField';
 import { ToggleSwitch } from '../ToggleSwitch';
+import { SettingsAdvancedSection } from './SettingsAdvancedSection';
 import { SettingsTabHeader } from './SettingsTabHeader';
 
 function readBrowserPermission(
@@ -42,6 +44,7 @@ interface NotificationsSettingsTabProps {
   notificationSoundEnabled: boolean;
   dailyDigestEnabled: boolean;
   dailyDigestTime: string;
+  revealSettingId?: string;
   onApplyProfile: (profile: Exclude<NotificationProfileId, 'custom'>) => void;
   onChangeChannel: (eventType: NotificationEventType, mode: NotificationChannelMode) => void;
   onChangeLeadMinutes: (minutes: number) => void;
@@ -65,6 +68,7 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
   notificationSoundEnabled,
   dailyDigestEnabled,
   dailyDigestTime,
+  revealSettingId,
   onApplyProfile,
   onChangeChannel,
   onChangeLeadMinutes,
@@ -189,8 +193,11 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
     },
   };
 
+  const forceAdvancedOpen =
+    revealSettingId === 'notif-quiet-digest' || revealSettingId === 'notif-channels';
+
   return (
-    <div className="space-y-6" data-testid="settings-notifications-section">
+    <div className="space-y-5 pb-4 animate-tab-enter" data-testid="settings-notifications-section">
       <SettingsTabHeader
         subtitle={t.notificationsSubtitle}
         onReset={onResetNotifications}
@@ -200,150 +207,131 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
             type="button"
             data-testid="notifications-test-btn"
             onClick={onSendTest}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow transition whitespace-nowrap"
           >
-            <Send className="h-3.5 w-3.5 text-[var(--accent)]" />
+            <Send className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             <span>{t.notificationsTestButton}</span>
           </button>
         }
       />
 
-      {/* OS / Browser Notification Permission Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
-          <span className="text-xs font-medium text-[var(--text-primary)]">
-            {t.notifPermissionLabel}:
-          </span>
-          <span className="rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]">
-            {browserPermission === 'desktop'
-              ? t.notifPermissionDesktopNative
-              : browserPermission === 'granted'
-                ? t.enabledBadge
-                : browserPermission === 'denied'
-                  ? t.disabledBadge
-                  : t.notifPermissionPrompt}
-          </span>
-        </div>
-        {isElectronDesktop && (
-          <button
-            type="button"
-            data-testid="notif-open-windows-settings-btn"
-            onClick={() => void window.agendameaWindow?.openWindowsNotificationSettings?.()}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
-          >
-            <ExternalLink className="h-3 w-3 text-[var(--accent)]" />
-            <span>{t.notifOpenWindowsSettingsButton}</span>
-          </button>
-        )}
-      </div>
-
-      {/* Preset Profiles */}
-      <section
-        aria-label={t.notificationsProfilesTitle}
-        data-setting-id="notif-profiles"
-        className="space-y-3"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-            {t.notificationsProfilesTitle}
-          </h3>
-          {profile === 'custom' && (
-            <span className="rounded-full border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--text-primary)]">
-              {t.notificationsProfileCustom}
+      {/* Primary Notifications Card (Everyday Controls) */}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70">
+        {/* OS / Browser Permission Row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <ShieldCheck className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
+            <span className="text-xs font-medium text-[var(--text-primary)]">
+              {t.notifPermissionLabel}:
             </span>
+            <span className="text-xs text-[var(--text-secondary)]">
+              {browserPermission === 'desktop'
+                ? t.notifPermissionDesktopNative
+                : browserPermission === 'granted'
+                  ? t.enabledBadge
+                  : browserPermission === 'denied'
+                    ? t.disabledBadge
+                    : t.notifPermissionPrompt}
+            </span>
+          </div>
+          {isElectronDesktop && (
+            <button
+              type="button"
+              data-testid="notif-open-windows-settings-btn"
+              onClick={() => void window.agendameaWindow?.openWindowsNotificationSettings?.()}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors"
+            >
+              <ExternalLink className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <span>{t.notifOpenWindowsSettingsButton}</span>
+            </button>
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          {profileCards.map((card) => {
-            const Icon = card.icon;
-            const active = profile === card.id;
-            return (
-              <button
-                key={card.id}
-                type="button"
-                data-testid={`notification-profile-${card.id}`}
-                aria-pressed={active}
-                onClick={() => onApplyProfile(card.id)}
-                className={`flex items-start gap-2.5 rounded-xl border p-3.5 text-start transition-colors ${
-                  active
-                    ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                    : 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]'
-                }`}
-              >
-                <Icon
-                  className={`h-4 w-4 mt-0.5 shrink-0 ${
-                    active ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
-                  }`}
-                />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-[var(--text-primary)]">{card.title}</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-muted)]">
-                    {card.desc}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Quiet Hours, Notification Sound & Daily Digest */}
-      <section
-        aria-label={t.notifQuietHoursTitle}
-        data-setting-id="notif-quiet-digest"
-        className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
-      >
-        {/* Quiet Hours */}
-        <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-start gap-2.5 min-w-0">
-              <Moon className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  {t.notifQuietHoursTitle}
-                </p>
-                <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.notifQuietHoursDesc}</p>
-              </div>
-            </div>
-            <ToggleSwitch
-              checked={quietHoursEnabled}
-              onChange={onToggleQuietHours}
-              label={t.notifQuietHoursTitle}
-              testId="notif-quiet-hours-toggle"
-            />
+        {/* Preset Profiles */}
+        <section
+          aria-label={t.notificationsProfilesTitle}
+          data-setting-id="notif-profiles"
+          className="p-4 sm:p-5 space-y-3"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t.notificationsProfilesTitle}
+            </h3>
+            {profile === 'custom' && (
+              <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                {t.notificationsProfileCustom}
+              </span>
+            )}
           </div>
 
-          {quietHoursEnabled && (
-            <div className="flex flex-wrap items-center gap-3 ps-6 pt-1">
-              <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                <span>{t.notifQuietFromLabel}</span>
-                <input
-                  type="time"
-                  data-testid="notif-quiet-start"
-                  value={quietHoursStart}
-                  onChange={(e) => onChangeQuietHoursStart(e.target.value)}
-                  className="font-mono-tabular rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--accent)]"
-                />
-              </label>
-              <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
-                <span>{t.notifQuietToLabel}</span>
-                <input
-                  type="time"
-                  data-testid="notif-quiet-end"
-                  value={quietHoursEnd}
-                  onChange={(e) => onChangeQuietHoursEnd(e.target.value)}
-                  className="font-mono-tabular rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--accent)]"
-                />
-              </label>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {profileCards.map((card) => {
+              const Icon = card.icon;
+              const active = profile === card.id;
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  data-testid={`notification-profile-${card.id}`}
+                  aria-pressed={active}
+                  onClick={() => onApplyProfile(card.id)}
+                  className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-start transition ${
+                    active
+                      ? 'border-[var(--border-strong)] bg-[var(--surface-subtle)] text-[var(--text-primary)]'
+                      : 'border-[var(--border)]/70 bg-[var(--canvas)]/50 text-[var(--text-secondary)] ag-hover-card-glow hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  <Icon
+                    className={`h-4 w-4 mt-0.5 shrink-0 ${
+                      active ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[var(--text-primary)]">{card.title}</p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-muted)]">
+                      {card.desc}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Upcoming Reminder Lead Time */}
+        <section
+          aria-label={t.notificationsLeadTimeTitle}
+          data-setting-id="notif-lead-time"
+          className="flex flex-wrap items-center justify-between gap-3 p-4 sm:px-5"
+        >
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <Clock className="h-4 w-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[var(--text-primary)]">
+                {t.notificationsLeadTimeTitle}
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                {t.notificationsLeadTimeDesc}
+              </p>
             </div>
-          )}
-        </div>
+          </div>
+          <SelectField
+            data-testid="notification-lead-select"
+            value={leadMinutes}
+            onChange={(e) => onChangeLeadMinutes(Number(e.target.value))}
+            wrapperClassName="w-36 shrink-0"
+          >
+            {NOTIFICATION_LEAD_OPTIONS.map((min) => (
+              <option key={min} value={min}>
+                {formatLeadOption(min)}
+              </option>
+            ))}
+          </SelectField>
+        </section>
 
         {/* Notification Sound */}
-        <div className="flex items-center justify-between gap-3 px-4 py-3.5">
-          <div className="flex items-start gap-2.5 min-w-0">
+        <div className="flex items-center justify-between gap-3 p-4 sm:px-5">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
             <Volume2 className="h-4 w-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
             <div className="min-w-0">
               <p className="text-sm font-medium text-[var(--text-primary)]">{t.notifSoundTitle}</p>
@@ -357,114 +345,150 @@ export const NotificationsSettingsTab = React.memo(function NotificationsSetting
             testId="notif-sound-toggle"
           />
         </div>
+      </div>
 
-        {/* Daily Digest */}
-        <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-start gap-2.5 min-w-0">
-              <Sun className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  {t.notifDailyDigestLabel}
-                </p>
-                <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.notifDailyDigestDesc}</p>
+      {/* Advanced Notifications: Quiet Hours, Daily Digest & Per-Event Channels */}
+      <SettingsAdvancedSection
+        forceOpen={forceAdvancedOpen}
+        testId="notif-advanced-section"
+        toggleTestId="notif-advanced-toggle"
+      >
+        <section
+          aria-label={t.notifQuietHoursTitle}
+          data-setting-id="notif-quiet-digest"
+          className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70"
+        >
+          {/* Quiet Hours */}
+          <div className="p-4 sm:px-5 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                <Moon className="h-4 w-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                      {t.notifQuietHoursTitle}
+                    </p>
+                    <InfoTooltip text={t.notifQuietHoursTooltip} testId="notif-quiet-info" />
+                  </div>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.notifQuietHoursDesc}</p>
+                </div>
               </div>
-            </div>
-            <ToggleSwitch
-              checked={dailyDigestEnabled}
-              onChange={onToggleDailyDigest}
-              label={t.notifDailyDigestLabel}
-              testId="notif-daily-digest-toggle"
-            />
-          </div>
-          {dailyDigestEnabled && (
-            <div className="flex items-center gap-2 ps-6">
-              <span className="text-xs text-[var(--text-secondary)]">
-                {t.notifDigestTimeLabel}:
-              </span>
-              <input
-                type="time"
-                data-testid="notif-daily-digest-time"
-                value={dailyDigestTime}
-                onChange={(e) => onChangeDailyDigestTime(e.target.value)}
-                className="font-mono-tabular rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--accent)]"
+              <ToggleSwitch
+                checked={quietHoursEnabled}
+                onChange={onToggleQuietHours}
+                label={t.notifQuietHoursTitle}
+                testId="notif-quiet-hours-toggle"
               />
             </div>
-          )}
-        </div>
-      </section>
 
-      {/* Upcoming Reminder Lead Time */}
-      <section
-        aria-label={t.notificationsLeadTimeTitle}
-        data-setting-id="notif-lead-time"
-        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5"
-      >
-        <div className="flex items-start gap-2.5 min-w-0">
-          <Clock className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-[var(--text-primary)]">
-              {t.notificationsLeadTimeTitle}
-            </p>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.notificationsLeadTimeDesc}</p>
-          </div>
-        </div>
-        <SelectField
-          data-testid="notification-lead-select"
-          value={leadMinutes}
-          onChange={(e) => onChangeLeadMinutes(Number(e.target.value))}
-          wrapperClassName="w-36 shrink-0"
-        >
-          {NOTIFICATION_LEAD_OPTIONS.map((min) => (
-            <option key={min} value={min}>
-              {formatLeadOption(min)}
-            </option>
-          ))}
-        </SelectField>
-      </section>
-
-      {/* Per-Event Channel Controls */}
-      <section
-        aria-label={t.notificationsChannelsTitle}
-        data-setting-id="notif-channels"
-        className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
-      >
-        <div className="border-b border-[var(--border)] bg-[var(--canvas)]/60 px-4 py-3">
-          <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
-            {t.notificationsChannelsTitle}
-          </h3>
-        </div>
-        <div className="divide-y divide-[var(--border)]">
-          {NOTIFICATION_EVENT_KEYS.map((eventKey) => (
-            <div
-              key={eventKey}
-              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-[var(--text-primary)]">
-                  {eventMeta[eventKey].title}
-                </p>
-                <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
-                  {eventMeta[eventKey].desc}
-                </p>
+            {quietHoursEnabled && (
+              <div className="flex flex-wrap items-center gap-3 ps-6 pt-1">
+                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                  <span>{t.notifQuietFromLabel}</span>
+                  <input
+                    type="time"
+                    data-testid="notif-quiet-start"
+                    value={quietHoursStart}
+                    onChange={(e) => onChangeQuietHoursStart(e.target.value)}
+                    className="font-mono-tabular rounded-lg border border-[var(--border)] bg-transparent px-2.5 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--text-secondary)]"
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                  <span>{t.notifQuietToLabel}</span>
+                  <input
+                    type="time"
+                    data-testid="notif-quiet-end"
+                    value={quietHoursEnd}
+                    onChange={(e) => onChangeQuietHoursEnd(e.target.value)}
+                    className="font-mono-tabular rounded-lg border border-[var(--border)] bg-transparent px-2.5 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--text-secondary)]"
+                  />
+                </label>
               </div>
-              <SelectField
-                data-testid={`notification-channel-${eventKey}`}
-                value={channels[eventKey]}
-                onChange={(e) =>
-                  onChangeChannel(eventKey, e.target.value as NotificationChannelMode)
-                }
-                wrapperClassName="w-40 shrink-0"
-              >
-                <option value="both">{t.notificationsChannelBoth}</option>
-                <option value="inApp">{t.notificationsChannelInApp}</option>
-                <option value="desktop">{t.notificationsChannelDesktop}</option>
-                <option value="off">{t.notificationsChannelOff}</option>
-              </SelectField>
+            )}
+          </div>
+
+          {/* Daily Digest */}
+          <div className="p-4 sm:px-5 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                <Sun className="h-4 w-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                    {t.notifDailyDigestLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                    {t.notifDailyDigestDesc}
+                  </p>
+                </div>
+              </div>
+              <ToggleSwitch
+                checked={dailyDigestEnabled}
+                onChange={onToggleDailyDigest}
+                label={t.notifDailyDigestLabel}
+                testId="notif-daily-digest-toggle"
+              />
             </div>
-          ))}
-        </div>
-      </section>
+            {dailyDigestEnabled && (
+              <div className="flex items-center gap-2 ps-6">
+                <span className="text-xs text-[var(--text-secondary)]">
+                  {t.notifDigestTimeLabel}:
+                </span>
+                <input
+                  type="time"
+                  data-testid="notif-daily-digest-time"
+                  value={dailyDigestTime}
+                  onChange={(e) => onChangeDailyDigestTime(e.target.value)}
+                  className="font-mono-tabular rounded-lg border border-[var(--border)] bg-transparent px-2.5 py-1 text-xs text-[var(--text-primary)] focus:border-[var(--text-secondary)]"
+                />
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Per-Event Channel Matrix Card */}
+        <section
+          aria-label={t.notificationsChannelsTitle}
+          data-setting-id="notif-channels"
+          className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:p-5 space-y-3"
+        >
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t.notificationsChannelsTitle}
+            </h3>
+            <InfoTooltip text={t.notifChannelsTooltip} testId="notif-channels-info" />
+          </div>
+          <div className="divide-y divide-[var(--border)]/70">
+            {NOTIFICATION_EVENT_KEYS.map((eventKey) => (
+              <div
+                key={eventKey}
+                className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-1 last:pb-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-[var(--text-primary)]">
+                    {eventMeta[eventKey].title}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                    {eventMeta[eventKey].desc}
+                  </p>
+                </div>
+                <SelectField
+                  data-testid={`notification-channel-${eventKey}`}
+                  value={channels[eventKey]}
+                  onChange={(e) =>
+                    onChangeChannel(eventKey, e.target.value as NotificationChannelMode)
+                  }
+                  wrapperClassName="w-40 shrink-0"
+                >
+                  <option value="both">{t.notificationsChannelBoth}</option>
+                  <option value="inApp">{t.notificationsChannelInApp}</option>
+                  <option value="desktop">{t.notificationsChannelDesktop}</option>
+                  <option value="off">{t.notificationsChannelOff}</option>
+                </SelectField>
+              </div>
+            ))}
+          </div>
+        </section>
+      </SettingsAdvancedSection>
     </div>
   );
 });

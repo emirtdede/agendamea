@@ -1,12 +1,14 @@
 import { type RefObject, useEffect } from 'react';
 import { subscribeServerEvents } from '../api/eventStream';
 import type { UiDictionary } from '../i18n/translations';
+import { appLockStore } from '../store/appLockStore';
 import { workspaceUiStore } from '../store/workspaceUiStore';
 
 interface UseServerSseSyncOptions {
   tRef: RefObject<UiDictionary>;
   quickAddRef: RefObject<HTMLInputElement | null>;
   launchViewOverriddenRef?: { current: boolean };
+  isAppLocked?: boolean;
   scheduleFocus: (fn: () => void, delayMs: number) => void;
   focusTodoFromNotification: (todoId: string) => void;
   dispatchVoiceNotification: (payload: {
@@ -25,6 +27,7 @@ export function useServerSseSync({
   tRef,
   quickAddRef,
   launchViewOverriddenRef,
+  isAppLocked = false,
   scheduleFocus,
   focusTodoFromNotification,
   dispatchVoiceNotification,
@@ -36,17 +39,22 @@ export function useServerSseSync({
       workspaceUiStore.setIsCloseModalOpen(true);
     });
     const unsubQuickAdd = window.agendameaWindow?.onFocusQuickAdd?.(() => {
+      if (appLockStore.getState().locked) return;
       workspaceUiStore.dismissModals();
       scheduleFocus(() => quickAddRef.current?.focus(), 60);
     });
     const unsubNavView = window.agendameaWindow?.onNavigateSmartView?.((viewId) => {
+      if (appLockStore.getState().locked) return;
       if (viewId === 'today' || viewId === 'important' || viewId === 'all') {
         if (launchViewOverriddenRef) launchViewOverriddenRef.current = true;
         workspaceUiStore.dismissModals();
         workspaceUiStore.setActiveView({ type: 'smart', id: viewId });
       }
     });
-    const unsubFocusTodo = window.agendameaWindow?.onFocusTodo?.(focusTodoFromNotification);
+    const unsubFocusTodo = window.agendameaWindow?.onFocusTodo?.((todoId) => {
+      if (appLockStore.getState().locked) return;
+      focusTodoFromNotification(todoId);
+    });
     return () => {
       if (typeof unsubClose === 'function') unsubClose();
       if (typeof unsubQuickAdd === 'function') unsubQuickAdd();
@@ -57,8 +65,10 @@ export function useServerSseSync({
 
   // Live refresh whenever external CLI, MCP server, or Incoming Webhook mutates tasks (shared SSE bus)
   useEffect(() => {
+    if (isAppLocked) return;
     let refreshTimer: number | null = null;
     const unsub = subscribeServerEvents((parsed) => {
+      if (appLockStore.getState().locked) return;
       if (parsed?.type === 'ai.download.progress' && parsed.done === true && parsed.ok === true) {
         const modelLabel = typeof parsed.modelId === 'string' ? parsed.modelId : '';
         dispatchVoiceNotification({
@@ -92,7 +102,7 @@ export function useServerSseSync({
       if (refreshTimer !== null) window.clearTimeout(refreshTimer);
       unsub();
     };
-  }, [dispatchVoiceNotification, loadData, tRef]);
+  }, [dispatchVoiceNotification, isAppLocked, loadData, tRef]);
 
   // Handle Windows Jump List / PWA shortcut launch query params (?view=... & ?action=new)
   useEffect(() => {

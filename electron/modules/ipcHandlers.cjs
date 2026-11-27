@@ -4,12 +4,28 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { ensureDynamicIconFiles, updateWindowsShortcuts } = require('../iconGenerator.cjs');
-const cliInstaller = require('../../shared/cliInstaller.cjs');
-const mcpClients = require('../../shared/mcpClients.cjs');
-const { getAppLogger } = require('../../shared/logger.cjs');
 
-const ipcLog = () => getAppLogger('main');
+let _iconGenMod = null;
+let _cliInstallerMod = null;
+let _mcpClientsMod = null;
+let _loggerMod = null;
+
+function getIconGen() {
+  if (!_iconGenMod) _iconGenMod = require('../iconGenerator.cjs');
+  return _iconGenMod;
+}
+function getCliInstaller() {
+  if (!_cliInstallerMod) _cliInstallerMod = require('../../shared/cliInstaller.cjs');
+  return _cliInstallerMod;
+}
+function getMcpClients() {
+  if (!_mcpClientsMod) _mcpClientsMod = require('../../shared/mcpClients.cjs');
+  return _mcpClientsMod;
+}
+const ipcLog = () => {
+  if (!_loggerMod) _loggerMod = require('../../shared/logger.cjs');
+  return _loggerMod.getAppLogger('main');
+};
 
 function detectDefaultOneDriveFolder(app) {
   const candidates = [
@@ -51,7 +67,9 @@ function registerCoreIpcHandlers(ctx) {
     resolveStartupIcons,
     showAndFocusMainWindow,
     performFullQuit,
+    performAppRelaunch,
     setCloseBehavior,
+    setWindowThemeMode,
     applyLoginItemSetting,
     syncGlobalQuickAddShortcut,
     syncVoiceDictationShortcut,
@@ -62,10 +80,12 @@ function registerCoreIpcHandlers(ctx) {
     getVoiceOverlayManager,
     updateTrayLabels,
     rebuildWindowsJumpList,
+    invalidateIconCache,
     consumeInitialLocaleInfo,
   } = ctx;
 
   const activeNotifications = new Set();
+  let lastAppliedIconSig = '';
 
   ipcMain.handle('window:minimize', (event) => {
     resolveSenderWindow(event)?.minimize();
@@ -285,7 +305,7 @@ function registerCoreIpcHandlers(ctx) {
   ipcMain.handle('cli:install-shims', async (event) => {
     assertTrustedIpcSender(event);
     try {
-      return await cliInstaller.installCliShims({
+      return await getCliInstaller().installCliShims({
         runtimeRoot: getRuntimeRoot(),
         execPath: process.execPath,
       });
@@ -298,7 +318,7 @@ function registerCoreIpcHandlers(ctx) {
   ipcMain.handle('mcp:list-clients', (event) => {
     assertTrustedIpcSender(event);
     try {
-      return { ok: true, clients: mcpClients.listMcpClients() };
+      return { ok: true, clients: getMcpClients().listMcpClients() };
     } catch (err) {
       ipcLog().error({ err }, 'MCP list clients error');
       return { ok: false, clients: [], error: 'MCP_LIST_FAILED' };
@@ -309,7 +329,7 @@ function registerCoreIpcHandlers(ctx) {
     assertTrustedIpcSender(event);
     try {
       const runtimeRoot = getRuntimeRoot();
-      return mcpClients.installMcpClient(String(clientId || ''), {
+      return getMcpClients().installMcpClient(String(clientId || ''), {
         runtimeRoot,
         execPath: process.execPath,
         mcpPath: path.join(runtimeRoot, 'mcp', 'server.cjs'),
@@ -323,7 +343,7 @@ function registerCoreIpcHandlers(ctx) {
   ipcMain.handle('mcp:uninstall-client', (event, clientId) => {
     assertTrustedIpcSender(event);
     try {
-      return mcpClients.uninstallMcpClient(String(clientId || ''));
+      return getMcpClients().uninstallMcpClient(String(clientId || ''));
     } catch (err) {
       ipcLog().error({ err, clientId }, 'MCP client uninstall error');
       return { ok: false, error: 'MCP_UNINSTALL_FAILED' };
@@ -344,7 +364,7 @@ function registerCoreIpcHandlers(ctx) {
       }
       const selectedPath = picked.filePaths[0];
       const runtimeRoot = getRuntimeRoot();
-      return mcpClients.installCustomMcpConfig(selectedPath, {
+      return getMcpClients().installCustomMcpConfig(selectedPath, {
         runtimeRoot,
         execPath: process.execPath,
         mcpPath: path.join(runtimeRoot, 'mcp', 'server.cjs'),
@@ -362,7 +382,7 @@ function registerCoreIpcHandlers(ctx) {
     assertTrustedIpcSender(event);
     try {
       const runtimeRoot = getRuntimeRoot();
-      return await mcpClients.probeMcpServer({
+      return await getMcpClients().probeMcpServer({
         runtimeRoot,
         execPath: process.execPath,
         mcpPath: path.join(runtimeRoot, 'mcp', 'server.cjs'),
@@ -377,7 +397,7 @@ function registerCoreIpcHandlers(ctx) {
     assertTrustedIpcSender(event);
     try {
       if (process.platform === 'win32') {
-        const binDir = cliInstaller.writeCliShimFiles({
+        const binDir = getCliInstaller().writeCliShimFiles({
           runtimeRoot: getRuntimeRoot(),
           execPath: process.execPath,
         });
@@ -422,6 +442,7 @@ function registerCoreIpcHandlers(ctx) {
 
   ipcMain.handle('app:get-diagnostics', (event) => {
     assertTrustedIpcSender(event);
+    const cliInstaller = getCliInstaller();
     const runtimeRoot = getRuntimeRoot();
     const cliPath = path.join(runtimeRoot, 'cli', 'agendamea.cjs');
     const mcpPath = path.join(runtimeRoot, 'mcp', 'server.cjs');
@@ -629,8 +650,22 @@ function registerCoreIpcHandlers(ctx) {
     const num = Number(factor);
     if (!win || !Number.isFinite(num)) return { ok: false };
     const clamped = Math.max(0.8, Math.min(1.5, num));
+    if (
+      typeof win.webContents.getZoomFactor === 'function' &&
+      Math.abs(win.webContents.getZoomFactor() - clamped) < 0.001
+    ) {
+      return { ok: true, factor: clamped };
+    }
     win.webContents.setZoomFactor(clamped);
     return { ok: true, factor: clamped };
+  });
+
+  ipcMain.handle('window:set-theme-mode', (event, mode) => {
+    assertTrustedIpcSender(event);
+    if (typeof setWindowThemeMode === 'function') {
+      return setWindowThemeMode(mode);
+    }
+    return { ok: false };
   });
 
   ipcMain.handle('app:get-initial-locale', (event) => {
@@ -638,14 +673,58 @@ function registerCoreIpcHandlers(ctx) {
     return consumeInitialLocaleInfo();
   });
 
+  ipcMain.handle('app:relaunch', (event) => {
+    assertTrustedIpcSender(event);
+    if (typeof performAppRelaunch === 'function') {
+      setTimeout(() => {
+        performAppRelaunch();
+      }, 30);
+      return { ok: true };
+    }
+    return { ok: false };
+  });
+
   ipcMain.handle('icon:apply', (event, payload) => {
     assertTrustedIpcSender(event);
     try {
-      const bg = payload && typeof payload.bg === 'string' ? payload.bg : '#18181b';
-      const fg = payload && typeof payload.fg === 'string' ? payload.fg : '#ffffff';
+      const bg =
+        payload && typeof payload.bg === 'string' ? payload.bg.trim().toLowerCase() : '#18181b';
+      const fg =
+        payload && typeof payload.fg === 'string' ? payload.fg.trim().toLowerCase() : '#ffffff';
       const shouldUpdateShortcuts = payload?.updateShortcuts !== false;
       const userDataDir = app.getPath('userData');
-      const generated = ensureDynamicIconFiles(userDataDir, bg, fg);
+      const iconGen = getIconGen();
+      const iconSig = `${bg}|${fg}`;
+
+      if (!shouldUpdateShortcuts) {
+        if (lastAppliedIconSig === iconSig) {
+          const saved = iconGen.readSavedActiveIcon(userDataDir);
+          if (saved?.icoPath) {
+            return { ok: true, icoPath: saved.icoPath, updatedShortcuts: 0, cached: true };
+          }
+        }
+        const saved = iconGen.readSavedActiveIcon(userDataDir);
+        if (
+          saved &&
+          saved.bg === bg &&
+          saved.fg === fg &&
+          saved.icoPath &&
+          saved.trayPngPath &&
+          saved.notifPngPath &&
+          fs.existsSync(saved.icoPath) &&
+          fs.existsSync(saved.trayPngPath) &&
+          fs.existsSync(saved.notifPngPath)
+        ) {
+          lastAppliedIconSig = iconSig;
+          return { ok: true, icoPath: saved.icoPath, updatedShortcuts: 0, cached: true };
+        }
+      }
+
+      const generated = iconGen.ensureDynamicIconFiles(userDataDir, bg, fg);
+      lastAppliedIconSig = iconSig;
+      if (typeof invalidateIconCache === 'function') {
+        invalidateIconCache();
+      }
 
       const win = resolveSenderWindow(event);
       if (win && !win.isDestroyed() && typeof win.setIcon === 'function') {
@@ -663,7 +742,7 @@ function registerCoreIpcHandlers(ctx) {
 
       let shortcuts = { updated: [], skipped: true };
       if (shouldUpdateShortcuts) {
-        shortcuts = updateWindowsShortcuts(generated.icoPath, {
+        shortcuts = iconGen.updateWindowsShortcuts(generated.icoPath, {
           shell,
           app,
           isStoreBuild: Boolean(process.windowsStore),

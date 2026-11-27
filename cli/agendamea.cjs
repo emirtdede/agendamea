@@ -2,8 +2,18 @@
 'use strict';
 
 (function runAgendameaCli() {
+  const firstRawArg = process.argv[2] || '';
+  const firstRawLower = firstRawArg.toLowerCase();
+
+  // Ultra-fast <10ms version exit before loading store, SQLite, or command modules
+  if (firstRawArg === '-v' || firstRawArg === '--version' || firstRawLower === 'version') {
+    const { APP_VERSION } = require('../shared/version.cjs');
+    console.log(`agendamea ${APP_VERSION}`);
+    return;
+  }
+
   // Fast-path zero-chain in-process MCP launch BEFORE loading colors/formatters so stdout stays pure JSON-RPC
-  if (process.argv[2] && process.argv[2].toLowerCase() === 'mcp' && process.argv.length === 3) {
+  if (firstRawLower === 'mcp' && process.argv.length === 3) {
     console.log = (...a) => console.error(...a);
     require('../mcp/server.cjs').startMcpServer();
     return;
@@ -28,30 +38,41 @@
     resolveViewSelectors,
     parseNaturalTaskTokens,
   } = require('./lib/cliHelpers.cjs');
-  const {
-    handleMcpCommand,
-    handleDynamicComplete,
-    handleCompletionCommand,
-    handleDoctorCommand,
-    handleServeCommand,
-    handleConfigCommand,
-  } = require('./commands/system.cjs');
-  const { handleAiCommand, handleRagCommand, handleAskCommand } = require('./commands/ai.cjs');
-  const {
-    handleStatusCommand,
-    handleMatrixCommand,
-    handleCalendarCommand,
-    handleKanbanCommand,
-    handleSubtaskCommand,
-    handleCategoryCommand,
-    handleTrashCommand,
-  } = require('./commands/viewsAndCatalog.cjs');
-  const {
-    handleSyncCommand,
-    handleHookCommand,
-    handleExportCommand,
-    handleImportCommand,
-  } = require('./commands/webhooksAndSync.cjs');
+
+  // Lazy-load command groups so daily `ag list` / `ag add` / `ag done` never parse unused AI/webhook/MCP modules
+  const handleMcpCommand = (...a) => require('./commands/system.cjs').handleMcpCommand(...a);
+  const handleDynamicComplete = (...a) =>
+    require('./commands/system.cjs').handleDynamicComplete(...a);
+  const handleCompletionCommand = (...a) =>
+    require('./commands/system.cjs').handleCompletionCommand(...a);
+  const handleDoctorCommand = (...a) => require('./commands/system.cjs').handleDoctorCommand(...a);
+  const handleServeCommand = (...a) => require('./commands/system.cjs').handleServeCommand(...a);
+  const handleConfigCommand = (...a) => require('./commands/system.cjs').handleConfigCommand(...a);
+  const handleAiCommand = (...a) => require('./commands/ai.cjs').handleAiCommand(...a);
+  const handleRagCommand = (...a) => require('./commands/ai.cjs').handleRagCommand(...a);
+  const handleAskCommand = (...a) => require('./commands/ai.cjs').handleAskCommand(...a);
+  const handleStatusCommand = (...a) =>
+    require('./commands/viewsAndCatalog.cjs').handleStatusCommand(...a);
+  const handleMatrixCommand = (...a) =>
+    require('./commands/viewsAndCatalog.cjs').handleMatrixCommand(...a);
+  const handleCalendarCommand = (...a) =>
+    require('./commands/viewsAndCatalog.cjs').handleCalendarCommand(...a);
+  const handleKanbanCommand = (...a) =>
+    require('./commands/viewsAndCatalog.cjs').handleKanbanCommand(...a);
+  const handleSubtaskCommand = (...a) =>
+    require('./commands/viewsAndCatalog.cjs').handleSubtaskCommand(...a);
+  const handleCategoryCommand = (...a) =>
+    require('./commands/viewsAndCatalog.cjs').handleCategoryCommand(...a);
+  const handleTrashCommand = (...a) =>
+    require('./commands/viewsAndCatalog.cjs').handleTrashCommand(...a);
+  const handleSyncCommand = (...a) =>
+    require('./commands/webhooksAndSync.cjs').handleSyncCommand(...a);
+  const handleHookCommand = (...a) =>
+    require('./commands/webhooksAndSync.cjs').handleHookCommand(...a);
+  const handleExportCommand = (...a) =>
+    require('./commands/webhooksAndSync.cjs').handleExportCommand(...a);
+  const handleImportCommand = (...a) =>
+    require('./commands/webhooksAndSync.cjs').handleImportCommand(...a);
 
   async function main() {
     const args = process.argv.slice(2);

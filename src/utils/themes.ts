@@ -798,7 +798,7 @@ export function resolveAppIconColors(
   const effectiveMode = resolveEffectiveThemeMode(themeMode);
   const id = appIconId ?? 'match-theme';
   if (id === 'obsidian') {
-    return { bg: '#111114', fg: '#fafafa', border: 'rgba(255,255,255,0.14)' };
+    return { bg: '#111114', fg: '#fafafa', border: 'rgba(255,255,255,0.18)' };
   }
   if (id === 'obsidian-light') {
     return { bg: '#fafafa', fg: '#111114', border: 'rgba(17,17,20,0.18)' };
@@ -824,9 +824,7 @@ export function resolveAppIconColors(
     }
     const activeTheme = getThemeById(themeId);
     if (activeTheme.id === 'obsidian') {
-      return effectiveMode === 'dark'
-        ? { bg: '#fafafa', fg: '#09090b', border: 'rgba(9,9,11,0.16)' }
-        : { bg: '#18181b', fg: '#ffffff', border: 'rgba(255,255,255,0.12)' };
+      return { bg: '#111114', fg: '#fafafa', border: 'rgba(255,255,255,0.18)' };
     }
     const bg = effectiveMode === 'dark' ? activeTheme.swatchDark : activeTheme.swatch;
     const fg = getContrastingForeground(bg);
@@ -858,12 +856,16 @@ export function applyAppIconTokensToDocument(colors: {
   root.style.setProperty('--app-icon-border', colors.border);
 }
 
+let lastElectronZoomFactor = 1;
+
 export function applyAccessibilityToDocument(options: {
   zoomPercent: number;
   highContrast: boolean;
   reducedMotion: boolean;
   listDensity?: string;
   fontFamily?: string;
+  fontScale?: string;
+  readableSpacing?: boolean;
   colorBlindShapes?: boolean;
   strongFocusRing?: boolean;
 }): void {
@@ -895,8 +897,15 @@ export function applyAccessibilityToDocument(options: {
     root.classList.remove('colorblind-shapes');
   }
 
+  if (options.readableSpacing) {
+    root.classList.add('readable-spacing');
+  } else {
+    root.classList.remove('readable-spacing');
+  }
+
   root.dataset.density = options.listDensity || 'comfortable';
   root.dataset.font = options.fontFamily || 'system';
+  root.dataset.fontScale = options.fontScale || 'normal';
 
   const electronBridge = (
     window as unknown as {
@@ -906,9 +915,13 @@ export function applyAccessibilityToDocument(options: {
 
   if (electronBridge && typeof electronBridge.setZoomFactor === 'function') {
     root.style.zoom = '';
-    void Promise.resolve(electronBridge.setZoomFactor(zoom / 100)).catch(() => {
-      /* ignore */
-    });
+    const nextFactor = zoom / 100;
+    if (lastElectronZoomFactor !== nextFactor) {
+      lastElectronZoomFactor = nextFactor;
+      void Promise.resolve(electronBridge.setZoomFactor(nextFactor)).catch(() => {
+        /* ignore */
+      });
+    }
   } else {
     root.style.zoom = zoom === 100 ? '' : `${zoom}%`;
   }
@@ -917,6 +930,8 @@ export function applyAccessibilityToDocument(options: {
     localStorage.setItem('agendamea-zoom-percent', String(zoom));
     localStorage.setItem('agendamea-high-contrast', String(Boolean(options.highContrast)));
     localStorage.setItem('agendamea-reduced-motion', String(Boolean(options.reducedMotion)));
+    localStorage.setItem('agendamea-font-scale', options.fontScale || 'normal');
+    localStorage.setItem('agendamea-readable-spacing', String(Boolean(options.readableSpacing)));
   } catch {
     // Ignore storage restrictions
   }

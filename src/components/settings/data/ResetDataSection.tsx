@@ -26,7 +26,7 @@ export const ResetDataSection = React.memo(function ResetDataSection({
   const { t } = useI18n();
 
   return (
-    <div data-testid="reset-all-data-section" className="px-4 py-3.5 space-y-3">
+    <div data-testid="reset-all-data-section" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-[var(--text-primary)]">
@@ -40,7 +40,7 @@ export const ResetDataSection = React.memo(function ResetDataSection({
             data-testid="reset-all-data-open-btn"
             disabled={isResettingData || isImporting}
             onClick={onOpenConfirm}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/15 disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 dark:text-red-400 ag-hover-danger-glow disabled:opacity-40 transition-colors whitespace-nowrap shrink-0"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             <span>{t.resetDataButton}</span>
@@ -53,7 +53,7 @@ export const ResetDataSection = React.memo(function ResetDataSection({
           role="alertdialog"
           data-testid="reset-all-data-confirm-box"
           aria-label={t.resetDataSectionTitle}
-          className="animate-tab-enter rounded-xl border border-red-500/35 bg-red-500/10 p-3.5 space-y-3"
+          className="animate-tab-enter border-s-2 border-red-500/70 ps-4 py-2 space-y-3"
         >
           <div className="flex items-start gap-2.5">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
@@ -73,12 +73,12 @@ export const ResetDataSection = React.memo(function ResetDataSection({
             <span>{t.resetDataIncludeSettingsLabel}</span>
           </label>
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-3">
             <button
               type="button"
               disabled={isResettingData}
               onClick={onCancelConfirm}
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 transition-colors"
+              className="text-xs font-medium text-[var(--text-secondary)] ag-hover-glow disabled:opacity-40 transition-colors"
             >
               {t.cancelButton}
             </button>

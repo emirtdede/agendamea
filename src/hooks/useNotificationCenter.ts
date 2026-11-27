@@ -189,10 +189,25 @@ export function useNotificationCenter({
   // Background due/upcoming task reminder ticker (checks every 20s)
   useEffect(() => {
     const checkReminders = () => {
-      const now = new Date();
       const notifState = notificationStore.getState();
+      const taskDueDelivery = shouldDeliverNotification(notifState.channels, 'taskDue');
+      const taskUpcomingDelivery = shouldDeliverNotification(notifState.channels, 'taskUpcoming');
+      const remindersActive =
+        Boolean(notifState.dailyDigestEnabled) ||
+        taskDueDelivery.inApp ||
+        taskDueDelivery.desktop ||
+        taskUpcomingDelivery.inApp ||
+        taskUpcomingDelivery.desktop;
+      if (!remindersActive) return;
+
+      const list = todosRef.current;
+      if (!notifState.dailyDigestEnabled && !list.some((item) => !item.completed && item.dueDate)) {
+        return;
+      }
+
+      const now = new Date();
       const leadMinutes = notifState.leadMinutes;
-      const hits = evaluateTaskReminders(todosRef.current, now, leadMinutes);
+      const hits = evaluateTaskReminders(list, now, leadMinutes);
       const dict = tRef.current;
       let addedAny = false;
       for (const hit of hits) {

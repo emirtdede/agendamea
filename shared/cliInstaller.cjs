@@ -140,6 +140,40 @@ function writeCliShimFiles({ runtimeRoot, execPath, binDir: customBinDir } = {})
 
   const bundledExe = getBundledCliExePath(resolvedRoot);
   if (bundledExe) {
+    const targetJsonPath = path.join(binDir, 'ag.target.json');
+    const primaryExe = path.join(binDir, 'ag.exe');
+    const agendaExe = path.join(binDir, 'agenda.exe');
+    const agendameaExe = path.join(binDir, 'agendamea.exe');
+
+    // Fast no-op when target config and shim executables are already up to date (avoids unnecessary Defender PE scans)
+    try {
+      if (
+        fs.existsSync(targetJsonPath) &&
+        fs.existsSync(primaryExe) &&
+        fs.existsSync(agendaExe) &&
+        fs.existsSync(agendameaExe) &&
+        !LEGACY_CMD_NAMES.some((n) => fs.existsSync(path.join(binDir, n)))
+      ) {
+        const existingCfg = JSON.parse(fs.readFileSync(targetJsonPath, 'utf8'));
+        const srcStat = fs.statSync(bundledExe);
+        const dstStat = fs.statSync(primaryExe);
+        const targetMatches =
+          existingCfg &&
+          existingCfg.schemaVersion === 1 &&
+          existingCfg.execPath === targetExec &&
+          existingCfg.cliScript === cliScript &&
+          existingCfg.mcpScript === mcpScript &&
+          existingCfg.runtimeRoot === resolvedRoot;
+        const binMatches =
+          dstStat.size === srcStat.size && Math.abs(dstStat.mtimeMs - srcStat.mtimeMs) < 2000;
+        if (targetMatches && binMatches) {
+          return binDir;
+        }
+      }
+    } catch {
+      // Fall through to full refresh
+    }
+
     const targetConfig = {
       schemaVersion: 1,
       execPath: targetExec,
@@ -148,12 +182,17 @@ function writeCliShimFiles({ runtimeRoot, execPath, binDir: customBinDir } = {})
       runtimeRoot: resolvedRoot,
       updatedAt: new Date().toISOString(),
     };
-    writeAtomicJson(path.join(binDir, 'ag.target.json'), targetConfig);
+    writeAtomicJson(targetJsonPath, targetConfig);
 
-    const primaryExe = path.join(binDir, 'ag.exe');
     safeReplaceBinary(bundledExe, primaryExe, null);
-    safeReplaceBinary(bundledExe, path.join(binDir, 'agenda.exe'), primaryExe);
-    safeReplaceBinary(bundledExe, path.join(binDir, 'agendamea.exe'), primaryExe);
+    try {
+      const srcStat = fs.statSync(bundledExe);
+      fs.utimesSync(primaryExe, srcStat.atime, srcStat.mtime);
+    } catch {
+      // Non-fatal mtime preservation
+    }
+    safeReplaceBinary(bundledExe, agendaExe, primaryExe);
+    safeReplaceBinary(bundledExe, agendameaExe, primaryExe);
 
     // Clean up legacy .cmd/.ps1 shims so PATHEXT resolution is deterministic and clutter-free
     for (const legacy of LEGACY_CMD_NAMES) {

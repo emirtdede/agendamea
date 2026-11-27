@@ -409,236 +409,237 @@ export const WebhooksSettingsTab = React.memo(function WebhooksSettingsTab({
     <section
       aria-label={t.docsWebhookTitle}
       data-setting-id="webhooks-main"
-      className="space-y-4"
+      className="space-y-5"
       data-testid="docs-webhook-section"
     >
-      {/* Always-Mounted Dual Status Strip (Outgoing + Incoming ToggleSwitch) */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
-        <div className="flex items-start gap-2">
-          <Webhook className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
+      {/* Card 1: Dual Status Toggles */}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70">
+        <div className="flex items-start gap-2.5 p-4 sm:px-5">
+          <Webhook className="h-3.5 w-3.5 text-[var(--text-muted)] mt-0.5 shrink-0" />
           <div className="min-w-0">
-            <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
               {t.docsWebhookTitle}
             </h3>
-            <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.docsWebhookDesc}</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
+              {t.docsWebhookDesc}
+            </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2">
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-[var(--text-primary)] truncate">
-                {t.settingsTabWebhooks}
-              </p>
-              <p className="text-[10.5px] text-[var(--text-muted)]">
-                {enabledDraft ? t.enabledBadge : t.disabledBadge}
-              </p>
-            </div>
-            <ToggleSwitch
-              checked={enabledDraft}
-              onChange={(next) => {
-                setEnabledDraft(next);
-                void onSaveWebhook(buildPatch({ webhookEnabled: next })).catch(() => {
-                  /* Error toast is reported by parent store */
-                });
-              }}
-              label={t.docsWebhookTitle}
-              testId="docs-webhook-toggle"
-            />
+        <div className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-[var(--text-primary)] truncate">
+              {t.settingsTabWebhooks}
+            </p>
+            <p className="text-[11px] text-[var(--text-muted)]">
+              {enabledDraft ? t.enabledBadge : t.disabledBadge}
+            </p>
           </div>
+          <ToggleSwitch
+            checked={enabledDraft}
+            onChange={(next) => {
+              setEnabledDraft(next);
+              void onSaveWebhook(buildPatch({ webhookEnabled: next })).catch(() => {
+                /* Error toast is reported by parent store */
+              });
+            }}
+            label={t.docsWebhookTitle}
+            testId="docs-webhook-toggle"
+          />
+        </div>
 
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2">
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-[var(--text-primary)] truncate">
-                {t.webhookIncomingToggleLabel}
-              </p>
-              <p className="font-mono-tabular text-[10.5px] text-[var(--text-muted)] truncate">
-                127.0.0.1:{runtimePort}
-              </p>
-            </div>
-            <ToggleSwitch
-              checked={incomingEnabledDraft}
-              onChange={(next) => {
-                setIncomingEnabledDraft(next);
-                void onSaveWebhook(buildPatch({ webhookIncomingEnabled: next })).catch(() => {
-                  /* Error toast is reported by parent store */
-                });
-              }}
-              label={t.webhookIncomingToggleLabel}
-              testId="docs-webhook-incoming-toggle"
-            />
+        <div className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-[var(--text-primary)] truncate">
+              {t.webhookIncomingToggleLabel}
+            </p>
+            <p className="font-mono-tabular text-[11px] text-[var(--text-muted)] truncate">
+              127.0.0.1:{runtimePort}
+            </p>
           </div>
+          <ToggleSwitch
+            checked={incomingEnabledDraft}
+            onChange={(next) => {
+              setIncomingEnabledDraft(next);
+              void onSaveWebhook(buildPatch({ webhookIncomingEnabled: next })).catch(() => {
+                /* Error toast is reported by parent store */
+              });
+            }}
+            label={t.webhookIncomingToggleLabel}
+            testId="docs-webhook-incoming-toggle"
+          />
         </div>
       </div>
 
-      {/* Accordion 1: Outgoing Webhooks (Open by Default) */}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <button
-          type="button"
-          data-testid="webhook-accordion-outgoing"
-          aria-expanded={outgoingOpen}
-          onClick={() => setOutgoingOpen((v) => !v)}
-          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-start hover:bg-[var(--surface-hover)] transition-colors"
-        >
-          <span className="font-display text-xs font-semibold text-[var(--text-primary)]">
-            {t.docsWebhookTitle}
-          </span>
-          {outgoingOpen ? (
-            <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
-          )}
-        </button>
-
-        {outgoingOpen && (
-          <div className="border-t border-[var(--border)]">
-            <OutgoingWebhookSection
-              urlRowsDraft={urlRowsDraft}
-              setUrlRowsDraft={setUrlRowsDraft}
-              overridesDraft={overridesDraft}
-              setOverridesDraft={setOverridesDraft}
-              expandedUrlId={expandedUrlId}
-              setExpandedUrlId={setExpandedUrlId}
-              formatDraft={formatDraft}
-              setFormatDraft={setFormatDraft}
-              secretDraft={secretDraft}
-              setSecretDraft={setSecretDraft}
-              revealOutgoingSecret={revealOutgoingSecret}
-              setRevealOutgoingSecret={setRevealOutgoingSecret}
-              selectedEventSet={selectedEventSet}
-              toggleEventChip={toggleEventChip}
-              allowLocalDraft={allowLocalDraft}
-              setAllowLocalDraft={setAllowLocalDraft}
-              hasUnsavedChanges={hasUnsavedChanges}
-              isSavingWebhook={isSavingWebhook}
-              isTestingWebhook={isTestingWebhook}
-              cleanedJoinedUrls={cleanedJoinedUrls}
-              webhookSaved={webhookSaved}
-              setWebhookSaved={setWebhookSaved}
-              lastSavedSummary={lastSavedSummary}
-              webhookTestResult={webhookTestResult}
-              setWebhookTestResult={setWebhookTestResult}
-              copiedId={copiedId}
-              onCopy={handleCopy}
-              onSaveConfig={handleSaveWebhookConfig}
-              onTestWebhook={handleTestWebhook}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Accordion 2: Incoming Webhook */}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <button
-          type="button"
-          data-testid="webhook-accordion-incoming"
-          aria-expanded={incomingOpen}
-          onClick={() => setIncomingOpen((v) => !v)}
-          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-start hover:bg-[var(--surface-hover)] transition-colors"
-        >
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <span className="font-display text-xs font-semibold text-[var(--text-primary)]">
-              {t.docsWebhookIncomingTitle}
+      {/* Card 2: Outgoing, Incoming & Delivery Logs Accordions */}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 px-4 sm:px-5 divide-y divide-[var(--border)]/70">
+        {/* Accordion 1: Outgoing Webhooks (Open by Default) */}
+        <div>
+          <button
+            type="button"
+            data-testid="webhook-accordion-outgoing"
+            aria-expanded={outgoingOpen}
+            onClick={() => setOutgoingOpen((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 py-3.5 text-start ag-hover-glow transition-colors"
+          >
+            <span className="text-[13px] font-medium text-[var(--text-primary)]">
+              {t.docsWebhookTitle}
             </span>
-            <span
-              dir="ltr"
-              className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono-tabular text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              {`127.0.0.1:${runtimePort}`}
-            </span>
-          </div>
-          {incomingOpen ? (
-            <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
-          )}
-        </button>
-
-        {incomingOpen && (
-          <div className="animate-accordion border-t border-[var(--border)]">
-            <IncomingWebhookSection
-              runtimePort={runtimePort}
-              incomingEnabledDraft={incomingEnabledDraft}
-              isIncomingActive={isIncomingActive}
-              incomingSecretDraft={incomingSecretDraft}
-              setIncomingSecretDraft={setIncomingSecretDraft}
-              revealIncomingSecret={revealIncomingSecret}
-              setRevealIncomingSecret={setRevealIncomingSecret}
-              incomingActionTab={incomingActionTab}
-              setIncomingActionTab={setIncomingActionTab}
-              incomingShellTab={incomingShellTab}
-              setIncomingShellTab={setIncomingShellTab}
-              incomingCommandSnippet={incomingCommandSnippet}
-              isTestingIncoming={isTestingIncoming}
-              incomingTestResult={incomingTestResult}
-              setIncomingTestResult={setIncomingTestResult}
-              copiedId={copiedId}
-              hideToggle
-              onCopy={handleCopy}
-              onTestIncoming={handleTestIncoming}
-              onToggleIncoming={(next) => {
-                setIncomingEnabledDraft(next);
-                void onSaveWebhook(buildPatch({ webhookIncomingEnabled: next })).catch(() => {
-                  /* Error toast is reported by parent store */
-                });
-              }}
-              onGenerateIncomingSecret={(key) => {
-                setIncomingSecretDraft(key);
-                setIncomingEnabledDraft(true);
-                void onSaveWebhook(
-                  buildPatch({ webhookIncomingSecret: key, webhookIncomingEnabled: true }),
-                ).catch(() => {
-                  /* Error toast is reported by parent store */
-                });
-              }}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Accordion 3: Delivery Logs & Retry Outbox */}
-      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-        <button
-          type="button"
-          data-testid="webhook-accordion-logs"
-          aria-expanded={isLogsExpanded}
-          onClick={() => setLogsOpen((v) => !v)}
-          className="flex w-full items-center justify-between gap-2 px-4 py-3 text-start hover:bg-[var(--surface-hover)] transition-colors"
-        >
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <span className="font-display text-xs font-semibold text-[var(--text-primary)]">
-              {t.webhookLogsTitle}
-            </span>
-            <span className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10.5px] text-[var(--text-muted)]">
-              {logs.length}
-            </span>
-            {pendingOrDeadOutbox.length > 0 && (
-              <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono-tabular text-[10.5px] font-semibold text-amber-700 dark:text-amber-300">
-                {pendingOrDeadOutbox.length}
-              </span>
+            {outgoingOpen ? (
+              <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
             )}
-          </div>
-          {isLogsExpanded ? (
-            <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
-          )}
-        </button>
+          </button>
 
-        {isLogsExpanded && (
-          <div className="animate-accordion border-t border-[var(--border)]">
-            <WebhookLogsOutboxSection
-              logs={logs}
-              pendingOrDeadOutbox={pendingOrDeadOutbox}
-              isLoadingLogs={isLoadingLogs}
-              replayingId={replayingId}
-              onRefresh={refreshDeliveryData}
-              onClearLogs={handleClearLogs}
-              onReplayOutbox={handleReplayOutbox}
-            />
-          </div>
-        )}
+          {outgoingOpen && (
+            <div className="pb-4">
+              <OutgoingWebhookSection
+                urlRowsDraft={urlRowsDraft}
+                setUrlRowsDraft={setUrlRowsDraft}
+                overridesDraft={overridesDraft}
+                setOverridesDraft={setOverridesDraft}
+                expandedUrlId={expandedUrlId}
+                setExpandedUrlId={setExpandedUrlId}
+                formatDraft={formatDraft}
+                setFormatDraft={setFormatDraft}
+                secretDraft={secretDraft}
+                setSecretDraft={setSecretDraft}
+                revealOutgoingSecret={revealOutgoingSecret}
+                setRevealOutgoingSecret={setRevealOutgoingSecret}
+                selectedEventSet={selectedEventSet}
+                toggleEventChip={toggleEventChip}
+                allowLocalDraft={allowLocalDraft}
+                setAllowLocalDraft={setAllowLocalDraft}
+                hasUnsavedChanges={hasUnsavedChanges}
+                isSavingWebhook={isSavingWebhook}
+                isTestingWebhook={isTestingWebhook}
+                cleanedJoinedUrls={cleanedJoinedUrls}
+                webhookSaved={webhookSaved}
+                setWebhookSaved={setWebhookSaved}
+                lastSavedSummary={lastSavedSummary}
+                webhookTestResult={webhookTestResult}
+                setWebhookTestResult={setWebhookTestResult}
+                copiedId={copiedId}
+                onCopy={handleCopy}
+                onSaveConfig={handleSaveWebhookConfig}
+                onTestWebhook={handleTestWebhook}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Accordion 2: Incoming Webhook */}
+        <div>
+          <button
+            type="button"
+            data-testid="webhook-accordion-incoming"
+            aria-expanded={incomingOpen}
+            onClick={() => setIncomingOpen((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 py-3.5 text-start ag-hover-glow transition-colors"
+          >
+            <div className="flex flex-wrap items-baseline gap-2 min-w-0">
+              <span className="text-[13px] font-medium text-[var(--text-primary)]">
+                {t.docsWebhookIncomingTitle}
+              </span>
+              <span dir="ltr" className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                · 127.0.0.1:{runtimePort}
+              </span>
+            </div>
+            {incomingOpen ? (
+              <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
+            )}
+          </button>
+
+          {incomingOpen && (
+            <div className="animate-accordion pb-4">
+              <IncomingWebhookSection
+                runtimePort={runtimePort}
+                incomingEnabledDraft={incomingEnabledDraft}
+                isIncomingActive={isIncomingActive}
+                incomingSecretDraft={incomingSecretDraft}
+                setIncomingSecretDraft={setIncomingSecretDraft}
+                revealIncomingSecret={revealIncomingSecret}
+                setRevealIncomingSecret={setRevealIncomingSecret}
+                incomingActionTab={incomingActionTab}
+                setIncomingActionTab={setIncomingActionTab}
+                incomingShellTab={incomingShellTab}
+                setIncomingShellTab={setIncomingShellTab}
+                incomingCommandSnippet={incomingCommandSnippet}
+                isTestingIncoming={isTestingIncoming}
+                incomingTestResult={incomingTestResult}
+                setIncomingTestResult={setIncomingTestResult}
+                copiedId={copiedId}
+                hideToggle
+                onCopy={handleCopy}
+                onTestIncoming={handleTestIncoming}
+                onToggleIncoming={(next) => {
+                  setIncomingEnabledDraft(next);
+                  void onSaveWebhook(buildPatch({ webhookIncomingEnabled: next })).catch(() => {
+                    /* Error toast is reported by parent store */
+                  });
+                }}
+                onGenerateIncomingSecret={(key) => {
+                  setIncomingSecretDraft(key);
+                  setIncomingEnabledDraft(true);
+                  void onSaveWebhook(
+                    buildPatch({ webhookIncomingSecret: key, webhookIncomingEnabled: true }),
+                  ).catch(() => {
+                    /* Error toast is reported by parent store */
+                  });
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Accordion 3: Delivery Logs & Retry Outbox */}
+        <div>
+          <button
+            type="button"
+            data-testid="webhook-accordion-logs"
+            aria-expanded={isLogsExpanded}
+            onClick={() => setLogsOpen((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 py-3.5 text-start ag-hover-glow transition-colors"
+          >
+            <div className="flex flex-wrap items-baseline gap-2 min-w-0">
+              <span className="text-[13px] font-medium text-[var(--text-primary)]">
+                {t.webhookLogsTitle}
+              </span>
+              {logs.length > 0 && (
+                <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                  · {logs.length}
+                </span>
+              )}
+              {pendingOrDeadOutbox.length > 0 && (
+                <span className="font-mono-tabular text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  · {pendingOrDeadOutbox.length}
+                </span>
+              )}
+            </div>
+            {isLogsExpanded ? (
+              <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
+            )}
+          </button>
+
+          {isLogsExpanded && (
+            <div className="animate-accordion pb-4">
+              <WebhookLogsOutboxSection
+                logs={logs}
+                pendingOrDeadOutbox={pendingOrDeadOutbox}
+                isLoadingLogs={isLoadingLogs}
+                replayingId={replayingId}
+                onRefresh={refreshDeliveryData}
+                onClearLogs={handleClearLogs}
+                onReplayOutbox={handleReplayOutbox}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

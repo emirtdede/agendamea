@@ -51,7 +51,15 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     settingId: 'a11y-zoom',
     labelKey: 'zoomLevelTitle',
     descKeys: ['zoomLevelDesc', 'accessibilitySectionSubtitle'],
-    keywords: 'zoom scale font size percent olcek yakinlastir',
+    keywords: 'zoom scale percent olcek yakinlastir',
+  },
+  {
+    id: 'a11y-font-scale',
+    tab: 'accessibility',
+    settingId: 'a11y-font-scale',
+    labelKey: 'a11yFontScaleTitle',
+    descKeys: ['a11yFontScaleDesc', 'a11yReadableSpacingTitle'],
+    keywords: 'font size text scale readable letter line spacing yazi boyutu harf satir araligi',
   },
   {
     id: 'a11y-contrast',
@@ -63,8 +71,9 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
       'reducedMotionTitle',
       'accessibilityColorBlindTitle',
       'accessibilityStrongFocusTitle',
+      'a11yReadableSpacingTitle',
     ],
-    keywords: 'contrast colorblind focus ring motion wcag kontrast erisilebilirlik odak',
+    keywords: 'contrast colorblind focus ring motion wcag spacing kontrast erisilebilirlik odak',
   },
   {
     id: 'general-language',
@@ -95,6 +104,14 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
       'generalCompletionSoundLabel',
     ],
     keywords: 'startup view layout priority completed sound chime pop baslangic oncelik ses',
+  },
+  {
+    id: 'general-app-lock',
+    tab: 'general',
+    settingId: 'general-app-lock',
+    labelKey: 'appLockTitle',
+    descKeys: ['appLockDesc', 'appLockAutoLockLabel', 'appLockOnMinimizeTitle'],
+    keywords: 'pin password lock security sifre kilit guvenlik parola 4 6 8',
   },
   {
     id: 'general-desktop',
@@ -309,11 +326,11 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
   },
   {
     id: 'about-guide',
-    tab: 'about',
-    subTab: 'guide',
-    settingId: 'about-guide',
-    labelKey: 'docsSubTabGuide',
-    descKeys: ['docsPlaygroundTitle', 'docsSyntaxTableTitle', 'docsVoiceExamplesTitle'],
-    keywords: 'guide playground syntax quick add voice examples rehber kullanim',
+    tab: 'guide',
+    settingId: 'user-guide-main',
+    labelKey: 'settingsTabUserGuide',
+    descKeys: ['guideHeroTitle', 'docsPlaygroundTitle', 'docsVoiceExamplesTitle'],
+    keywords:
+      'guide manual help playground syntax quick add voice examples kullanim kilavuzu rehber yardim',
   },
 ];

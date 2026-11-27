@@ -1,20 +1,21 @@
 import {
-  Activity,
-  BookOpen,
   Bug,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Copy,
-  Database,
+  Cpu,
   Download,
   ExternalLink,
   FolderOpen,
   Globe,
   HardDrive,
-  Info,
+  HelpCircle,
+  Languages,
   Scale,
   Search,
+  Shield,
   ShieldCheck,
   Sparkles,
   Terminal,
@@ -33,9 +34,10 @@ import { formatByteSize } from '../../utils/formatBytes';
 import { BrandMark } from '../BrandMark';
 import { UpdateSettingsSection } from '../UpdateSettingsSection';
 import { DocsUserGuideTab } from './docs/DocsUserGuideTab';
-import { LegalSettingsTab } from './LegalSettingsTab';
 
 export type AboutSubTabId = 'about' | 'guide';
+
+const VELLIUM_WEBSITE_URL = 'https://vellium.dev';
 
 interface AboutLegalSettingsTabProps {
   oneDriveStatus: OneDriveStatus | null;
@@ -44,6 +46,7 @@ interface AboutLegalSettingsTabProps {
   onCancelUpdateDownload?: () => Promise<void>;
   onQuitAndInstallUpdate?: () => Promise<void>;
   onOpenLegalDoc?: (doc: LegalDocId) => void;
+  onOpenWelcomeGuide?: () => void;
   requestedSubTab?: AboutSubTabId;
   expandSectionId?: string;
   subTabSeq?: number;
@@ -65,6 +68,26 @@ interface ElectronDiagnosticsSnap {
   userDataDir?: string;
 }
 
+function VelliumMonogram({ className = 'h-8 w-8' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 36 32" fill="none" aria-hidden="true" className={className}>
+      <path
+        d="M3.5 4.5L18 28.5L32.5 4.5H27.8L18 20.8L8.2 4.5H3.5Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M11.2 4.5L18 15.8L24.8 4.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeOpacity="0.55"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
   oneDriveStatus,
   onCheckForUpdates,
@@ -72,6 +95,7 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
   onCancelUpdateDownload,
   onQuitAndInstallUpdate,
   onOpenLegalDoc,
+  onOpenWelcomeGuide,
   requestedSubTab,
   expandSectionId,
   subTabSeq,
@@ -96,6 +120,7 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
   const [healthOpen, setHealthOpen] = useState(expandSectionId === 'about-health');
   const [changelogOpen, setChangelogOpen] = useState(expandSectionId === 'about-changelog');
   const [sysInfo, setSysInfo] = useState<SystemInfoPayload | null>(null);
+  const [sysInfoLoaded, setSysInfoLoaded] = useState(false);
   const [electronDiag, setElectronDiag] = useState<ElectronDiagnosticsSnap | null>(null);
   const copyTimerRef = useRef<number | null>(null);
   const verCopyTimerRef = useRef<number | null>(null);
@@ -121,10 +146,13 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
     void api
       .getSystemInfo()
       .then((info) => {
-        if (active) setSysInfo(info);
+        if (active) {
+          setSysInfo(info);
+          setSysInfoLoaded(true);
+        }
       })
       .catch(() => {
-        /* non-fatal */
+        if (active) setSysInfoLoaded(true);
       });
     if (window.agendameaWindow?.getDiagnostics) {
       void window.agendameaWindow
@@ -154,6 +182,7 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
   );
   const completedCountDisplay = sysInfo ? sysInfo.completedTodos : completedTodoCount;
   const trashedCountDisplay = sysInfo ? sysInfo.trashedTodos : trashedTodosCount;
+  const categoriesCountDisplay = sysInfo?.categoriesCount ?? 0;
 
   const channelLabel = useMemo(() => {
     const ch = electronDiag?.distributionChannel;
@@ -225,15 +254,22 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
     const ver = `Agendamea v${updateState.result?.currentVersion ?? APP_VERSION}`;
     try {
       await navigator.clipboard.writeText(ver);
-      setVersionCopied(true);
-      if (verCopyTimerRef.current !== null) window.clearTimeout(verCopyTimerRef.current);
-      verCopyTimerRef.current = window.setTimeout(() => {
-        setVersionCopied(false);
-        verCopyTimerRef.current = null;
-      }, 1800);
     } catch {
-      // Ignore clipboard failure
+      const ta = document.createElement('textarea');
+      ta.value = ver;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
     }
+    setVersionCopied(true);
+    if (verCopyTimerRef.current !== null) window.clearTimeout(verCopyTimerRef.current);
+    verCopyTimerRef.current = window.setTimeout(() => {
+      setVersionCopied(false);
+      verCopyTimerRef.current = null;
+    }, 2200);
   };
 
   const handleCopyDiagnostics = async () => {
@@ -243,6 +279,8 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
     } catch {
       const ta = document.createElement('textarea');
       ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
       document.body.appendChild(ta);
       ta.select();
       document.execCommand('copy');
@@ -291,46 +329,10 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
   const displayVersion = updateState.result?.currentVersion ?? APP_VERSION;
 
   return (
-    <div className="space-y-5">
-      {/* 2-Way Segmented View Switcher: Updates & About vs User Guide (role="group", zero nested tablist) */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <fieldset
-          aria-label={t.settingsTabAbout}
-          className="inline-flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1"
-        >
-          <button
-            type="button"
-            data-testid="about-subtab-about"
-            aria-pressed={activeView === 'about'}
-            onClick={() => setActiveView('about')}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
-              activeView === 'about'
-                ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <Info className="h-3.5 w-3.5 shrink-0" />
-            <span>{t.settingsTabAbout}</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="about-subtab-guide"
-            aria-pressed={activeView === 'guide'}
-            onClick={() => setActiveView('guide')}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
-              activeView === 'guide'
-                ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <BookOpen className="h-3.5 w-3.5 shrink-0" />
-            <span>{t.docsSubTabGuide}</span>
-          </button>
-        </fieldset>
-
-        {activeView === 'guide' && (
-          <div className="relative min-w-[200px] sm:w-56">
+    <div className="animate-tab-enter">
+      {activeView === 'guide' ? (
+        <div data-setting-id="about-guide" className="animate-tab-enter space-y-4">
+          <div className="relative min-w-[200px] sm:w-64">
             <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               type="text"
@@ -339,90 +341,216 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
               onChange={(e) => setGuideSearch(e.target.value)}
               placeholder={t.docsSearchPlaceholder}
               aria-label={t.docsSearchPlaceholder}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 ps-8 pe-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
+              className="w-full rounded-lg border border-[var(--border)] bg-transparent py-1.5 ps-8 pe-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--text-secondary)]"
             />
             {guideSearch && (
               <button
                 type="button"
                 onClick={() => setGuideSearch('')}
                 aria-label={t.clearSearch}
-                className="absolute end-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="absolute end-1.5 top-1/2 -translate-y-1/2 p-0.5 text-[var(--text-muted)] ag-hover-glow"
               >
                 <X className="h-3 w-3" />
               </button>
             )}
           </div>
-        )}
-      </div>
-
-      {activeView === 'guide' ? (
-        <div data-setting-id="about-guide" className="animate-tab-enter">
           <DocsUserGuideTab searchQuery={guideSearch} />
         </div>
       ) : (
-        <div className="space-y-5 animate-tab-enter">
-          {/* 1. Identity & Trust Hero Card */}
-          <section
+        <div className="space-y-6 pb-6">
+          {/* 1. Power Pilot Header Row: Title + Subtitle + Website CTA */}
+          <header
             data-setting-id="about-identity"
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 space-y-4"
+            className="flex flex-wrap items-start justify-between gap-4"
           >
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex items-start gap-3.5 min-w-0">
-                <BrandMark className="h-10 w-10 shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="font-display text-base font-bold text-[var(--text-primary)]">
-                      Agendamea
-                    </h2>
-                    <button
-                      type="button"
-                      data-testid="about-copy-version-btn"
-                      onClick={() => void handleCopyVersion()}
-                      title={t.docsCopyButton}
-                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-subtle)] px-2.5 py-0.5 font-mono-tabular text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
-                    >
-                      <span>v{displayVersion}</span>
-                      {versionCopied ? (
-                        <Check className="h-3 w-3 text-emerald-500" />
-                      ) : (
-                        <Copy className="h-3 w-3 opacity-70" />
-                      )}
-                    </button>
-                    <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-[10.5px] font-semibold text-[var(--accent)]">
-                      {channelLabel}
-                    </span>
-                  </div>
-                  <p className="mt-1.5 text-xs leading-relaxed text-[var(--text-muted)]">
-                    {t.settingsSubtitle}
-                  </p>
-                </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <h2 className="font-display text-[22px] font-bold tracking-tight text-[var(--text-primary)]">
+                {t.settingsTabAbout}
+              </h2>
+              <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+                {t.aboutHeroSubtitle}
+              </p>
+            </div>
+            <a
+              href={VELLIUM_WEBSITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="about-website-link"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)]/80 px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow shrink-0"
+            >
+              <Globe className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <span>{t.aboutWebsiteButton}</span>
+            </a>
+          </header>
+
+          {/* 2. 4-Column Metric KPI Strip */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {/* Version */}
+            <button
+              type="button"
+              data-testid="about-copy-version-btn"
+              onClick={() => void handleCopyVersion()}
+              title={t.docsCopyButton}
+              className="group flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-3.5 text-start ag-hover-card-glow transition"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                  {t.aboutMetricVersionLabel}
+                </span>
+                {versionCopied ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
+                )}
+              </div>
+              <div className="mt-2.5">
+                <p className="font-mono-tabular text-[17px] font-bold tracking-tight text-[var(--text-primary)]">
+                  v{displayVersion}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-[var(--text-muted)]">
+                  {channelLabel}
+                </p>
+              </div>
+            </button>
+
+            {/* Core */}
+            <div className="flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                  {t.aboutMetricCoreLabel}
+                </span>
+                <Cpu className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
+              </div>
+              <div className="mt-2.5">
+                <p className="font-display text-[17px] font-bold tracking-tight text-[var(--text-primary)]">
+                  {t.aboutMetricCoreValue}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-[var(--text-muted)]">
+                  SQLite · AI · REST API
+                </p>
               </div>
             </div>
 
-            {/* Privacy & Architecture Trust Pills */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
-                <HardDrive className="h-3.5 w-3.5 text-emerald-500" />
-                <span>{t.aboutBadgeLocalFirst}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                <span>{t.aboutBadgeZeroTelemetry}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
-                <Scale className="h-3.5 w-3.5 text-[var(--accent)]" />
-                <span>{t.aboutBadgeMitLicense}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
-                <Globe className="h-3.5 w-3.5 text-[var(--accent)]" />
-                <span>{t.aboutBadgeLanguagesCount}</span>
-              </span>
+            {/* Languages */}
+            <div className="flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                  {t.aboutMetricLanguagesLabel}
+                </span>
+                <Languages className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
+              </div>
+              <div className="mt-2.5">
+                <p className="font-display text-[17px] font-bold tracking-tight text-[var(--text-primary)]">
+                  {t.aboutBadgeLanguagesCount}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-[var(--text-muted)]">
+                  {t.aboutBadgeMitLicense}
+                </p>
+              </div>
+            </div>
+
+            {/* Privacy */}
+            <div className="flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                  {t.aboutMetricPrivacyLabel}
+                </span>
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+              </div>
+              <div className="mt-2.5">
+                <p className="font-display text-[17px] font-bold tracking-tight text-[var(--text-primary)]">
+                  {t.aboutMetricPrivacyValue}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-[var(--text-muted)]">
+                  {t.aboutMetricPrivacySub}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Main Product Identity Card (Agendamea - Vellium) */}
+          <section
+            aria-label="Agendamea - Vellium"
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-5 space-y-4"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <BrandMark className="h-10 w-10 shrink-0" />
+                <div className="min-w-0">
+                  <h3 className="font-display text-[15px] font-semibold tracking-tight text-[var(--text-primary)]">
+                    Agendamea - Vellium
+                  </h3>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.aboutHeroSubtitle}</p>
+                </div>
+              </div>
+              <VelliumMonogram className="h-7 w-7 shrink-0 text-[var(--text-muted)]/60" />
+            </div>
+
+            <dl className="divide-y divide-[var(--border)]/70 border-y border-[var(--border)]/70 text-xs">
+              <div className="flex items-center justify-between gap-4 py-2.5">
+                <dt className="text-[var(--text-muted)]">{t.aboutSpecDeveloper}</dt>
+                <dd className="font-mono-tabular font-medium text-[var(--text-primary)]">
+                  vellium.dev
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-2.5">
+                <dt className="text-[var(--text-muted)]">{t.aboutSpecDistribution}</dt>
+                <dd className="font-mono-tabular font-medium text-[var(--text-primary)]">
+                  {channelLabel}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-4 py-2.5">
+                <dt className="text-[var(--text-muted)]">{t.aboutSpecCore}</dt>
+                <dd className="font-mono-tabular font-medium text-[var(--text-primary)]">
+                  SQLite · AI · REST API
+                </dd>
+              </div>
+            </dl>
+
+            {/* Emerald Local-Privacy Guarantee Banner */}
+            <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.08] px-3.5 py-2.5 text-xs text-emerald-700 dark:text-emerald-300">
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              <span className="leading-relaxed">{t.aboutLocalPrivacyBanner}</span>
+            </div>
+
+            {/* Identity Card Footer Actions */}
+            <div className="flex flex-col gap-3 pt-0.5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="min-w-0 flex-1 text-xs leading-snug text-[var(--text-muted)]">
+                {t.aboutWelcomePrompt}
+              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-testid="about-copy-diagnostics-btn"
+                  onClick={() => void handleCopyDiagnostics()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow whitespace-nowrap"
+                >
+                  {diagCopied ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                  )}
+                  <span>{diagCopied ? t.diagnosticsCopiedToast : t.copyDiagnosticsButton}</span>
+                </button>
+                {onOpenWelcomeGuide && (
+                  <button
+                    type="button"
+                    data-testid="about-open-welcome-btn"
+                    onClick={onOpenWelcomeGuide}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow whitespace-nowrap"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                    <span>{t.aboutOpenWelcomeButton}</span>
+                  </button>
+                )}
+              </div>
             </div>
           </section>
 
-          {/* 2. Updates Section */}
+          {/* 4. Software Updates Card */}
           <UpdateSettingsSection
             currentVersion={displayVersion}
+            channelLabel={channelLabel}
             autoUpdateCheck={autoUpdateCheck}
             updateState={updateState}
             onToggleAutoUpdateCheck={updaterStore.toggleAutoUpdateCheck}
@@ -432,180 +560,295 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
             onQuitAndInstall={onQuitAndInstallUpdate}
           />
 
-          {/* 3. Collapsible Live System & Runtime Health Card (Compact by Default) */}
-          <section
-            aria-label={t.aboutSystemHealthTitle}
-            data-setting-id="about-health"
-            data-testid="about-system-health-card"
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
-          >
-            <button
-              type="button"
-              data-testid="about-health-toggle"
-              aria-expanded={healthOpen}
-              onClick={() => setHealthOpen((v) => !v)}
-              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-start transition-colors hover:bg-[var(--surface-hover)]"
-            >
-              <div className="flex flex-wrap items-center gap-2 min-w-0">
-                <Activity className="h-4 w-4 text-emerald-500 shrink-0" />
-                <span className="font-display text-xs font-semibold text-[var(--text-primary)]">
-                  {t.aboutSystemHealthTitle}
-                </span>
-                {sysInfo && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono-tabular text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    <span>127.0.0.1:{sysInfo.runtimePort}</span>
-                  </span>
-                )}
-              </div>
-              {healthOpen ? (
-                <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
-              )}
-            </button>
-
-            {healthOpen && (
-              <div className="animate-accordion border-t border-[var(--border)] grid grid-cols-1 gap-px bg-[var(--border)] sm:grid-cols-2 lg:grid-cols-3">
-                <div className="bg-[var(--surface)] px-4 py-3">
-                  <p className="text-[11px] font-medium text-[var(--text-muted)]">
-                    {t.aboutHealthRuntimeLabel}
+          {/* 5. Workspace Statistics on This Device Card */}
+          <section aria-label={t.aboutDeviceWorkspaceTitle} className="space-y-2.5">
+            <div className="flex items-center gap-2">
+              <HardDrive className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                {t.aboutDeviceWorkspaceTitle}
+              </h3>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-[var(--border)]/80 bg-[var(--canvas)]/60 p-3.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                    {t.aboutDeviceActiveTasks}
                   </p>
-                  <p className="mt-0.5 font-mono-tabular text-xs font-semibold text-[var(--text-primary)] truncate">
-                    {electronDiag?.electronVersion
-                      ? `Electron ${electronDiag.electronVersion} · ${electronDiag.platform} ${electronDiag.arch}`
-                      : t.aboutChannelWebPwa}
+                  <p className="mt-1.5 font-mono-tabular text-[20px] font-bold text-[var(--text-primary)]">
+                    {activeTodoCount}
                   </p>
-                  {electronDiag?.chromeVersion && (
-                    <p className="mt-0.5 font-mono-tabular text-[10.5px] text-[var(--text-muted)]">
-                      Chromium {electronDiag.chromeVersion} · Node {electronDiag.nodeVersion}
+                </div>
+                <div className="rounded-lg border border-[var(--border)]/80 bg-[var(--canvas)]/60 p-3.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                    {t.aboutDeviceCompletedTasks}
+                  </p>
+                  <p className="mt-1.5 font-mono-tabular text-[20px] font-bold text-[var(--text-primary)]">
+                    {completedCountDisplay}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[var(--border)]/80 bg-[var(--canvas)]/60 p-3.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                    {t.aboutDeviceCategories}
+                  </p>
+                  {!sysInfoLoaded ? (
+                    <div className="mt-2.5 h-6 w-12 rounded bg-[var(--surface-subtle)] animate-pulse" />
+                  ) : (
+                    <p className="mt-1.5 font-mono-tabular text-[20px] font-bold text-[var(--text-primary)]">
+                      {categoriesCountDisplay}
                     </p>
                   )}
                 </div>
-
-                <div className="bg-[var(--surface)] px-4 py-3">
-                  <p className="text-[11px] font-medium text-[var(--text-muted)]">
-                    {t.aboutHealthDatabaseLabel}
-                  </p>
-                  <p className="mt-0.5 flex items-center gap-1.5 font-mono-tabular text-xs font-semibold text-[var(--text-primary)]">
-                    <Database className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
-                    <span>
-                      SQLite WAL v{sysInfo?.schemaVersion ?? 5} ·{' '}
-                      {formatByteSize(sysInfo?.dbSizeBytes ?? 0)}
-                    </span>
-                  </p>
-                  <p className="mt-0.5 font-mono-tabular text-[10.5px] text-[var(--text-muted)]">
-                    {t.aboutHealthModelsSizeLabel}: {formatByteSize(sysInfo?.modelsDiskBytes ?? 0)}
-                  </p>
-                </div>
-
-                <div className="bg-[var(--surface)] px-4 py-3">
-                  <p className="text-[11px] font-medium text-[var(--text-muted)]">
-                    {t.aboutHealthWorkspaceLabel}
-                  </p>
-                  <p
-                    data-testid="about-workspace-counters"
-                    className="mt-0.5 font-mono-tabular text-xs font-semibold text-[var(--text-primary)]"
-                  >
-                    {activeTodoCount} {t.filterActive} · {completedCountDisplay} {t.filterCompleted}{' '}
-                    · {trashedCountDisplay} {t.tabTrash}
-                  </p>
-                  <p className="mt-0.5 text-[10.5px] text-[var(--text-muted)]">
-                    {t.aboutHealthCloudLabel}:{' '}
-                    {oneDriveStatus?.connected
-                      ? `${t.enabledBadge} (${oneDriveStatus.activeProvider ?? t.cloudCustomFolderLabel})`
-                      : t.aboutHealthLocalOnly}
-                  </p>
-                </div>
               </div>
-            )}
+              <p className="text-[11.5px] text-[var(--text-muted)]">
+                {t.aboutDeviceWorkspaceFootnote}
+              </p>
+            </div>
           </section>
 
-          {/* 4. Collapsible What's New Changelog */}
-          <section
-            aria-label={t.aboutWhatsNewTitle}
-            data-setting-id="about-changelog"
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
-          >
-            <button
-              type="button"
-              data-testid="about-changelog-toggle"
-              aria-expanded={changelogOpen}
-              onClick={() => setChangelogOpen((v) => !v)}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-start transition-colors hover:bg-[var(--surface-hover)]"
+          {/* 6. Legal & Support Card (Power Pilot Tile Grid) */}
+          {onOpenLegalDoc && (
+            <section
+              aria-label={t.settingsTabLegal}
+              data-setting-id="about-legal"
+              data-testid="about-legal-section"
+              className="space-y-2.5"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <Sparkles className="h-4 w-4 text-[var(--accent)] shrink-0" />
-                <span className="font-display text-xs font-semibold text-[var(--text-primary)]">
-                  {t.aboutWhatsNewTitle}
-                </span>
-                <span className="font-mono-tabular rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 text-[10.5px] text-[var(--text-muted)]">
-                  v{APP_CHANGELOG[0]?.version}
-                </span>
+              <div className="flex items-center gap-2">
+                <Scale className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                  {t.settingsTabLegal}
+                </h3>
               </div>
-              {changelogOpen ? (
-                <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
-              )}
-            </button>
 
-            {changelogOpen && (
-              <div className="animate-accordion border-t border-[var(--border)] divide-y divide-[var(--border)]">
-                {APP_CHANGELOG.map((rel) => (
-                  <div key={rel.version} className="px-4 py-3.5 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono-tabular text-xs font-bold text-[var(--text-primary)]">
-                        v{rel.version}
-                      </span>
-                      <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
-                        {rel.date}
-                      </span>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 space-y-3">
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                  {(
+                    [
+                      {
+                        id: 'terms' as LegalDocId,
+                        title: t.legalTermsTitle,
+                        desc: t.legalTermsSummary,
+                        icon: Scale,
+                      },
+                      {
+                        id: 'privacy' as LegalDocId,
+                        title: t.legalPrivacyTitle,
+                        desc: t.legalPrivacySummary,
+                        icon: Shield,
+                      },
+                      {
+                        id: 'opensource' as LegalDocId,
+                        title: t.legalOpenSourceTitle,
+                        desc: t.legalOpenSourceSummary,
+                        icon: FolderOpen,
+                      },
+                    ] as const
+                  ).map(({ id, title, desc, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      data-testid={`legal-doc-row-${id}`}
+                      onClick={() => onOpenLegalDoc(id)}
+                      className="group flex flex-col justify-between rounded-lg border border-[var(--border)]/80 bg-[var(--canvas)]/60 p-3.5 text-start ag-hover-card-glow transition"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <Icon className="h-4 w-4 text-[var(--text-muted)] group-hover:text-[var(--text-primary)]" />
+                        <ChevronRight className="h-3.5 w-3.5 text-[var(--text-muted)] transition-transform group-hover:translate-x-0.5 rtl:rotate-180" />
+                      </div>
+                      <div className="mt-3 space-y-0.5">
+                        <p className="text-[12.5px] font-semibold text-[var(--text-primary)]">
+                          {title}
+                        </p>
+                        <p className="text-[11px] leading-snug text-[var(--text-muted)] line-clamp-2">
+                          {desc}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    data-testid="legal-doc-row-gdpr"
+                    onClick={() => onOpenLegalDoc('gdpr')}
+                    className="group flex items-center justify-between gap-3 rounded-lg border border-[var(--border)]/80 bg-[var(--canvas)]/60 p-3.5 text-start ag-hover-card-glow transition"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
+                        <p className="text-[12.5px] font-semibold text-[var(--text-primary)] truncate">
+                          {t.legalKvkkGdprTitle}
+                        </p>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)] truncate">
+                        {t.legalGdprSummary}
+                      </p>
                     </div>
-                    <ul className="space-y-1.5 ps-4 list-disc text-xs leading-relaxed text-[var(--text-secondary)]">
-                      {rel.highlightKeys.map((key) => (
-                        <li key={key}>{t[key]}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+                    <ChevronRight className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0 transition-transform group-hover:translate-x-0.5 rtl:rotate-180" />
+                  </button>
 
-          {/* 5. Troubleshooting, Folders & Support Actions (Both Data & Logs Folders Preserved) */}
+                  <button
+                    type="button"
+                    data-testid="legal-doc-row-accessibility"
+                    onClick={() => onOpenLegalDoc('accessibility')}
+                    className="group flex items-center justify-between gap-3 rounded-lg border border-[var(--border)]/80 bg-[var(--canvas)]/60 p-3.5 text-start ag-hover-card-glow transition"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <HelpCircle className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
+                        <p className="text-[12.5px] font-semibold text-[var(--text-primary)] truncate">
+                          {t.legalAccessibilityTitle}
+                        </p>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)] truncate">
+                        {t.aboutLegalSupportCardDesc}
+                      </p>
+                    </div>
+                    <ExternalLink className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
+                  </button>
+                </div>
+
+                <p className="border-t border-[var(--border)]/60 pt-3 text-[11px] text-[var(--text-muted)]">
+                  Copyright © {new Date().getFullYear()} Vellium. {t.aboutCopyrightNotice}
+                </p>
+              </div>
+            </section>
+          )}
+
+          {/* 7. Restrained System Health, Release Notes & Diagnostics Card */}
           <section
             aria-label={t.aboutDiagnosticsTitle}
             data-setting-id="about-support"
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3.5"
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70"
           >
-            <div>
-              <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
-                {t.aboutDiagnosticsTitle}
-              </h3>
-              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{t.aboutDiagnosticsDesc}</p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
+            {/* What's New Changelog */}
+            <div data-setting-id="about-changelog" className="px-4">
               <button
                 type="button"
-                data-testid="about-copy-diagnostics-btn"
-                onClick={() => void handleCopyDiagnostics()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
+                data-testid="about-changelog-toggle"
+                aria-expanded={changelogOpen}
+                onClick={() => setChangelogOpen((v) => !v)}
+                className="flex w-full items-center justify-between gap-3 py-3 text-start ag-hover-glow"
               >
-                {diagCopied ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="text-[13px] font-medium text-[var(--text-primary)]">
+                  {t.aboutWhatsNewTitle}
+                </span>
+                {changelogOpen ? (
+                  <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
                 ) : (
-                  <Copy className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                  <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
                 )}
-                <span>{diagCopied ? t.diagnosticsCopiedToast : t.copyDiagnosticsButton}</span>
               </button>
 
+              {changelogOpen && (
+                <div className="animate-accordion pb-4 divide-y divide-[var(--border)]/60">
+                  {APP_CHANGELOG.map((rel) => (
+                    <div key={rel.version} className="py-3 first:pt-0 last:pb-0 space-y-2">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="font-mono-tabular text-xs font-semibold text-[var(--text-primary)]">
+                          v{rel.version}
+                        </span>
+                        <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                          {rel.date}
+                        </span>
+                      </div>
+                      <ul className="space-y-1.5 ps-4 list-disc text-xs leading-relaxed text-[var(--text-secondary)]">
+                        {rel.highlightKeys.map((key) => (
+                          <li key={key}>{t[key]}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* System & Runtime Health (Collapsed by default) */}
+            <div
+              data-setting-id="about-health"
+              data-testid="about-system-health-card"
+              className="px-4"
+            >
+              <button
+                type="button"
+                data-testid="about-health-toggle"
+                aria-expanded={healthOpen}
+                onClick={() => setHealthOpen((v) => !v)}
+                className="flex w-full items-center justify-between gap-3 py-3 text-start ag-hover-glow"
+              >
+                <span className="text-[13px] font-medium text-[var(--text-primary)]">
+                  {t.aboutSystemHealthTitle}
+                </span>
+                {healthOpen ? (
+                  <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0 rtl:rotate-180" />
+                )}
+              </button>
+
+              {healthOpen && (
+                <div className="animate-accordion pb-4 grid grid-cols-1 gap-4 sm:grid-cols-3 pt-1">
+                  <div>
+                    <p className="text-[11px] font-medium text-[var(--text-muted)]">
+                      {t.aboutHealthRuntimeLabel}
+                    </p>
+                    <p className="mt-1 font-mono-tabular text-xs text-[var(--text-primary)] truncate">
+                      {electronDiag?.electronVersion
+                        ? `Electron ${electronDiag.electronVersion} · ${electronDiag.platform} ${electronDiag.arch}`
+                        : t.aboutChannelWebPwa}
+                    </p>
+                    {electronDiag?.chromeVersion && (
+                      <p className="mt-0.5 font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                        Chromium {electronDiag.chromeVersion} · Node {electronDiag.nodeVersion}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-medium text-[var(--text-muted)]">
+                      {t.aboutHealthDatabaseLabel}
+                    </p>
+                    <p className="mt-1 font-mono-tabular text-xs text-[var(--text-primary)]">
+                      SQLite v{sysInfo?.schemaVersion ?? 5} ·{' '}
+                      {formatByteSize(sysInfo?.dbSizeBytes ?? 0)}
+                    </p>
+                    {sysInfo && sysInfo.modelsDiskBytes > 0 && (
+                      <p className="mt-0.5 font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                        {t.aboutHealthModelsSizeLabel}: {formatByteSize(sysInfo.modelsDiskBytes)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-medium text-[var(--text-muted)]">
+                      {t.aboutHealthWorkspaceLabel}
+                    </p>
+                    <p
+                      data-testid="about-workspace-counters"
+                      className="mt-1 font-mono-tabular text-xs text-[var(--text-primary)]"
+                    >
+                      {activeTodoCount} {t.filterActive} · {completedCountDisplay}{' '}
+                      {t.filterCompleted} · {trashedCountDisplay} {t.tabTrash}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                      {t.aboutHealthCloudLabel}:{' '}
+                      {oneDriveStatus?.connected
+                        ? `${t.enabledBadge} (${oneDriveStatus.activeProvider ?? t.cloudCustomFolderLabel})`
+                        : t.aboutHealthLocalOnly}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Compact 4-Action Support & Folders Row */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
               <button
                 type="button"
                 data-testid="about-download-diagnostics-btn"
                 onClick={() => void handleDownloadDiagnostics()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] whitespace-nowrap shrink-0"
               >
                 <Download className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                 <span>{t.aboutDownloadDiagnosticsButton}</span>
@@ -617,16 +860,16 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
                     type="button"
                     data-testid="about-open-data-folder-btn"
                     onClick={() => void window.agendameaWindow?.openDataFolder?.()}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] whitespace-nowrap shrink-0"
                   >
-                    <FolderOpen className="h-3.5 w-3.5 text-[var(--accent)]" />
+                    <FolderOpen className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                     <span>{t.aboutOpenDataFolderButton}</span>
                   </button>
                   <button
                     type="button"
                     data-testid="about-open-logs-folder-btn"
                     onClick={() => void window.agendameaWindow?.openLogsFolder?.()}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] whitespace-nowrap shrink-0"
                   >
                     <Terminal className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                     <span>{t.aboutOpenLogsFolderButton}</span>
@@ -638,48 +881,13 @@ export const AboutLegalSettingsTab = React.memo(function AboutLegalSettingsTab({
                 type="button"
                 data-testid="about-report-bug-btn"
                 onClick={() => void handleReportBug()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)]"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] whitespace-nowrap shrink-0"
               >
-                <Bug className="h-3.5 w-3.5 text-[var(--accent)]" />
+                <Bug className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                 <span>{t.aboutReportBugButton}</span>
               </button>
-
-              <a
-                href={GITHUB_REPO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                <span>{t.aboutGithubLink}</span>
-              </a>
             </div>
           </section>
-
-          {/* 6. Embedded Legal Documents (5 Store & Open Source Compliance Documents) */}
-          {onOpenLegalDoc && (
-            <section
-              aria-label={t.settingsTabLegal}
-              data-setting-id="about-legal"
-              data-testid="about-legal-section"
-              className="space-y-2.5"
-            >
-              <div className="flex items-center gap-2">
-                <Scale className="h-4 w-4 text-[var(--accent)] shrink-0" />
-                <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
-                  {t.settingsTabLegal}
-                </h3>
-              </div>
-              <LegalSettingsTab onOpenLegalDoc={onOpenLegalDoc} />
-            </section>
-          )}
-
-          {/* Footer Publisher Credit */}
-          <div className="flex justify-end pt-1">
-            <span className="text-[11px] text-[var(--text-muted)]">
-              {t.aboutMadeByVellium} · © {new Date().getFullYear()} Vellium
-            </span>
-          </div>
         </div>
       )}
     </div>

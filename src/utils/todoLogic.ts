@@ -73,17 +73,17 @@ function getShortDateFormatter(locale = 'tr-TR'): Intl.DateTimeFormat {
   });
 }
 
+const DAYS_IN_MONTH = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
 export function isValidIsoDateString(value: string): boolean {
-  if (!ISO_DATE_RE.test(value)) return false;
-  const [y, m, d] = value.split('-').map(Number);
-  if (y === undefined || m === undefined || d === undefined) return false;
-  const dt = new Date(y, m - 1, d);
-  return (
-    !Number.isNaN(dt.getTime()) &&
-    dt.getFullYear() === y &&
-    dt.getMonth() === m - 1 &&
-    dt.getDate() === d
-  );
+  if (value.length !== 10 || !ISO_DATE_RE.test(value)) return false;
+  const y = Number(value.slice(0, 4));
+  const m = Number(value.slice(5, 7));
+  const d = Number(value.slice(8, 10));
+  if (m < 1 || m > 12 || d < 1) return false;
+  const maxDay =
+    m === 2 && ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 29 : (DAYS_IN_MONTH[m] ?? 0);
+  return d <= maxDay;
 }
 
 export function normalizeDateRange(
@@ -408,27 +408,28 @@ export function filterAndSortTodos(params: {
       const dateA = a.dueDate ?? a.startDate ?? null;
       const dateB = b.dueDate ?? b.startDate ?? null;
       if (dateA && dateB && dateA !== dateB) {
-        return dateA.localeCompare(dateB);
+        return dateA < dateB ? -1 : 1;
       }
       if (dateA && !dateB) return -1;
       if (!dateA && dateB) return 1;
       const timeA = sanitizeDueTime(a.dueTime);
       const timeB = sanitizeDueTime(b.dueTime);
       if (timeA && timeB && timeA !== timeB) {
-        return timeA.localeCompare(timeB);
+        return timeA < timeB ? -1 : 1;
       }
       if (timeA && !timeB) return -1;
       if (!timeA && timeB) return 1;
     } else if (sortBy === 'newest') {
-      const diff = b.createdAt.localeCompare(a.createdAt);
-      if (diff !== 0) return diff;
+      if (b.createdAt !== a.createdAt) {
+        return b.createdAt < a.createdAt ? -1 : 1;
+      }
     }
 
     // Default / tie-breaker: manual sortOrder ascending, then newest first
     if (a.sortOrder !== b.sortOrder) {
       return a.sortOrder - b.sortOrder;
     }
-    return b.createdAt.localeCompare(a.createdAt);
+    return b.createdAt === a.createdAt ? 0 : b.createdAt < a.createdAt ? -1 : 1;
   });
 }
 

@@ -17,12 +17,13 @@ const sttLog = () => getAppLogger('server');
 const SAMPLE_RATE = 16000;
 const MIN_SAMPLES = 8000; // 0.5s
 const MAX_SAMPLES = 480000; // 30s cap per WBS-3.1 / WBS-3.2
-const SPEECH_THRESHOLD = 0.02;
-const MIN_SPEECH_RATIO = 0.1;
+const SPEECH_THRESHOLD = 0.005;
+const MIN_SPEECH_RATIO = 0.03;
 const DEFAULT_IDLE_UNLOAD_MS = 180_000;
 
-// All 73 Agendamea UI languages mapped cleanly to Whisper ISO-639-1 codes
+// All 73 Agendamea UI languages + auto-detect mapped cleanly to Whisper ISO-639-1 codes
 const WHISPER_LANG_MAP = Object.freeze({
+  auto: 'auto',
   tr: 'tr',
   en: 'en',
   de: 'de',
@@ -128,11 +129,11 @@ function float32ToInt16Pcm(floatSamples) {
 }
 
 function mapUiLangToWhisper(uiLang) {
-  const raw = String(uiLang || 'en').trim();
-  if (!raw) return 'en';
+  const raw = String(uiLang || 'auto').trim();
+  if (!raw || raw.toLowerCase() === 'auto') return 'auto';
   if (WHISPER_LANG_MAP[raw]) return WHISPER_LANG_MAP[raw];
   const base = raw.split('-')[0].toLowerCase();
-  return WHISPER_LANG_MAP[base] || 'en';
+  return WHISPER_LANG_MAP[base] || 'auto';
 }
 
 function computeSpeechRatio(samples) {
@@ -164,6 +165,9 @@ function toFloat32Array(input) {
     return new Float32Array(input.buffer, input.byteOffset, input.byteLength / 4);
   }
   if (Buffer.isBuffer(input) && input.byteLength % 4 === 0) {
+    if (input.byteOffset % 4 === 0) {
+      return new Float32Array(input.buffer, input.byteOffset, input.byteLength / 4);
+    }
     const copy = new Uint8Array(input.byteLength);
     copy.set(input);
     return new Float32Array(copy.buffer);
@@ -172,12 +176,78 @@ function toFloat32Array(input) {
   return null;
 }
 
+/**
+ * Single-pass speech ratio + peak analysis + optional quiet-speech normalization + Float32 -> Int16 conversion.
+ * Replaces 3 separate full-buffer scans and eliminates intermediate Float32Array + ArrayBuffer.slice copies.
+ */
+function analyzeAndPreparePcm16FromFloat32(work) {
+  const len = work.length;
+  let voiced = 0;
+  let peak = 0;
+  for (let i = 0; i < len; i += 1) {
+    const a = Math.abs(work[i]);
+    if (a >= SPEECH_THRESHOLD) voiced += 1;
+    if (a > peak) peak = a;
+  }
+  const ratio = len > 0 ? voiced / len : 0;
+  if (ratio < MIN_SPEECH_RATIO) {
+    return { ratio, pcm16: null };
+  }
+  const gain = peak > 0.005 && peak < 0.35 ? Math.min(8, 0.72 / peak) : 1;
+  const applyGain = gain > 1.15 ? gain : 1;
+  const pcm16 = new Int16Array(len);
+  for (let i = 0; i < len; i += 1) {
+    const raw = applyGain !== 1 ? work[i] * applyGain : work[i];
+    const clamped = Math.max(-1, Math.min(1, raw));
+    pcm16[i] = clamped < 0 ? Math.round(clamped * 32768) : Math.round(clamped * 32767);
+  }
+  return { ratio, pcm16 };
+}
+
+/**
+ * Direct binary Int16 PCM path: single-pass speech ratio + peak analysis + optional in-place quiet-speech boost.
+ */
+function analyzeAndPreparePcm16FromInt16(work) {
+  const len = work.length;
+  const intThreshold = Math.round(SPEECH_THRESHOLD * 32767);
+  let voiced = 0;
+  let peakInt = 0;
+  for (let i = 0; i < len; i += 1) {
+    const a = Math.abs(work[i]);
+    if (a >= intThreshold) voiced += 1;
+    if (a > peakInt) peakInt = a;
+  }
+  const ratio = len > 0 ? voiced / len : 0;
+  if (ratio < MIN_SPEECH_RATIO) {
+    return { ratio, pcm16: null };
+  }
+  const peak = peakInt / 32767;
+  const gain = peak > 0.005 && peak < 0.35 ? Math.min(8, 0.72 / peak) : 1;
+  if (gain > 1.15) {
+    const boosted = new Int16Array(len);
+    for (let i = 0; i < len; i += 1) {
+      const v = Math.round(work[i] * gain);
+      boosted[i] = Math.max(-32768, Math.min(32767, v));
+    }
+    return { ratio, pcm16: boosted };
+  }
+  return { ratio, pcm16: work };
+}
+
 class SttService {
   constructor(options = {}) {
     this.modelPath = options.modelPath || null;
     this.modelId = options.modelId || 'whisper-base-q5_1';
     this.whisperModule = options.whisperModule || null;
-    this.importer = options.importer || (() => import('@fugood/whisper.node'));
+    this.importer =
+      options.importer ||
+      (async () => {
+        try {
+          return require('@fugood/whisper.node');
+        } catch {
+          return import('@fugood/whisper.node');
+        }
+      });
     this.idleUnloadMs =
       typeof options.idleUnloadMs === 'number' ? options.idleUnloadMs : DEFAULT_IDLE_UNLOAD_MS;
     this.context = null;
@@ -326,7 +396,8 @@ class SttService {
 
   async transcribePcm(pcm16k, uiLang = 'en') {
     const startedAt = Date.now();
-    const samples = toFloat32Array(pcm16k);
+    const isInt16Input = pcm16k instanceof Int16Array;
+    const samples = isInt16Input ? pcm16k : toFloat32Array(pcm16k);
     if (!samples) {
       return { ok: false, code: 'INVALID_AUDIO', message: 'Invalid PCM audio buffer.' };
     }
@@ -346,8 +417,10 @@ class SttService {
       truncated = true;
     }
 
-    const ratio = computeSpeechRatio(work);
-    if (ratio < MIN_SPEECH_RATIO) {
+    const { ratio, pcm16 } = isInt16Input
+      ? analyzeAndPreparePcm16FromInt16(work)
+      : analyzeAndPreparePcm16FromFloat32(work);
+    if (!pcm16 || ratio < MIN_SPEECH_RATIO) {
       return {
         ok: false,
         code: 'SILENCE',
@@ -384,9 +457,12 @@ class SttService {
             : lang === 'en'
               ? 'Add task, tomorrow, today, at 15:00, high priority, low priority, important, complete, delete, read my note.'
               : undefined;
-        // @fugood/whisper.node transcribeData() requires signed 16-bit Mono 16 kHz PCM ArrayBuffer!
-        const pcm16 = float32ToInt16Pcm(work);
-        const pcmBuf = pcm16.buffer.slice(pcm16.byteOffset, pcm16.byteOffset + pcm16.byteLength);
+        // @fugood/whisper.node transcribeData() requires signed 16-bit Mono 16 kHz PCM ArrayBuffer
+        // Avoid redundant ArrayBuffer copy when pcm16 already spans its entire backing ArrayBuffer
+        const pcmBuf =
+          pcm16.byteOffset === 0 && pcm16.byteLength === pcm16.buffer.byteLength
+            ? pcm16.buffer
+            : pcm16.buffer.slice(pcm16.byteOffset, pcm16.byteOffset + pcm16.byteLength);
         const job = await context.transcribeData(pcmBuf, {
           language: lang,
           temperature: 0.0,
@@ -423,6 +499,25 @@ class SttService {
           elapsedMs: Date.now() - startedAt,
         };
       }
+    } finally {
+      this._releaseSlot();
+    }
+  }
+
+  async warmup() {
+    await this._acquireSlot();
+    try {
+      await this.ensureContext();
+      return { ok: true, loaded: Boolean(this.context), gpuFallbackUsed: this.gpuFallbackUsed };
+    } catch (err) {
+      sttLog().error(
+        { err, modelPath: this.modelPath, modelId: this.modelId },
+        'SttService warmup failed',
+      );
+      return {
+        ok: false,
+        code: err && err.message === 'STT_MODEL_MISSING' ? 'STT_MODEL_MISSING' : 'STT_UNAVAILABLE',
+      };
     } finally {
       this._releaseSlot();
     }

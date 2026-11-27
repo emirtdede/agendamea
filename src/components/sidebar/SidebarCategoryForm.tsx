@@ -39,7 +39,7 @@ export function SidebarCategoryForm({
         onClick={onOpenFromCollapsed}
         aria-label={t.newCategory}
         title={t.newCategory}
-        className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+        className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors"
       >
         <Plus className="h-4 w-4" />
       </button>
@@ -79,7 +79,7 @@ export function SidebarCategoryForm({
           type="button"
           onClick={onClose}
           disabled={isCreatingCategory}
-          className="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
+          className="rounded-md px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow disabled:opacity-40"
         >
           {t.cancelButton}
         </button>

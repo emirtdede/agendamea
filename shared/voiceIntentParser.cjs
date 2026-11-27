@@ -386,10 +386,17 @@ function parseVoiceIntent(rawText, options = {}) {
     }
   }
 
-  // 8. UNIVERSAL 73-LANGUAGE ISO/SYMBOL FAST PATH (e.g. "Meeting 2026-12-05 10:30 #work !")
+  // 8. UNIVERSAL 73-LANGUAGE ISO/SYMBOL + NATURAL SCHEDULE FAST PATH
+  // (e.g. "Meeting 2026-12-05 10:30 #work !" or "Yarın saat 15'te doktor randevusu")
   const hasStructuredSignal =
     /\b\d{4}-\d{2}-\d{2}\b/.test(text) ||
     /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/.test(text) ||
+    /(?:^|\s)(?:saat|at)\s+(?:[01]?\d|2[0-3])(?::[0-5]\d)?(?:'?(?:te|ta|de|da|e|a))?(?=\b|\s|$)/iu.test(
+      text,
+    ) ||
+    /(?<![\p{L}\p{N}_])(bug[üu]n(?:[üu]n|e|k[üu]|[üu])?|yar[ıi]n(?:a|ki)?|[öo]b[üu]r\s+g[üu]n|today|tomorrow|day\s+after\s+tomorrow)(?![\p{L}\p{N}_])/iu.test(
+      text,
+    ) ||
     /(?:^|\s)#[\p{L}\p{N}_-]{1,28}/u.test(text) ||
     /(?:^|\s)\/[\p{L}\p{N}_-]{1,40}/u.test(text) ||
     /(?:^|\s)[!*^](?=\s|$)/.test(text);

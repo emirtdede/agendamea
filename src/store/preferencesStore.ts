@@ -9,6 +9,7 @@ import type {
   CompletionSoundPreset,
   DefaultStartupView,
   FontFamilyPreset,
+  FontScalePreset,
   LayoutMode,
   ListDensity,
   Priority,
@@ -42,9 +43,11 @@ export interface PreferencesStoreState {
   customIconColor: string;
   listDensity: ListDensity;
   fontFamily: FontFamilyPreset;
+  fontScale: FontScalePreset;
   zoomPercent: number;
   highContrast: boolean;
   reducedMotion: boolean;
+  readableSpacing: boolean;
   colorBlindShapes: boolean;
   strongFocusRing: boolean;
   closeBehavior: CloseBehavior;
@@ -61,6 +64,7 @@ export interface PreferencesStoreState {
   trashAutoPurgeDays: TrashAutoPurgeDays;
   dragLocked: boolean;
   language: LanguageCode;
+  pendingLanguage: LanguageCode | null;
   sidebarCollapsed: boolean;
 }
 
@@ -75,8 +79,10 @@ export interface PreferencesStore extends SelectorStore<PreferencesStoreState> {
   setFontFamily: (font: FontFamilyPreset) => void;
   resetAppearance: () => void;
   setZoomPercent: (zoom: number, options?: { silentError?: boolean }) => void;
+  setFontScale: (scale: FontScalePreset) => void;
   setHighContrast: (enabled: boolean) => void;
   setReducedMotion: (enabled: boolean) => void;
+  setReadableSpacing: (enabled: boolean) => void;
   setColorBlindShapes: (enabled: boolean) => void;
   setStrongFocusRing: (enabled: boolean) => void;
   resetAccessibility: () => void;
@@ -95,6 +101,7 @@ export interface PreferencesStore extends SelectorStore<PreferencesStoreState> {
   resetGeneral: () => void;
   setDragLocked: (locked: boolean, onRollback?: () => void) => void;
   setLanguage: (nextLang: LanguageCode) => void;
+  saveLanguageForNextLaunch: (nextLang: LanguageCode) => Promise<void>;
   toggleSidebarCollapsed: () => void;
   expandSidebarIfCollapsed: () => boolean;
   syncFromBootstrap: (
@@ -137,17 +144,30 @@ export function readInitialTheme(): {
 
 function readInitialAccessibility(): {
   zoomPercent: number;
+  fontScale: FontScalePreset;
   highContrast: boolean;
   reducedMotion: boolean;
+  readableSpacing: boolean;
 } {
   try {
+    const rawScale = localStorage.getItem('agendamea-font-scale');
+    const fontScale: FontScalePreset =
+      rawScale === 'small' || rawScale === 'large' || rawScale === 'xlarge' ? rawScale : 'normal';
     return {
       zoomPercent: clampZoomPercent(localStorage.getItem('agendamea-zoom-percent') ?? 100),
+      fontScale,
       highContrast: localStorage.getItem('agendamea-high-contrast') === 'true',
       reducedMotion: localStorage.getItem('agendamea-reduced-motion') === 'true',
+      readableSpacing: localStorage.getItem('agendamea-readable-spacing') === 'true',
     };
   } catch {
-    return { zoomPercent: 100, highContrast: false, reducedMotion: false };
+    return {
+      zoomPercent: 100,
+      fontScale: 'normal',
+      highContrast: false,
+      reducedMotion: false,
+      readableSpacing: false,
+    };
   }
 }
 
@@ -172,9 +192,11 @@ function buildInitialPreferencesState(): PreferencesStoreState {
     customIconColor: '#2563eb',
     listDensity: 'comfortable',
     fontFamily: 'system',
+    fontScale: initialAccessibility.fontScale,
     zoomPercent: initialAccessibility.zoomPercent,
     highContrast: initialAccessibility.highContrast,
     reducedMotion: initialAccessibility.reducedMotion,
+    readableSpacing: initialAccessibility.readableSpacing,
     colorBlindShapes: false,
     strongFocusRing: false,
     closeBehavior: 'ask',
@@ -191,6 +213,7 @@ function buildInitialPreferencesState(): PreferencesStoreState {
     trashAutoPurgeDays: 0,
     dragLocked: false,
     language: initialLang.code,
+    pendingLanguage: null,
     sidebarCollapsed: readInitialSidebarCollapsed(),
   };
 }
@@ -321,6 +344,11 @@ export function createPreferencesStore(
     });
   };
 
+  const setFontScale = (scale: FontScalePreset): void => {
+    base.patchState({ fontScale: scale });
+    void persistSettings({ fontScale: scale }).catch(onError);
+  };
+
   const setHighContrast = (enabled: boolean): void => {
     base.patchState({ highContrast: enabled });
     void persistSettings({ highContrast: enabled }).catch(onError);
@@ -329,6 +357,11 @@ export function createPreferencesStore(
   const setReducedMotion = (enabled: boolean): void => {
     base.patchState({ reducedMotion: enabled });
     void persistSettings({ reducedMotion: enabled }).catch(onError);
+  };
+
+  const setReadableSpacing = (enabled: boolean): void => {
+    base.patchState({ readableSpacing: enabled });
+    void persistSettings({ readableSpacing: enabled }).catch(onError);
   };
 
   const setColorBlindShapes = (enabled: boolean): void => {
@@ -344,15 +377,19 @@ export function createPreferencesStore(
   const resetAccessibility = (): void => {
     base.patchState({
       zoomPercent: 100,
+      fontScale: 'normal',
       highContrast: false,
       reducedMotion: false,
+      readableSpacing: false,
       colorBlindShapes: false,
       strongFocusRing: false,
     });
     void persistSettings({
       zoomPercent: 100,
+      fontScale: 'normal',
       highContrast: false,
       reducedMotion: false,
+      readableSpacing: false,
       colorBlindShapes: false,
       strongFocusRing: false,
     }).catch(onError);
@@ -494,13 +531,35 @@ export function createPreferencesStore(
 
   const setLanguage = (nextLang: LanguageCode): void => {
     langDirty = true;
-    base.patchState({ language: nextLang });
+    base.patchState({ language: nextLang, pendingLanguage: null });
     try {
+      localStorage.setItem('agendamea-language', nextLang);
       localStorage.setItem('agendamea-language-customized', 'true');
+      localStorage.removeItem('agendamea-app-title');
     } catch {
       // Ignore storage write errors
     }
     void persistSettings({ language: nextLang }).catch(onError);
+  };
+
+  const saveLanguageForNextLaunch = async (nextLang: LanguageCode): Promise<void> => {
+    langDirty = true;
+    const activeLang = base.getState().language;
+    base.patchState({
+      pendingLanguage: nextLang === activeLang ? null : nextLang,
+    });
+    try {
+      localStorage.setItem('agendamea-language', nextLang);
+      localStorage.setItem('agendamea-language-customized', 'true');
+      localStorage.removeItem('agendamea-app-title');
+    } catch {
+      // Ignore storage write errors
+    }
+    try {
+      await persistSettings({ language: nextLang });
+    } catch (err) {
+      onError(err);
+    }
   };
 
   const toggleSidebarCollapsed = (): void => {
@@ -581,6 +640,10 @@ export function createPreferencesStore(
     }
     if (settings.listDensity) patch.listDensity = settings.listDensity;
     if (settings.fontFamily) patch.fontFamily = settings.fontFamily;
+    if (settings.fontScale) patch.fontScale = settings.fontScale;
+    if (typeof settings.readableSpacing === 'boolean') {
+      patch.readableSpacing = settings.readableSpacing;
+    }
     if (Array.isArray(settings.recentCustomColors)) {
       patch.recentCustomColors = settings.recentCustomColors.slice(0, 6);
     }
@@ -612,9 +675,14 @@ export function createPreferencesStore(
     }
 
     if (fromExternalSse && settings.language && isValidLanguageCode(settings.language)) {
-      langDirty = false;
-      patch.language = settings.language;
+      const currentActive = base.getState().language;
+      if (settings.language !== currentActive) {
+        patch.pendingLanguage = settings.language;
+      } else {
+        patch.pendingLanguage = null;
+      }
       try {
+        localStorage.setItem('agendamea-language', settings.language);
         localStorage.setItem('agendamea-language-customized', 'true');
       } catch {
         // Ignore storage write errors
@@ -637,10 +705,12 @@ export function createPreferencesStore(
         // Fall back to navigator language
       }
 
-      if (nativeLocale?.installerLocale && !hasCustomLang) {
+      if (nativeLocale?.installerLocale) {
         const setupLang = resolveSystemLanguage([nativeLocale.installerLocale], 'en');
         patch.language = setupLang;
+        patch.pendingLanguage = null;
         try {
+          localStorage.setItem('agendamea-language', setupLang);
           localStorage.setItem('agendamea-language-customized', 'true');
         } catch {
           // Ignore storage write errors
@@ -655,9 +725,14 @@ export function createPreferencesStore(
         if (nativeLocale?.osLocale) {
           resolvedInitial = resolveSystemLanguage([nativeLocale.osLocale], 'en');
         }
-        if (settings.language === 'tr' && resolvedInitial !== 'tr') {
+        if (
+          !settings.onboardingCompleted &&
+          settings.language === 'tr' &&
+          resolvedInitial !== 'tr'
+        ) {
           patch.language = resolvedInitial;
           try {
+            localStorage.setItem('agendamea-language', resolvedInitial);
             localStorage.setItem('agendamea-language-customized', 'true');
           } catch {
             // Ignore storage write errors
@@ -751,10 +826,12 @@ export function createPreferencesStore(
         (settings.customIconColor && normalizeHexColor(settings.customIconColor)) || '#2563eb',
       listDensity: settings.listDensity ?? 'comfortable',
       fontFamily: settings.fontFamily ?? 'system',
+      fontScale: settings.fontScale ?? 'normal',
       zoomPercent:
         typeof settings.zoomPercent === 'number' ? clampZoomPercent(settings.zoomPercent) : 100,
       highContrast: Boolean(settings.highContrast),
       reducedMotion: Boolean(settings.reducedMotion),
+      readableSpacing: Boolean(settings.readableSpacing),
       colorBlindShapes: Boolean(settings.colorBlindShapes),
       strongFocusRing: Boolean(settings.strongFocusRing),
       closeBehavior: nextCloseBehavior,
@@ -800,8 +877,10 @@ export function createPreferencesStore(
     setFontFamily,
     resetAppearance,
     setZoomPercent,
+    setFontScale,
     setHighContrast,
     setReducedMotion,
+    setReadableSpacing,
     setColorBlindShapes,
     setStrongFocusRing,
     resetAccessibility,
@@ -820,6 +899,7 @@ export function createPreferencesStore(
     resetGeneral,
     setDragLocked,
     setLanguage,
+    saveLanguageForNextLaunch,
     toggleSidebarCollapsed,
     expandSidebarIfCollapsed,
     syncFromBootstrap,

@@ -1,6 +1,8 @@
+import { Plus } from 'lucide-react';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
 import type { KanbanGroupBy, Priority } from '../../types';
+import { ContextMenu } from '../ContextMenu';
 import { CompactBoardCard, type SharedBoardViewProps } from './CompactBoardCard';
 
 export const KanbanBoardView = React.memo(function KanbanBoardView({
@@ -16,10 +18,17 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
   onUpdateTodo,
   onTagClick,
   onTodoContextMenu,
+  onQuickCreateInBoard,
 }: SharedBoardViewProps) {
   const { t } = useI18n();
   const [groupBy, setGroupBy] = useState<KanbanGroupBy>('priority');
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [colCtxMenu, setColCtxMenu] = useState<{
+    x: number;
+    y: number;
+    colId: string;
+    title: string;
+  } | null>(null);
 
   const handleCardDragStart = useCallback(
     (e: React.DragEvent<HTMLDivElement>, id: string) => {
@@ -36,39 +45,53 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
 
   const columns = useMemo(() => {
     if (groupBy === 'status') {
+      const activeItems: typeof todos = [];
+      const completedItems: typeof todos = [];
+      for (const item of todos) {
+        if (item.completed) completedItems.push(item);
+        else activeItems.push(item);
+      }
       return [
         {
           id: 'active',
           title: t.filterActive,
           dotColor: '#2563eb',
-          items: todos.filter((item) => !item.completed),
+          items: activeItems,
         },
         {
           id: 'completed',
           title: t.filterCompleted,
           dotColor: '#16a34a',
-          items: todos.filter((item) => item.completed),
+          items: completedItems,
         },
       ];
+    }
+    const highItems: typeof todos = [];
+    const normalItems: typeof todos = [];
+    const lowItems: typeof todos = [];
+    for (const item of todos) {
+      if (item.priority === 'high') highItems.push(item);
+      else if (item.priority === 'low') lowItems.push(item);
+      else normalItems.push(item);
     }
     return [
       {
         id: 'high',
         title: t.priorityHigh,
         dotColor: '#dc2626',
-        items: todos.filter((item) => item.priority === 'high'),
+        items: highItems,
       },
       {
         id: 'normal',
         title: t.priorityNormal,
         dotColor: '#2563eb',
-        items: todos.filter((item) => item.priority === 'normal'),
+        items: normalItems,
       },
       {
         id: 'low',
         title: t.priorityLow,
         dotColor: '#71717a',
-        items: todos.filter((item) => item.priority === 'low'),
+        items: lowItems,
       },
     ];
   }, [groupBy, todos, t]);
@@ -138,6 +161,13 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
             <div
               key={col.id}
               data-testid={`kanban-col-${col.id}`}
+              onContextMenu={(e) => {
+                if (e.defaultPrevented || !onQuickCreateInBoard) return;
+                if (groupBy === 'status' && col.id === 'completed') return;
+                e.preventDefault();
+                e.stopPropagation();
+                setColCtxMenu({ x: e.clientX, y: e.clientY, colId: col.id, title: col.title });
+              }}
               onDragOver={(e) => {
                 if (dragLocked) return;
                 e.preventDefault();
@@ -199,6 +229,31 @@ export const KanbanBoardView = React.memo(function KanbanBoardView({
           );
         })}
       </div>
+
+      {colCtxMenu && onQuickCreateInBoard && (
+        <ContextMenu
+          testId="kanban-col-context-menu"
+          x={colCtxMenu.x}
+          y={colCtxMenu.y}
+          onClose={() => setColCtxMenu(null)}
+          items={[
+            {
+              id: 'add-in-column',
+              label: `${t.ctxAddTaskInColumn} (${colCtxMenu.title})`,
+              icon: <Plus className="h-3.5 w-3.5" />,
+              onSelect: () => {
+                const priority: Priority =
+                  colCtxMenu.colId === 'high' ||
+                  colCtxMenu.colId === 'low' ||
+                  colCtxMenu.colId === 'normal'
+                    ? colCtxMenu.colId
+                    : 'normal';
+                onQuickCreateInBoard({ priority });
+              },
+            },
+          ]}
+        />
+      )}
     </div>
   );
 });

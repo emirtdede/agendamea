@@ -100,8 +100,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             }}
             className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-start text-xs font-medium transition-colors disabled:opacity-40 ${
               item.danger
-                ? 'text-red-600 dark:text-red-400 hover:bg-red-500/10'
-                : 'text-[var(--text-primary)] hover:bg-[var(--surface-hover)]'
+                ? 'text-red-600 dark:text-red-400 ag-hover-danger-glow'
+                : 'text-[var(--text-primary)] ag-hover-glow'
             }`}
           >
             {item.icon && (

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type Database from 'better-sqlite3';
+import sqliteCore from '../../shared/sqliteCore.cjs';
 import textNormalize from '../../shared/textNormalize.cjs';
 import todoRepository from '../../shared/todoRepository.cjs';
 import type { Priority, Subtask, SubtaskPatch, Todo, TodoPatch } from '../types.ts';
@@ -30,13 +31,25 @@ export function getTodoByIdDao(db: Database.Database, id: string): Todo | null {
 export function findTodoBySelectorDao(db: Database.Database, selector: string): Todo | null {
   const clean = String(selector || '').trim();
   if (!clean) return null;
-  const exactRow = db
-    .prepare('SELECT id FROM todos WHERE id = ? AND deleted_at IS NULL')
+  const exactRow = sqliteCore
+    .prepareCached(db, 'SELECT id FROM todos WHERE id = ? AND deleted_at IS NULL')
     .get(clean) as { id: string } | undefined;
   if (exactRow) return getTodoByIdDao(db, exactRow.id);
 
-  const rows = db
-    .prepare(
+  // Fast SQL prefix match on primary key before scanning titles
+  if (!clean.includes('%') && !clean.includes('_')) {
+    const prefixRow = sqliteCore
+      .prepareCached(
+        db,
+        'SELECT id FROM todos WHERE id LIKE ? AND deleted_at IS NULL ORDER BY pinned DESC, sort_order ASC, created_at DESC LIMIT 1',
+      )
+      .get(`${clean}%`) as { id: string } | undefined;
+    if (prefixRow) return getTodoByIdDao(db, prefixRow.id);
+  }
+
+  const rows = sqliteCore
+    .prepareCached(
+      db,
       'SELECT id, title FROM todos WHERE deleted_at IS NULL ORDER BY pinned DESC, sort_order ASC, created_at DESC',
     )
     .all() as Array<{ id: string; title: string }>;
@@ -53,13 +66,18 @@ export function resolveTodoByVoiceSelectorDao(
 ): Todo | null {
   const clean = String(selector || '').trim();
   if (!clean) return null;
-  const rows = db
-    .prepare(
+
+  const exactIdRow = sqliteCore
+    .prepareCached(db, 'SELECT id FROM todos WHERE LOWER(id) = LOWER(?) AND deleted_at IS NULL')
+    .get(clean) as { id: string } | undefined;
+  if (exactIdRow) return getTodoByIdDao(db, exactIdRow.id);
+
+  const rows = sqliteCore
+    .prepareCached(
+      db,
       'SELECT id, title, notes, completed FROM todos WHERE deleted_at IS NULL ORDER BY pinned DESC, sort_order ASC, created_at DESC',
     )
     .all() as Array<{ id: string; title: string; notes: string; completed: number }>;
-  const exact = rows.find((t) => t.id.toLowerCase() === clean.toLowerCase());
-  if (exact) return getTodoByIdDao(db, exact.id);
   const matched = rows.filter(
     (t) =>
       textNormalize.matchesNormalized(t.title, clean) ||

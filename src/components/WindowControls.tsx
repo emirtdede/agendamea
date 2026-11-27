@@ -10,6 +10,8 @@ interface NativeWindowBridge {
   isMaximized?: () => Promise<boolean> | boolean;
   onMaximizedChange?: (cb: (isMaximized: boolean) => void) => (() => void) | undefined;
   onCloseRequested?: (cb: () => void) => (() => void) | undefined;
+  onWindowMinimizedOrHidden?: (cb: () => void) => (() => void) | undefined;
+  onVoiceActivity?: (cb: () => void) => (() => void) | undefined;
   onFocusQuickAdd?: (cb: () => void) => (() => void) | undefined;
   onNavigateSmartView?: (
     cb: (viewId: import('../types').SmartView) => void,
@@ -138,11 +140,13 @@ interface NativeWindowBridge {
     updateShortcuts?: boolean;
   }) => Promise<{ ok: boolean; icoPath?: string; updatedShortcuts?: number }>;
   setZoomFactor?: (factor: number) => Promise<{ ok: boolean; factor?: number }>;
+  setWindowThemeMode?: (mode: import('../types').ThemeMode) => Promise<{ ok: boolean }>;
   getInitialLocale?: () => Promise<{
     installerLocale: string | null;
     osLocale: string;
     preferred: string;
   }>;
+  relaunch?: () => Promise<{ ok: boolean }>;
   checkForUpdates?: () => Promise<import('../types').UpdateCheckResult>;
   downloadAndInstallUpdate?: (url?: string) => Promise<{
     ok: boolean;
@@ -317,7 +321,7 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
   return (
     <fieldset
       aria-label={t.windowControlsLabel}
-      className="app-no-drag flex items-center gap-0.5 rounded-lg border-0 bg-[var(--canvas)]/75 p-0.5 backdrop-blur-sm"
+      className="app-no-drag flex items-center gap-0.5 rounded-lg border-0 bg-[var(--canvas)]/92 p-0.5"
     >
       {/* Minimize */}
       <button
@@ -325,7 +329,7 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
         onClick={() => void handleMinimize()}
         aria-label={t.windowMinimize}
         title={t.windowMinimize}
-        className="app-no-drag flex h-7 w-8 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] active:bg-[var(--border)]"
+        className="app-no-drag flex h-7 w-8 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors ag-hover-glow hover:text-[var(--text-primary)] active:bg-[var(--border)]"
       >
         <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
           <path d="M2 6.5H10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -339,7 +343,7 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
         aria-label={maximizeTitle}
         title={maximizeTitle}
         aria-pressed={isFullscreenOrMaximized}
-        className="app-no-drag flex h-7 w-8 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] active:bg-[var(--border)]"
+        className="app-no-drag flex h-7 w-8 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors ag-hover-glow hover:text-[var(--text-primary)] active:bg-[var(--border)]"
       >
         {isFullscreenOrMaximized ? (
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -380,7 +384,7 @@ export function WindowControls({ onNotify }: WindowControlsProps) {
         onClick={() => void handleClose()}
         aria-label={t.windowClose}
         title={t.windowClose}
-        className="app-no-drag flex h-7 w-8 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors hover:bg-[#c42b1c] hover:text-white active:bg-[#a62216]"
+        className="app-no-drag flex h-7 w-8 cursor-pointer items-center justify-center rounded-md text-[var(--text-muted)] transition-colors ag-hover-danger-glow"
       >
         <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
           <path

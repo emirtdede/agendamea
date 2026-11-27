@@ -227,7 +227,7 @@ export const TR_DICTIONARY: UiDictionary = {
   onedriveBackupDetectedDesc:
     'Bulut eşitleme klasörünüzde daha önceden kaydedilmiş bir Agendamea yedeği bulundu. Verilerinizi geri yüklemek mi, yoksa yeni bir başlangıç yapmak mı istersiniz?',
   onedriveStartFreshButton: 'Yeni Başlangıç Yap',
-  welcomeReplayButton: 'Karşılama Rehberi',
+  welcomeReplayButton: 'Başlangıç Sihirbazı',
   welcomeSkipButton: 'Atla',
   welcomeBackButton: 'Geri',
   welcomeNextButton: 'İleri',
@@ -429,10 +429,10 @@ export const TR_DICTIONARY: UiDictionary = {
   aiModelInstalledBadge: 'Doğrulandı',
   aiModelNotInstalledBadge: 'İndirilmedi',
   aiModelDownloadingLabel: 'İndiriliyor',
-  aiVoiceControlsTitle: 'Sesli Dikte, VAD ve Sesli Okuma',
+  aiVoiceControlsTitle: 'Ses ve Dikte Ayarları',
   aiVoiceShortcutLabel: 'Global Dikte Kısayolu',
-  aiVoiceAutoStopLabel: 'Sessizlikte Otomatik Durdurma (VAD)',
-  aiVoiceTtsToggleLabel: 'Notları Sesli Oku (Windows OneCore TTS)',
+  aiVoiceAutoStopLabel: 'Konuşma bitince otomatik durdur',
+  aiVoiceTtsToggleLabel: 'Yanıtları sesli oku',
   aiVoiceTtsVoiceLabel: 'Ses Paketi',
   aiVoiceTestOverlayButton: 'Dikte Balonunu Test Et',
   aiVoiceTrayGuideTitle: 'Arka Planda Kesintisiz Dikte',
@@ -440,7 +440,7 @@ export const TR_DICTIONARY: UiDictionary = {
     'Pencereyi kapattığınızda kısayolun çalışması için Sistem Tepsisinde Bekle + Başlangıçta Aç modunu tek tıkla etkinleştirin.',
   aiVoiceEnableTrayButton: 'Tepsi + Başlangıç Modunu Aç',
   aiPrivacyBadgeText:
-    '%100 cihaz içi · 0 bulut API · 0 maliyet · Ses kayıtları yalnızca RAM içinde işlenir.',
+    'Ses ve yapay zeka tamamen bilgisayarınızda çalışır; verileriniz cihazınızdan çıkmaz.',
   aiRagReindexButton: 'RAG İndeksini Yenile',
   aiRagChunksLabel: 'İndeksli Parça',
   overlayPreparingLabel: 'Mikrofon hazırlanıyor...',
@@ -667,7 +667,7 @@ export const TR_DICTIONARY: UiDictionary = {
   accessibilityZoomIncrease: 'Yakınlaştırmayı artır',
   aiExternalBaseUrlLabel: 'Özel Sunucu Adresi',
   aiOpenModelsFolderButton: 'Model Klasörünü Aç',
-  aiVoiceDictationLangAuto: 'Uygulama Diliyle Eşleştir (Otomatik)',
+  aiVoiceDictationLangAuto: 'Otomatik algıla (Türkçe, İngilizce ve 70+ dil)',
   aiVoiceDictationLangLabel: 'Dikte Algılama Dili',
   appearanceDensityComfortable: 'Rahat',
   appearanceDensityCompact: 'Kompakt',
@@ -990,4 +990,331 @@ export const TR_DICTIONARY: UiDictionary = {
   welcomePowerExportTitle: 'Şifreli Yedekler ve Esnek Dışa Aktarma',
   welcomePowerExportDesc:
     'Yedeklerinizi parola ile koruyun veya dilediğinizde Takvim, CSV, Markdown ve JSON olarak dışa aktarın.',
+  cmdPaletteAriaLabel: 'Hızlı arama ve komut paleti',
+  cmdPalettePlaceholder: 'Görev, komut, sayfa veya tema ara...',
+  cmdPaletteGroupActions: 'EYLEMLER',
+  cmdPaletteGroupRecords: 'GÖREVLER VE KAYITLAR',
+  cmdPaletteGroupNavigation: 'GEZİNME',
+  cmdPaletteGroupThemes: 'TEMALAR VE AYARLAR',
+  cmdPaletteNoResults: 'Sonuç bulunamadı',
+  cmdPaletteFooterHint: '↑↓ Gezin • Enter Seç • Esc Kapat',
+  cmdPaletteResultsCount: 'sonuç',
+  cmdPaletteActionNewTask: 'Yeni görev ekle',
+  cmdPaletteActionDictate: 'Sesli dikteyi başlat',
+  cmdPaletteActionToggleSidebar: 'Kenar menüyü daralt / genişlet',
+  cmdPaletteActionToggleTheme: 'Açık / koyu temayı değiştir',
+  cmdPaletteActiveBadge: 'Aktif',
+  cmdPaletteTriggerLabel: 'Hızlı arama',
+  aiQuickSetupNeededToast: 'Sesli dikte için önce tek tıkla kurulumu tamamlayın. Ayarlar açılıyor.',
+  aiOneClickHeroTitle: 'Tek Tıkla Yapay Zeka ve Sesli Dikte Kurulumu',
+  aiOneClickHeroDesc:
+    'Tek bir butona basarak sesli dikte ve akıllı asistan için gereken her şeyi bilgisayarınıza otomatik kurun. Teknik ayar gerekmez.',
+  aiOneClickReadyTitle: 'Yapay Zeka ve Sesli Dikte Kullanıma Hazır',
+  aiOneClickReadyDesc:
+    'Tüm ses ve yapay zeka bileşenleri bilgisayarınızda kurulu ve aktif. İnternet olmadan anında kullanabilirsiniz.',
+  aiOneClickReadyBadge: 'Hazır',
+  aiOneClickNotReadyBadge: 'Kurulum Gerekli',
+  aiOneClickPendingBadge: 'Kurulmadı',
+  aiOneClickAdvancedButton: 'Gelişmiş Modeller',
+  aiOneClickFeatureDictation: 'Sesli Dikte (Konuş-Yaz)',
+  aiOneClickFeatureAssistant: 'Yapay Zeka Asistanı',
+  aiOneClickFeatureSearch: 'Akıllı Not Arama',
+  aiOneClickTierFastTitle: 'Hızlı Paket',
+  aiOneClickTierFastDesc: 'Küçük indirme, her bilgisayarda hızlı çalışır.',
+  aiOneClickTierBalancedTitle: 'Dengeli Paket',
+  aiOneClickTierBalancedDesc: 'Günlük Türkçe ve İngilizce kullanım için ideal denge.',
+  aiOneClickTierBestTitle: 'Yüksek Kalite',
+  aiOneClickTierBestDesc: 'En yüksek konuşma ve anlama doğruluğu (güçlü bilgisayarlar).',
+  aiOneClickRecommendedShort: 'Önerilen',
+  aiOneClickStatusDownloading: 'Gerekli dosyalar indiriliyor...',
+  aiOneClickStatusConfiguring: 'Otomatik yapılandırılıyor...',
+  aiOneClickStatusWarming: 'Ses ve yapay zeka motoru hazırlanıyor...',
+  aiOneClickPreparingHint: 'Kurulum tamamlandığında her şey otomatik etkinleşir.',
+  aiOneClickSetupButton: 'Tek Tıkla Kur ve Hazırla',
+  aiOneClickReverifyButton: 'Kurulumu Doğrula ve Yenile',
+  aiOneClickWarmupButton: 'Motoru Şimdi Hazırla',
+  aiOneClickWarmupDone: 'Ses tanıma motoru belleğe yüklendi ve anında kullanıma hazır.',
+  aiOneClickOfflineNote: 'Kurulumdan sonra tamamen internetsiz ve gizli çalışır.',
+  aiModelActivateButton: 'Kullan',
+  aiLiveTestSectionTitle: 'Canlı Test Alanı',
+  aiLiveTestDictationTitle: 'Hemen Konuş ve Test Et',
+  aiLiveTestDictationDesc:
+    'Butona basıp Türkçe veya İngilizce konuşun; sesiniz anında temiz metne dönüşsün.',
+  aiLiveTestSetupFirstHint: 'Test etmek için önce yukarıdaki tek tıkla kurulumu tamamlayın.',
+  aiLiveTestStartDictation: 'Konuş ve Dene',
+  aiLiveTestStopDictation: 'Kaydı Bitir',
+  aiLiveTestAddAsTask: 'Görev Olarak Ekle',
+  aiLiveTestTaskAdded: 'Görev eklendi',
+  aiLiveTestAskTitle: 'Yapay Zekayı Hemen Dene',
+  aiLiveTestAskDesc: 'Görevleriniz hakkında soru sorun veya örnek bir komut deneyin.',
+  aiLiveTestAskPlaceholder: 'Örn: Bugün hangi görevlerim var?',
+  aiLiveTestAskButton: 'Sor',
+  settingsTabUserGuide: 'Kullanım Kılavuzu',
+  guideHeroTitle: 'Agendamea Nasıl Kullanılır?',
+  guideHeroDesc:
+    'Tüm özellikleri teknik terimlere boğulmadan, adım adım ve net bir dille öğrenin. Aradığınız konuyu aşağıdan hemen bulabilirsiniz.',
+  guideSearchPlaceholder: 'Kılavuzda konu ara (ör. dikte, kısayol, yedekleme)...',
+  guideSecQuickStartTitle: 'Görev Ekleme ve Düzenleme',
+  guideSecQuickStartDesc:
+    'Günlük işlerinizi saniyeler içinde kaydedin, tarihlendirin ve alt adımlara bölün.',
+  guideSecQuickStartStep1:
+    'Üstteki "Yeni görev ekle" alanına işinizi yazıp Enter tuşuna basın. İsterseniz mikrofon ikonuna basarak konuşarak da ekleyebilirsiniz.',
+  guideSecQuickStartStep2:
+    'Bir göreve tıkladığınızda sağda detay paneli açılır; buradan tarih, saat, öncelik, kategori, etiket ve alt görev ekleyebilirsiniz.',
+  guideSecQuickStartStep3:
+    'Önemli işleri yıldızlayarak veya sabitleyerek listenin en üstünde tutabilir, sağ tıklayarak tüm hızlı işlemlere ulaşabilirsiniz.',
+  guideSecViewsTitle: 'Çalışma Görünümleri ve Planlama',
+  guideSecViewsDesc: 'Aynı görevleri çalışma tarzınıza göre dört farklı düzende görüntüleyin.',
+  guideSecViewsStep1:
+    'Liste görünümü günlük hızlı takip içindir; sürükleyip bırakarak sıralamayı dilediğiniz gibi değiştirebilirsiniz.',
+  guideSecViewsStep2:
+    'Kanban panosu görevlerinizi önceliğe veya duruma göre sütunlara ayırır; kartları sütunlar arasında taşıyabilirsiniz.',
+  guideSecViewsStep3:
+    'Takvim planlayıcı ay içindeki yoğun günlerinizi gösterir; Önem-Aciliyet Matrisi önce neye odaklanmanız gerektiğini netleştirir.',
+  guideSecCommandTitle: 'Hızlı Arama ve Komut Paleti (Ctrl+K)',
+  guideSecCommandDesc:
+    'Elinizi klavyeden kaldırmadan tüm görevlere, sayfalara, işlemlere ve temalara anında ulaşın.',
+  guideSecCommandStep1:
+    'Herhangi bir ekrandayken Ctrl+K kısayoluna basın veya kenar menüdeki arama ikonuna tıklayın.',
+  guideSecCommandStep2:
+    'Bir görev adı, kategori, ayar veya tema rengi yazın; yukarı/aşağı ok tuşlarıyla gezinin ve Enter ile anında açın.',
+  guideSecCommandStep3:
+    'Esc tuşuna basarak veya dış alana tıklayarak komut paletini anında kapatabilirsiniz.',
+  guideSecAiTitle: 'Tek Tıkla Yapay Zeka ve Sesli Dikte',
+  guideSecAiDesc:
+    'Bilgisayarınızda tamamen internetsiz çalışan sesli dikte ve akıllı asistanı zahmetsizce kurun.',
+  guideSecAiStep1:
+    'Ayarlar > Yapay Zeka ve Dikte ekranında bilgisayarınıza uygun paketi seçip "Tek Tıkla Kur ve Hazırla" butonuna basın; tüm indirme ve ayarlar otomatik yapılır.',
+  guideSecAiStep2:
+    'Kurulum bitince görev ekleme kutusundaki mikrofon ikonuna tıklayarak veya dikte kısayoluyla Türkçe ya da İngilizce konuşarak görev oluşturun.',
+  guideSecAiStep3:
+    'Aynı ekrandaki Canlı Test Alanı ile hem sesli dikteyi hem de yapay zeka yanıtlarını tek tıkla deneyebilirsiniz.',
+  guideSecAiOpenButton: 'Yapay Zeka ve Dikteye Git',
+  guideSecPrivacyTitle: 'Gizlilik, Yedekleme ve Çöp Kutusu',
+  guideSecPrivacyDesc:
+    'Tüm notlarınız yalnızca kendi bilgisayarınızda saklanır ve yanlışlıkla silinen hiçbir kayıt kaybolmaz.',
+  guideSecPrivacyStep1:
+    'Yaptığınız her değişiklik otomatik olarak kaydedilir; internet bağlantınız olmasa bile tüm özellikler eksiksiz çalışır.',
+  guideSecPrivacyStep2:
+    'Sildiğiniz görevler ve kategoriler önce Çöp Kutusuna taşınır; buradan dilediğiniz zaman tek tıkla geri yükleyebilirsiniz.',
+  guideSecPrivacyStep3:
+    'Veri ve Yedekleme sekmesinden tek dosyaya yedek alabilir, yedeklerinizi parola ile şifreleyebilir veya OneDrive / Google Drive klasörünüze otomatik eşitleyebilirsiniz.',
+  guideSecPrivacyOpenButton: 'Yedekleme Ayarlarına Git',
+  guideFaqTitle: 'Sık Sorulan Sorular',
+  guideFaqQ1: 'Agendamea internet olmadan çalışır mı?',
+  guideFaqA1:
+    'Evet. Görev ekleme, arama, takvim, hatırlatmalar ve kurulumunu yaptığınız yerel yapay zeka ile sesli dikte tamamen internetsiz çalışır.',
+  guideFaqQ2: 'Sesli dikte hangi dilleri anlar?',
+  guideFaqA2:
+    'Varsayılan "Otomatik algıla" modu Türkçe ve İngilizce başta olmak üzere 70 üzerinde dili anlar. İsterseniz Ayarlar > Yapay Zeka ve Dikte bölümünden tek bir dili sabitleyebilirsiniz.',
+  guideFaqQ3: 'Yanlışlıkla sildiğim bir görevi nasıl geri getiririm?',
+  guideFaqA3:
+    'Silme sonrası altta çıkan Geri Al butonuna basabilir veya Ayarlar > Çöp Kutusu sekmesinden silinen görev ve kategorileri geri yükleyebilirsiniz.',
+  guideFaqQ4: 'Başlangıç Sihirbazını yeniden nasıl açarım?',
+  guideFaqA4:
+    'Ayarlar sol menüsünde en alttaki "Başlangıç Sihirbazı" seçeneğine veya bu sayfanın sağ üstündeki butona tıklayarak istediğiniz zaman yeniden başlatabilirsiniz.',
+  guidePlaygroundSample: 'Üç aylık sunumu hazırla @yarın 14:30 ! * #finans /İş',
+  guidePlaygroundPreset1: 'Elektrik faturasını öde @bugün 17:00 ! #fatura /Kişisel',
+  guidePlaygroundPreset2: 'Ekip planlaması @2026-12-01..2026-12-03 ^ * #ekip /İş',
+  guidePlaygroundPreset3: 'Kahve çekirdeği al @yarın #market',
+  moreInfoLabel: 'Daha fazla bilgi',
+  showAdvancedSettings: 'Gelişmiş Ayarları Göster',
+  hideAdvancedSettings: 'Gelişmiş Ayarları Gizle',
+  showAdvancedShort: 'Göster',
+  hideAdvancedShort: 'Gizle',
+  aboutWebsiteButton: 'Web Sitesi',
+  aboutHeroSubtitle:
+    'Görevlerinizi ve günlük planınızı çevrimdışı yöneten sade, hızlı ve modern bir masaüstü uygulaması.',
+  aboutMetricVersionLabel: 'SÜRÜM',
+  aboutMetricCoreLabel: 'ÇEKİRDEK',
+  aboutMetricCoreValue: 'Çevrimdışı',
+  aboutMetricLanguagesLabel: 'DİL KATALOĞU',
+  aboutMetricPrivacyLabel: 'GİZLİLİK',
+  aboutMetricPrivacyValue: '%100 Yerel',
+  aboutMetricPrivacySub: 'Telemetri ve bulut yok',
+  aboutSpecDeveloper: 'Geliştirici',
+  aboutSpecDistribution: 'Dağıtım',
+  aboutSpecCore: 'Çekirdek',
+  aboutLocalPrivacyBanner:
+    'Tüm görevleriniz, sesli dikte ve yapay zeka asistanı tamamen cihazınızda çalışır; verileriniz bilgisayarınızdan asla çıkmaz.',
+  aboutWelcomePrompt: "Agendamea'nın temel özelliklerini ve kurulum sihirbazını yeniden açın.",
+  aboutOpenWelcomeButton: 'Tanıtımı Aç',
+  aboutDeviceWorkspaceTitle: 'BU CİHAZDAKİ ÇALIŞMA ALANINIZ',
+  aboutDeviceActiveTasks: 'AKTİF GÖREV',
+  aboutDeviceCompletedTasks: 'TAMAMLANAN',
+  aboutDeviceCategories: 'KATEGORİ',
+  aboutDeviceWorkspaceFootnote:
+    'Bu bilgiler yalnızca bu bilgisayarda hesaplanır ve hiçbir yere gönderilmez.',
+  aboutCopyrightNotice:
+    'Tüm hakları saklıdır. Yerel-öncelikli, gizlilik odaklı masaüstü görev yöneticisi.',
+  aboutLegalSupportCardDesc: 'Yardım, erişilebilirlik ve destek bilgileri',
+  a11yCardTitle: 'Erişilebilirlik ve Yakınlaştırma',
+  a11yCardSubtitle:
+    'Yakınlaştırma yüzdesi, yazı boyutu, kontrast ve klavye gezinme konforunu özelleştirin.',
+  a11yFontScaleTitle: 'Yazı Tipi Boyutu',
+  a11yFontScaleDesc: 'Okunabilirliği artırmak için tüm arayüzün taban yazı boyutunu ölçeklendirin.',
+  a11yFontScaleSmall: 'Küçük (%90)',
+  a11yFontScaleNormal: 'Normal (%100)',
+  a11yFontScaleLarge: 'Büyük (%112)',
+  a11yFontScaleXLarge: 'Çok Büyük (%125)',
+  a11yReadableSpacingTitle: 'Okunabilir Harf ve Satır Aralığı',
+  a11yReadableSpacingDesc:
+    'Harf, kelime ve satır boşluklarını genişleterek uzun okumalarda göz yorgunluğunu azaltır.',
+  a11yZoomTooltip:
+    'Pencere yakınlaştırmasını Ctrl + / - / 0 kısayollarıyla da anında değiştirebilirsiniz.',
+  a11yFontScaleTooltip:
+    'Yakınlaştırmadan bağımsız olarak yalnızca metin boyutunu büyütür; ekran düzeni korunur.',
+  a11yHighContrastTooltip:
+    'Kenarlıkları, metinleri ve anahtar sınırlarını maksimum okunabilirlik için güçlendirir.',
+  a11yStrongFocusTooltip:
+    'Klavyede Tab ile gezinirken seçili öğenin etrafında belirgin bir odak çerçevesi gösterir.',
+  a11yReadableSpacingTooltip:
+    'Satır ve kelime boşluklarını açar; karmaşık el yazısı alfabelerinde harf birleşimlerini korur.',
+  a11yReducedMotionTooltip:
+    'Görünüm, menü ve pencere geçiş animasyonlarını kapatarak anlık (0 ms) tepki sağlar.',
+  a11yColorBlindTooltip:
+    'Öncelik ve durum etiketlerine renge ek olarak ayırt edici geometrik şekiller ekler.',
+  appearanceFontTooltip:
+    'Disleksi Dostu yazı tipi daha geniş harf aralığı ile uzun metinlerde okumayı kolaylaştırır.',
+  appearanceAppIconTooltip:
+    'Pencere başlığı, görev çubuğu ve sistem tepsisi simge rengini özelleştirir.',
+  generalDragLockTooltip:
+    'Açıkken görevlerin yanlışlıkla sürüklenerek sırasının bozulmasını engeller.',
+  generalTrayTooltip:
+    'Kapatma tuşuna basınca uygulama hatırlatmalar için arka planda tepside çalışmaya devam edebilir.',
+  notifQuietHoursTooltip:
+    'Belirlenen saatler arasında masaüstü bildirimleri sessize alınır; görevleriniz kaybolmaz.',
+  notifChannelsTooltip:
+    'Her olay türünün uygulama içi, masaüstü veya her iki kanalda mı gösterileceğini seçin.',
+  shortcutsGlobalTooltip:
+    'Başka bir uygulamadayken bile hızlı görev ekleme veya sesli dikteyi anında başlatır.',
+  dataEncryptedTooltip:
+    'Yedek dosyanız cihaz içinde AES-256-GCM ile parola korumalı şifrelenir; parolanızı saklayın.',
+  dataExportMoreLabel: 'Diğer Dışa Aktarma Biçimleri ve Şifreli Yedek',
+  trashAutoPurgeTooltip:
+    'Çöp Kutusundaki eski kayıtlar seçilen süre dolduğunda otomatik olarak kalıcı silinir.',
+  aiOneClickInfoTooltip:
+    'Tek tıkla kurulum, sesli dikte, yapay zeka asistanı ve akıllı arama için gereken 3 yerel modeli otomatik indirip doğrular.',
+  aiProfileGroupGpu: "GPU'lu Bilgisayar",
+  aiProfileGroupCpu: "GPU'suz (CPU)",
+  aiProfileGroupCustom: 'Özel Profil',
+  aiProfileGroupTooltip:
+    'Ekran kartı (GPU) bulunan bilgisayarlar büyük modelleri hızlı çalıştırır; GPU yoksa CPU profilleri kararlı performans sunar.',
+  aiProfileCpuLightTitle: 'Hafif (CPU)',
+  aiProfileCpuLightDesc: '4 GB+ RAM · En küçük indirme, hızlı dikte ve temel görev yardımı.',
+  aiProfileCpuBalancedTitle: 'Dengeli (CPU)',
+  aiProfileCpuBalancedDesc:
+    '8 GB+ RAM · Ekran kartsız bilgisayarlarda yüksek Türkçe ve İngilizce doğruluğu.',
+  aiProfileGpuVeryWeakTitle: 'Çok Zayıf GPU',
+  aiProfileGpuVeryWeakDesc:
+    '2 GB VRAM · Giriş seviyesi ekran kartları için hafif ve hızlı kurulum.',
+  aiProfileGpuWeakTitle: 'Zayıf GPU',
+  aiProfileGpuWeakDesc: '4 GB VRAM · Günlük dikte ve akıcı yerel asistan dengesi.',
+  aiProfileGpuBalancedTitle: 'Dengeli GPU',
+  aiProfileGpuBalancedDesc: '6 GB VRAM · Gelişmiş doğal dil anlama ve temiz dikte kalitesi.',
+  aiProfileGpuStrongTitle: 'Güçlü GPU',
+  aiProfileGpuStrongDesc: '8 GB VRAM · Yüksek doğruluklu ses tanıma ve derin not araması.',
+  aiProfileGpuUltraTitle: 'Çok Güçlü GPU',
+  aiProfileGpuUltraDesc: '12 GB+ VRAM · En yüksek dil zekası ve stüdyo düzeyinde dikte kalitesi.',
+  aiCustomProfileTitle: 'Kendi Özel Profilinizi Oluşturun',
+  aiCustomProfileGuide:
+    'Sistemin eksiksiz çalışması için aşağıdaki 3 model türünün her birinden 1 adet seçmeniz gerekir.',
+  aiCustomRoleSttTitle: '1. Ses Tanıma (STT)',
+  aiCustomRoleLlmTitle: '2. Dil Modeli (LLM)',
+  aiCustomRoleEmbedTitle: '3. Akıllı Arama (Embedding)',
+  aiRoleSttTooltip: 'Mikrofonunuzdan gelen konuşmayı tamamen internetsiz olarak metne çevirir.',
+  aiRoleLlmTooltip:
+    'Doğal dildeki görev komutlarını anlar, tarih/öncelik ayırır ve sorularınızı yanıtlar.',
+  aiRoleEmbedTooltip: 'Görevleriniz ve notlarınız arasında anlam tabanlı hızlı arama sağlar.',
+  aiCustomSelectPlaceholder: 'Bir model seçin...',
+  aiCustomSelectedCount: 'seçildi',
+  aiCustomMissingHint: 'Kurulumu başlatmak için 3 model türünün tamamından 1 adet seçin.',
+  aiVoiceDictationLangTooltip:
+    'Otomatik algıla Türkçe, İngilizce ve 70+ dili tanır; tek dil kullanıyorsanız sabitlemek hızı artırır.',
+  aiVoiceNoiseTooltip:
+    'Fan, klavye ve ortam seslerini filtreleyerek sessizlikte kaydın güvenle durmasını sağlar.',
+  aiVoiceAutoStopTooltip:
+    'Konuşmanız bittikten sonra kaydın otomatik durması için beklenecek sessizlik süresi.',
+  aiVoiceSensitivityTooltip:
+    'Sessiz ortamlarda Yüksek, gürültülü ortamlarda Düşük veya Otomatik seçin.',
+  aiLiveTestTooltip:
+    'Buradaki denemeler güvenlidir; siz açıkça eklemedikçe görev listenizi değiştirmez.',
+  ctxDuplicateTask: 'Görevi Çoğalt',
+  ctxDuplicatedToast: 'Görev çoğaltıldı.',
+  ctxPriorityPrefix: 'Öncelik',
+  ctxOpenView: 'Görünümü Aç',
+  ctxSetStartupView: 'Başlangıç Görünümü Yap',
+  ctxStartupViewUpdatedToast: 'Başlangıç görünümü güncellendi.',
+  ctxAddTaskInColumn: 'Bu sütuna görev ekle',
+  ctxAddTaskInQuadrant: 'Bu bölgeye görev ekle',
+  matrixGuideTitle: 'Eisenhower Öncelik Matrisi',
+  matrixGuideTooltip:
+    'Görevler önem ve tarihe göre 4 bölgeye ayrılır; kartları sürükleyerek veya bölgeye sağ tıklayarak hızla düzenleyebilirsiniz.',
+  langRestartModalTitle: 'Dil Değişikliği İçin Yeniden Başlatma Gerekli',
+  langRestartModalDesc:
+    'Agendamea hızlı açılması için her oturumda yalnızca aktif dili yükler. Seçtiğiniz dil uygulama yeniden başladığında uygulanacaktır.',
+  langRestartNowButton: 'Şimdi Yeniden Başlat',
+  langRestartLaterButton: 'Daha Sonra',
+  langRestartPendingBanner:
+    'Yeni dil kaydedildi. Uygulama yeniden başlatıldığında seçtiğiniz dilde açılacaktır.',
+  langRestartCurrentLabel: 'Mevcut Dil',
+  langRestartTargetLabel: 'Yeni Dil',
+  appLockTitle: 'Uygulama Kilidi (PIN / Şifre)',
+  appLockDesc:
+    'İsteğe bağlı olarak Agendamea uygulamasını 4, 6 veya 8 haneli PIN ya da özel şifre ile koruyun.',
+  appLockInfoTooltip:
+    'Yerel cihazda tuzlanmış scrypt özeti olarak saklanır; açılışta ve boşta kaldığında görevlerinizi korur.',
+  appLockEnableButton: 'Kilidi Etkinleştir',
+  appLockLockNowButton: 'Şimdi Kilitle',
+  appLockChangeButton: 'PIN / Şifre Değiştir',
+  appLockDisableButton: 'Kilidi Kapat',
+  appLockTypeLabel: 'Kilit Yöntemi',
+  appLockTypePin4: '4 Haneli PIN',
+  appLockTypePin6: '6 Haneli PIN',
+  appLockTypePin8: '8 Haneli PIN',
+  appLockTypePassword: 'Şifre',
+  appLockAutoLockLabel: 'Hareketsizlik Sonrası Otomatik Kilit',
+  appLockAutoLockDesc:
+    'Belirlenen süre boyunca işlem yapılmazsa çalışma alanını otomatik kilitler.',
+  appLockAutoLockNever: 'Kapalı',
+  appLockAutoLock1m: '1 dakika',
+  appLockAutoLock5m: '5 dakika',
+  appLockAutoLock15m: '15 dakika',
+  appLockAutoLock30m: '30 dakika',
+  appLockAutoLock60m: '1 saat',
+  appLockOnMinimizeTitle: 'Simge Durumunda veya Tepside Kilitle',
+  appLockOnMinimizeDesc: 'Pencereyi küçülttüğünüzde veya tepsiye gizlediğinizde anında kilitler.',
+  appLockScreenTitle: 'Agendamea Kilitli',
+  appLockScreenSubtitle: 'Çalışma alanınızı açmak için PIN veya şifrenizi girin.',
+  appLockEnterPinPlaceholder: 'PIN kodunuzu girin',
+  appLockEnterPasswordPlaceholder: 'Şifrenizi girin',
+  appLockUnlockButton: 'Kilidi Aç',
+  appLockUnlockingButton: 'Açılıyor...',
+  appLockWrongCredential: 'Hatalı PIN veya şifre. Lütfen tekrar deneyin.',
+  appLockCooldownError: 'Çok fazla hatalı deneme. {seconds} saniye sonra tekrar deneyin.',
+  appLockForgotLink: 'PIN Unuttum / Kurtarma Kodu Kullan',
+  appLockBackToUnlock: 'PIN / Şifre Ekranına Dön',
+  appLockRecoveryTitle: 'Kurtarma Kodu ile Kilidi Aç',
+  appLockRecoveryDesc:
+    'Kurulumda verilen tek kullanımlık kurtarma kodunu girerek kilidi açabilir ve devre dışı bırakabilirsiniz.',
+  appLockRecoveryPlaceholder: 'AGDM-XXXX-XXXX-XXXX',
+  appLockRecoveryInvalid: 'Geçersiz kurtarma kodu. Lütfen kodu kontrol edip tekrar deneyin.',
+  appLockRecoverySavedTitle: 'Kurtarma Kodunuzu Kaydedin',
+  appLockRecoverySavedWarning:
+    'Bu kurtarma kodu yalnızca bir kez gösterilir. PIN veya şifrenizi unutmanız halinde erişimi geri almak için güvenli bir yerde saklayın.',
+  appLockRecoveryCopyButton: 'Kodu Kopyala',
+  appLockRecoveryCopiedToast: 'Kopyalandı',
+  appLockRecoveryDoneButton: 'Kaydettim',
+  appLockCurrentLabel: 'Mevcut PIN / Şifre',
+  appLockNewLabel: 'Yeni PIN / Şifre',
+  appLockConfirmLabel: 'Yeni PIN / Şifre Tekrar',
+  appLockMismatchError: 'Doğrulama alanı eşleşmiyor. Lütfen aynı değeri girin.',
+  appLockInvalidPinError: 'Tam olarak {digits} rakam girin.',
+  appLockInvalidPasswordError: 'Şifre 4 ile 128 karakter arasında olmalıdır.',
+  appLockEnabledToast: 'Uygulama kilidi etkinleştirildi.',
+  appLockChangedToast: 'Uygulama kilidi güncellendi.',
+  appLockDisabledToast: 'Uygulama kilidi kapatıldı.',
+  appLockCommandTitle: 'Uygulamayı Şimdi Kilitle',
+  appLockShowSecret: 'Göster',
+  appLockHideSecret: 'Gizle',
 };

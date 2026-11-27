@@ -44,9 +44,9 @@ public sealed class InstallEngine
                 // Non-fatal
             }
 
-            // Extract embedded SFX ZIP (or external payload in tests)
+            // Extract embedded SFX payload (parallel Brotli AGM_SFX2 or parallel ZIP AGM_SFX1)
             progress?.Report(new ProgressUpdate(locale.StepExtracting, 15));
-            SfxPayloadReader.ExtractPayload(
+            var extractedBytes = SfxPayloadReader.ExtractPayload(
                 currentExePath,
                 installDir,
                 options.ExternalPayloadPath,
@@ -58,15 +58,21 @@ public sealed class InstallEngine
 
             // Write compact uninstaller stub (strip SFX payload so uninstall.exe is clean)
             var uninstallExePath = Path.Combine(installDir, "uninstall.exe");
+            long uninstallBytes = 0;
             if (!string.IsNullOrWhiteSpace(currentExePath) &&
                 File.Exists(currentExePath) &&
                 !Path.GetFullPath(currentExePath).Equals(Path.GetFullPath(uninstallExePath), StringComparison.OrdinalIgnoreCase))
             {
                 SfxPayloadReader.CopyCleanUninstallerStub(currentExePath, uninstallExePath);
+                if (File.Exists(uninstallExePath))
+                {
+                    uninstallBytes = new FileInfo(uninstallExePath).Length;
+                }
             }
 
             var appExePath = Path.Combine(installDir, "Agendamea.exe");
-            var installedBytes = CalculateDirectorySize(installDir);
+            // Use exact byte total accumulated during extraction instead of re-walking 1,000+ files
+            var installedBytes = extractedBytes + uninstallBytes;
 
             if (!options.SkipWindowsIntegration)
             {
@@ -284,19 +290,6 @@ public sealed class InstallEngine
         catch
         {
             // Ignore locked files
-        }
-    }
-
-    private static long CalculateDirectorySize(string dir)
-    {
-        try
-        {
-            return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
-                .Sum(f => new FileInfo(f).Length);
-        }
-        catch
-        {
-            return 0;
         }
     }
 }

@@ -13,6 +13,7 @@ publish:
     releaseType: release
 
 asar: true
+afterPack: scripts/after-pack.cjs
 asarUnpack:
   - "cli/**"
   - "mcp/**"
@@ -30,20 +31,26 @@ asarUnpack:
   - "node_modules/@fugood/whisper.node/**"
   - "node_modules/@fugood/node-whisper-win32-x64/**"
   - "node_modules/@fugood/node-whisper-win32-x64-vulkan/**"
-  - "node_modules/pino/**"
-  - "node_modules/@pinojs/**"
-  - "node_modules/atomic-sleep/**"
-  - "node_modules/on-exit-leak-free/**"
-  - "node_modules/pino-abstract-transport/**"
-  - "node_modules/pino-std-serializers/**"
-  - "node_modules/process-warning/**"
-  - "node_modules/quick-format-unescaped/**"
-  - "node_modules/real-require/**"
-  - "node_modules/safe-stable-stringify/**"
-  - "node_modules/sonic-boom/**"
-  - "node_modules/split2/**"
-  - "node_modules/thread-stream/**"
-  - "node_modules/zod/**"
+  - "!node_modules/better-sqlite3/deps/**"
+  - "!node_modules/better-sqlite3/src/**"
+  - "!node_modules/better-sqlite3/prebuilds/linux*"
+  - "!node_modules/better-sqlite3/prebuilds/darwin*"
+  - "!node_modules/better-sqlite3/prebuilds/win32-arm64*"
+  - "!node_modules/better-sqlite3/build/Release/obj/**"
+  - "!node_modules/better-sqlite3/build/Release/*.lib"
+  - "!node_modules/better-sqlite3/build/Release/*.exp"
+  - "!node_modules/better-sqlite3/build/Release/*.pdb"
+  - "!node_modules/better-sqlite3/build/Release/*.iobj"
+  - "!node_modules/better-sqlite3/build/Release/*.ipdb"
+  - "!node_modules/**/*.d.ts"
+  - "!node_modules/**/*.d.cts"
+  - "!node_modules/**/*.d.mts"
+  - "!node_modules/**/*.map"
+  - "!node_modules/**/README*"
+  - "!node_modules/**/CHANGELOG*"
+  - "!node_modules/**/HISTORY*"
+  - "!node_modules/**/test/**"
+  - "!node_modules/**/tests/**"
 
 files:
   - "cli/**"
@@ -171,20 +178,26 @@ files:
   - "node_modules/yargs/**"
   - "node_modules/yargs-parser/**"
   - "node_modules/yoctocolors/**"
-  - "node_modules/pino/**"
-  - "node_modules/@pinojs/**"
-  - "node_modules/atomic-sleep/**"
-  - "node_modules/on-exit-leak-free/**"
-  - "node_modules/pino-abstract-transport/**"
-  - "node_modules/pino-std-serializers/**"
-  - "node_modules/process-warning/**"
-  - "node_modules/quick-format-unescaped/**"
-  - "node_modules/real-require/**"
-  - "node_modules/safe-stable-stringify/**"
-  - "node_modules/sonic-boom/**"
-  - "node_modules/split2/**"
-  - "node_modules/thread-stream/**"
-  - "node_modules/zod/**"
+  - "!node_modules/better-sqlite3/deps/**"
+  - "!node_modules/better-sqlite3/src/**"
+  - "!node_modules/better-sqlite3/prebuilds/linux*"
+  - "!node_modules/better-sqlite3/prebuilds/darwin*"
+  - "!node_modules/better-sqlite3/prebuilds/win32-arm64*"
+  - "!node_modules/better-sqlite3/build/Release/obj/**"
+  - "!node_modules/better-sqlite3/build/Release/*.lib"
+  - "!node_modules/better-sqlite3/build/Release/*.exp"
+  - "!node_modules/better-sqlite3/build/Release/*.pdb"
+  - "!node_modules/better-sqlite3/build/Release/*.iobj"
+  - "!node_modules/better-sqlite3/build/Release/*.ipdb"
+  - "!node_modules/**/*.d.ts"
+  - "!node_modules/**/*.d.cts"
+  - "!node_modules/**/*.d.mts"
+  - "!node_modules/**/*.map"
+  - "!node_modules/**/README*"
+  - "!node_modules/**/CHANGELOG*"
+  - "!node_modules/**/HISTORY*"
+  - "!node_modules/**/test/**"
+  - "!node_modules/**/tests/**"
 
 npmRebuild: true
 buildDependenciesFromSource: false
@@ -208,6 +221,7 @@ win:
 
 portable:
   artifactName: "Agendamea-Portable-${version}-win-${arch}.${ext}"
+  unpackDirName: true
 
 appx:
   applicationId: Agendamea
@@ -217,6 +231,9 @@ appx:
   publisherDisplayName: Vellium
   backgroundColor: "#09090b"
   showNameOnTiles: false
+  minVersion: "10.0.17763.0"
+  maxVersionTested: "10.0.26100.0"
+  customExtensionsPath: electron-resources/appx-extensions.xml
   capabilities:
     - runFullTrust
     - internetClient

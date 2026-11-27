@@ -9,7 +9,7 @@
 
 ## Reporting a Vulnerability
 
-Please report security vulnerabilities privately to **support@vellium.dev** with:
+Please report security vulnerabilities privately to **security@vellium.dev** (see [Security Disclosure Policy](https://vellium.dev/en/legal/security-disclosure)) with:
 
 1. Component and file path affected (Electron main/preload, Express loopback API, MCP server, Webhooks, CLI, or WPF Setup SFX).
 2. Clear reproduction steps or proof-of-concept payload.

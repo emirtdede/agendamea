@@ -46,7 +46,7 @@ export function TodoTagsSection({
                 type="button"
                 onClick={() => onRemoveTag(tag)}
                 aria-label={`${t.clearDate}: #${tag}`}
-                className="ms-0.5 rounded p-0.5 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-red-500 transition-colors"
+                className="ms-0.5 rounded p-0.5 text-[var(--text-muted)] ag-hover-danger-glow hover:text-red-500 transition-colors"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -72,7 +72,7 @@ export function TodoTagsSection({
           data-testid="detail-tag-add-button"
           disabled={!newTagInput.trim() || tags.length >= 12}
           aria-label={t.addButton}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-35"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] ag-hover-card-glow hover:text-[var(--text-primary)] disabled:opacity-35"
         >
           <Plus className="h-4 w-4" />
         </button>

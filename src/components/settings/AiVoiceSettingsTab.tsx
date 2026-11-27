@@ -1,12 +1,14 @@
-import { Cpu, Download, Mic, Sparkles, X } from 'lucide-react';
+import { Cpu, Mic, Sparkles, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { subscribeServerEvents } from '../../api/eventStream';
 import { useAiVoiceAudioControls } from '../../hooks/useAiVoiceAudioControls';
 import { useI18n } from '../../i18n/I18nContext';
 import { preferencesStore, usePreferencesSelector } from '../../store/preferencesStore';
-import type { AiStatusPayload, AiTierId, PiperVoiceStatus } from '../../types';
+import type { AiSetupState, AiStatusPayload, AiTierId, PiperVoiceStatus } from '../../types';
 import { listAvailableTtsVoices } from '../../voice/ttsPlayer';
+import { AiLivePlaygroundSection } from './ai/AiLivePlaygroundSection';
+import { AiOneClickSetupHero, type CustomAiModelSelection } from './ai/AiOneClickSetupHero';
 import { HardwareProfileSection } from './ai/HardwareProfileSection';
 import { ModelCatalogSection } from './ai/ModelCatalogSection';
 import { TierSelectorSection } from './ai/TierSelectorSection';
@@ -18,6 +20,7 @@ interface AiVoiceSettingsTabProps {
   onNotifyVoice?: (payload: { title: string; body?: string; variant?: 'info' | 'error' }) => void;
   requestedSubTab?: AiSubTabId;
   subTabSeq?: number;
+  revealSettingId?: string;
 }
 
 export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
@@ -32,6 +35,15 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   const [rescanning, setRescanning] = useState<boolean>(false);
   const [reindexing, setReindexing] = useState<boolean>(false);
   const [selectedTier, setSelectedTier] = useState<AiTierId>('tier-light');
+  const [selectedProfileId, setSelectedProfileId] = useState<AiTierId>('cpu-light');
+  const [customModels, setCustomModels] = useState<CustomAiModelSelection>({
+    sttModelId: 'whisper-small-q5_1',
+    llmModelId: 'qwen3-1.7b-q8_0',
+    embedModelId: 'multilingual-e5-small-q8_0',
+  });
+  const [setupState, setSetupState] = useState<AiSetupState | null>(null);
+  const [isStartingSetup, setIsStartingSetup] = useState(false);
+  const [isWarmingUp, setIsWarmingUp] = useState(false);
   const [externalModel, setExternalModel] = useState<string>('');
   const [externalBaseUrl, setExternalBaseUrl] = useState<string>('');
   const [voiceDictationLanguage, setVoiceDictationLanguage] = useState<string>('auto');
@@ -142,9 +154,28 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
         const data = await api.getAiStatus(force);
         if (!isMountedRef.current) return;
         setStatus(data);
+        if (data.setup) {
+          setSetupState(data.setup);
+        }
         if (syncFormFields || !hydratedSettingsRef.current) {
           hydratedSettingsRef.current = true;
-          setSelectedTier(data.settings.aiTier || data.recommendation.primaryOptionId);
+          const nextTier = data.settings.aiTier || data.recommendation.primaryOptionId;
+          setSelectedTier(nextTier);
+          const recProfile = data.recommendation.recommendedProfileId;
+          const isExplicitNewProfile =
+            nextTier === 'custom' || nextTier.startsWith('cpu-') || nextTier.startsWith('gpu-');
+          const hasAnyLocalModel = data.models.some((m) => m.present);
+          const preferredProfile: AiTierId = isExplicitNewProfile
+            ? nextTier
+            : !hasAnyLocalModel && recProfile
+              ? recProfile
+              : recProfile || 'cpu-light';
+          setSelectedProfileId(preferredProfile);
+          setCustomModels({
+            sttModelId: data.settings.aiSttModelId || 'whisper-small-q5_1',
+            llmModelId: data.settings.aiLlmModelId || 'qwen3-1.7b-q8_0',
+            embedModelId: data.settings.aiEmbedModelId || 'multilingual-e5-small-q8_0',
+          });
           setExternalModel(data.settings.aiOllamaModel || '');
           setExternalBaseUrl(data.settings.aiExternalBaseUrl || '');
           setVoiceDictationLanguage(data.settings.voiceDictationLanguage || 'auto');
@@ -243,9 +274,16 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
         );
         return;
       }
+      if (msg.type === 'ai.setup.progress' && msg.setup && typeof msg.setup === 'object') {
+        setSetupState(msg.setup as AiSetupState);
+        if (msg.done) {
+          void loadStatus(false, false);
+        }
+        return;
+      }
       if (msg.type !== 'ai.download.progress' || !msg.modelId) return;
       if (msg.done) {
-        void refreshModelsOnly();
+        void loadStatus(false, false);
         return;
       }
       const targetModelId = msg.modelId;
@@ -271,12 +309,12 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
         };
       });
     });
-  }, [refreshModelsOnly, refreshPiperVoices]);
+  }, [loadStatus, refreshPiperVoices]);
 
-  // Lightweight chained fallback poll while any model or Piper voice download is active
+  // Lightweight chained fallback poll while any model, setup bundle, or Piper voice download is active
   const hasActiveModelDownload = useMemo(
-    () => Boolean(status?.models.some((m) => m.downloading)),
-    [status],
+    () => Boolean(setupState?.active || status?.models.some((m) => m.downloading)),
+    [setupState?.active, status],
   );
   const hasActivePiperDownload = useMemo(
     () => piperVoices.some((v) => v.downloading),
@@ -284,13 +322,28 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   );
   const hasActiveDownload = hasActiveModelDownload || hasActivePiperDownload;
 
-  const hasReadyAiEngine = useMemo(() => {
-    if (!status) return true;
-    const hasLocal = status.installedDiskBytes > 0 || status.models.some((m) => m.present);
+  const readiness = useMemo(() => {
+    if (!status) {
+      return {
+        dictationReady: false,
+        assistantReady: false,
+        semanticSearchReady: false,
+        fullyReady: false,
+      };
+    }
+    if (status.readiness) return status.readiness;
+    const dictationReady = status.models.some((m) => m.role === 'stt' && m.present);
     const hasExternal =
       (status.recommendation?.externalOllama?.models?.length ?? 0) > 0 ||
       (status.recommendation?.externalLmStudio?.models?.length ?? 0) > 0;
-    return hasLocal || hasExternal;
+    const assistantReady = status.models.some((m) => m.role === 'llm' && m.present) || hasExternal;
+    const semanticSearchReady = status.models.some((m) => m.role === 'embed' && m.present);
+    return {
+      dictationReady,
+      assistantReady,
+      semanticSearchReady,
+      fullyReady: dictationReady && assistantReady,
+    };
   }, [status]);
 
   useEffect(() => {
@@ -300,7 +353,11 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
     const tick = async () => {
       if (cancelled) return;
       const jobs: Array<Promise<void>> = [];
-      if (hasActiveModelDownload) jobs.push(refreshModelsOnly());
+      if (setupState?.active) {
+        jobs.push(loadStatus(false, false));
+      } else if (hasActiveModelDownload) {
+        jobs.push(refreshModelsOnly());
+      }
       if (hasActivePiperDownload) jobs.push(refreshPiperVoices());
       await Promise.all(jobs);
       if (!cancelled) {
@@ -316,8 +373,10 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
     hasActiveDownload,
     hasActiveModelDownload,
     hasActivePiperDownload,
+    loadStatus,
     refreshModelsOnly,
     refreshPiperVoices,
+    setupState?.active,
   ]);
 
   const detectedExternalModels = useMemo(() => {
@@ -415,20 +474,110 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
     preferencesStore.setLaunchAtStartup(true);
   }, []);
 
-  const handleDownloadModel = useCallback(
+  const handleStartOneClickSetup = useCallback(
+    async (payload: { profileId: AiTierId; customModels?: CustomAiModelSelection }) => {
+      setActionError(null);
+      setSelectedProfileId(payload.profileId);
+      setIsStartingSetup(true);
+      try {
+        const res = await api.startAiOneClickSetup({
+          profileId: payload.profileId,
+          customModels: payload.customModels,
+        });
+        if (isMountedRef.current && res.setup) {
+          setSetupState(res.setup);
+        }
+        await loadStatus(false, false);
+      } catch {
+        if (isMountedRef.current) setActionError(t.operationFailedToast);
+      } finally {
+        if (isMountedRef.current) setIsStartingSetup(false);
+      }
+    },
+    [loadStatus, t.operationFailedToast],
+  );
+
+  const handleCancelOneClickSetup = useCallback(async () => {
+    setActionError(null);
+    try {
+      const res = await api.cancelAiOneClickSetup();
+      if (isMountedRef.current && res.setup) {
+        setSetupState(res.setup);
+      }
+      await loadStatus(false, false);
+    } catch {
+      if (isMountedRef.current) setActionError(t.operationFailedToast);
+    }
+  }, [loadStatus, t.operationFailedToast]);
+
+  const handleWarmupEngines = useCallback(async () => {
+    setActionError(null);
+    setIsWarmingUp(true);
+    try {
+      const res = await api.warmupAiEngines({ includeLlm: false });
+      await loadStatus(false, false);
+      if (!isMountedRef.current) return;
+      if (res?.ok && res?.stt?.ok) {
+        onNotifyVoice?.({
+          title: t.aiOneClickReadyTitle,
+          body: t.aiOneClickWarmupDone,
+        });
+      } else {
+        const msg =
+          res?.stt?.code === 'STT_MODEL_MISSING' ? t.sttErrorModelMissing : t.sttErrorUnavailable;
+        setActionError(msg);
+        onNotifyVoice?.({
+          title: t.aiOneClickNotReadyBadge,
+          body: msg,
+          variant: 'error',
+        });
+      }
+    } catch {
+      if (isMountedRef.current) setActionError(t.operationFailedToast);
+    } finally {
+      if (isMountedRef.current) setIsWarmingUp(false);
+    }
+  }, [
+    loadStatus,
+    onNotifyVoice,
+    t.aiOneClickNotReadyBadge,
+    t.aiOneClickReadyTitle,
+    t.aiOneClickWarmupDone,
+    t.operationFailedToast,
+    t.sttErrorModelMissing,
+    t.sttErrorUnavailable,
+  ]);
+
+  const handleActivateModel = useCallback(
     async (modelId: string) => {
       setActionError(null);
       setBusyModelId(modelId);
       try {
-        await api.downloadAiModel(modelId);
-        await refreshModelsOnly();
+        await api.activateAiModel(modelId);
+        await loadStatus(false, false);
       } catch {
         if (isMountedRef.current) setActionError(t.operationFailedToast);
       } finally {
         if (isMountedRef.current) setBusyModelId(null);
       }
     },
-    [refreshModelsOnly, t.operationFailedToast],
+    [loadStatus, t.operationFailedToast],
+  );
+
+  const handleDownloadModel = useCallback(
+    async (modelId: string) => {
+      setActionError(null);
+      setBusyModelId(modelId);
+      try {
+        await api.downloadAiModel(modelId, { activate: true });
+        await loadStatus(false, false);
+      } catch {
+        if (isMountedRef.current) setActionError(t.operationFailedToast);
+      } finally {
+        if (isMountedRef.current) setBusyModelId(null);
+      }
+    },
+    [loadStatus, t.operationFailedToast],
   );
 
   const handleCancelDownload = useCallback(
@@ -523,22 +672,19 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
   }, []);
 
   return (
-    <div className="space-y-5" data-testid="settings-ai-section">
-      {/* 2-Way Segmented View Switcher (role="group" to avoid nested tablist) */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <fieldset
-          aria-label={t.settingsTabAi}
-          className="inline-flex flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1"
-        >
+    <div className="space-y-6" data-testid="settings-ai-section">
+      {/* Razor-thin Hairline Underline Sub-Navigation (role="group" via fieldset, zero nested tablist) */}
+      <div className="border-b border-[var(--border)]">
+        <fieldset aria-label={t.settingsTabAi} className="m-0 flex items-center gap-6 border-0 p-0">
           <button
             type="button"
             data-testid="ai-subtab-voice"
             aria-pressed={activeSubTab === 'voice'}
             onClick={() => handleSwitchSubTab('voice')}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`relative inline-flex items-center gap-1.5 pb-2.5 text-xs font-medium transition-colors ${
               activeSubTab === 'voice'
-                ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                ? 'text-[var(--text-primary)]'
+                : 'text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]'
             }`}
           >
             <Mic className="h-3.5 w-3.5 shrink-0" />
@@ -546,7 +692,13 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
             {hasActivePiperDownload && (
               <span
                 aria-hidden="true"
-                className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"
+                className="h-1.5 w-1.5 rounded-full bg-[var(--text-primary)] animate-pulse"
+              />
+            )}
+            {activeSubTab === 'voice' && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-x-0 -bottom-px h-[1.5px] bg-[var(--text-primary)]"
               />
             )}
           </button>
@@ -556,10 +708,10 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
             data-testid="ai-subtab-engine"
             aria-pressed={activeSubTab === 'engine'}
             onClick={() => handleSwitchSubTab('engine')}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`relative inline-flex items-center gap-1.5 pb-2.5 text-xs font-medium transition-colors ${
               activeSubTab === 'engine'
-                ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                ? 'text-[var(--text-primary)]'
+                : 'text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]'
             }`}
           >
             <Cpu className="h-3.5 w-3.5 shrink-0" />
@@ -567,15 +719,17 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
             {hasActiveModelDownload && (
               <span
                 aria-hidden="true"
-                className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"
+                className="h-1.5 w-1.5 rounded-full bg-[var(--text-primary)] animate-pulse"
+              />
+            )}
+            {activeSubTab === 'engine' && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-x-0 -bottom-px h-[1.5px] bg-[var(--text-primary)]"
               />
             )}
           </button>
         </fieldset>
-
-        {activeSubTab === 'voice' && (
-          <p className="text-[11px] text-[var(--text-muted)]">{t.aiPrivacyBadgeText}</p>
-        )}
       </div>
 
       {/* Sticky Dismissible Action Error Banner */}
@@ -583,14 +737,14 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
         <div
           role="alert"
           data-testid="ai-action-error-banner"
-          className="sticky top-2 z-20 flex items-start justify-between gap-2.5 rounded-xl border border-red-500/40 bg-[var(--surface)] px-3.5 py-2.5 text-xs font-medium text-red-600 dark:text-red-400 shadow-md animate-fade-in"
+          className="sticky top-2 z-20 flex items-start justify-between gap-2.5 border-y border-red-500/35 bg-[var(--canvas)] py-2.5 text-xs font-medium text-red-500 dark:text-red-400 animate-fade-in"
         >
           <span className="min-w-0 flex-1 break-words leading-snug">{actionError}</span>
           <button
             type="button"
             onClick={() => setActionError(null)}
             aria-label={t.closeMenu}
-            className="shrink-0 rounded-md p-0.5 text-red-600/80 hover:bg-red-500/15 hover:text-red-600 dark:text-red-400/80 dark:hover:text-red-300 transition-colors"
+            className="shrink-0 p-0.5 text-red-500/80 ag-hover-danger-glow hover:text-red-500 transition-colors"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -598,54 +752,48 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
       )}
 
       {activeSubTab === 'voice' ? (
-        <div className="space-y-5 animate-tab-enter">
-          {/* Cold-Start Readiness Callout when no local/external AI model is installed yet */}
-          {!loading && status && !hasReadyAiEngine && (
-            <section
-              data-testid="ai-cold-start-banner"
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3"
-            >
-              <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                <Download className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-[var(--text-primary)]">
-                    {t.sttErrorModelMissing}
-                  </p>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-                    {t.aiSectionSubtitle}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                data-testid="ai-cold-start-setup-btn"
-                onClick={() => handleSwitchSubTab('engine')}
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 shrink-0 whitespace-nowrap"
-                style={{
-                  backgroundColor: 'var(--accent)',
-                  color: 'var(--accent-fg)',
-                }}
-              >
-                <Cpu className="h-3.5 w-3.5" />
-                <span>{t.aiSubTabEngine}</span>
-              </button>
-            </section>
-          )}
+        <div className="space-y-8 animate-tab-enter">
+          {/* Unified One-Click Setup & Readiness Hero */}
+          <AiOneClickSetupHero
+            status={status}
+            loading={loading}
+            setup={setupState}
+            selectedProfileId={selectedProfileId}
+            customModels={customModels}
+            isStartingSetup={isStartingSetup}
+            isWarmingUp={isWarmingUp}
+            onSelectProfileId={setSelectedProfileId}
+            onChangeCustomModels={setCustomModels}
+            onStartOneClickSetup={(payload) => void handleStartOneClickSetup(payload)}
+            onCancelSetup={() => void handleCancelOneClickSetup()}
+            onWarmup={() => void handleWarmupEngines()}
+            onOpenAdvancedModels={() => handleSwitchSubTab('engine')}
+          />
 
-          {/* Quick-Enable Tray + Startup Guide Card for Always-Ready Voice Hotkey */}
+          {/* Built-in Live Dictation & AI Test Playground */}
+          <AiLivePlaygroundSection
+            dictationReady={readiness.dictationReady}
+            assistantReady={readiness.assistantReady}
+            voiceMicDeviceId={voiceMicDeviceId}
+            voiceAutoStopMs={voiceAutoStopMs}
+            voiceNoiseSuppression={voiceNoiseSuppression}
+            voiceSensitivity={voiceSensitivity}
+          />
+
+          {/* Quick-Enable Tray + Startup Card for Always-Ready Voice Hotkey */}
           {isElectronDesktop &&
             (desktopPrefs.closeBehavior !== 'tray' || !desktopPrefs.launchAtStartup) && (
               <section
                 data-testid="ai-tray-startup-guide-card"
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--accent)]/35 bg-[var(--accent-soft)] px-4 py-3"
+                className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:px-5"
               >
                 <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                  <Sparkles className="h-4 w-4 text-[var(--accent)] shrink-0 mt-0.5" />
+                  <Sparkles className="h-4 w-4 text-[var(--text-muted)] shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-xs font-semibold text-[var(--text-primary)]">
+                    <p className="text-xs font-medium text-[var(--text-primary)]">
                       {t.aiVoiceTrayGuideTitle}
                     </p>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                    <p className="mt-0.5 text-xs leading-relaxed text-[var(--text-muted)]">
                       {t.aiVoiceTrayGuideDesc}
                     </p>
                   </div>
@@ -654,11 +802,7 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
                   type="button"
                   data-testid="ai-enable-tray-startup-btn"
                   onClick={handleEnableTrayAndStartup}
-                  className="rounded-lg px-3 py-1.5 text-xs font-semibold transition-opacity hover:opacity-90 shrink-0"
-                  style={{
-                    backgroundColor: 'var(--accent)',
-                    color: 'var(--accent-fg)',
-                  }}
+                  className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow shrink-0"
                 >
                   {t.aiVoiceEnableTrayButton}
                 </button>
@@ -736,6 +880,7 @@ export const AiVoiceSettingsTab = React.memo(function AiVoiceSettingsTab({
             status={status}
             busyModelId={busyModelId}
             onDownloadModel={(id) => void handleDownloadModel(id)}
+            onActivateModel={(id) => void handleActivateModel(id)}
             onCancelDownload={(id) => void handleCancelDownload(id)}
             onDeleteModel={(id) => void handleDeleteModel(id)}
             onDeleteAll={() => void handleDeleteAll()}

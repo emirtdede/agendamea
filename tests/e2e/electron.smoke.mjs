@@ -66,14 +66,24 @@ async function runSmoke() {
       `Expected loopback origin, got ${sandboxCheck.href}`,
     );
 
-    // 2. Dismiss first-launch WelcomeModal if visible
+    // 2. Dismiss first-launch WelcomeModal if visible (waitFor handles lazy-loaded modal mount)
     const skipBtn = page
       .locator(
         '[data-testid="welcome-step-skip"], [data-testid="welcome-step-start"], [data-testid="welcome-start-btn"], [data-testid="welcome-skip-btn"]',
       )
       .first();
-    if (await skipBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
+    const welcomeVisible = await skipBtn
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    if (welcomeVisible) {
       await skipBtn.click();
+      await page
+        .locator('[data-testid="welcome-modal"]')
+        .waitFor({ state: 'hidden', timeout: 3000 })
+        .catch(() => {
+          // Modal already unmounted
+        });
     }
 
     // 3. Create a task via QuickAddBar and verify real DOM persistence

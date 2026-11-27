@@ -127,6 +127,25 @@ test('WBS-4.2 RED-TEAM: Indirect Prompt Injection isolation (tools: []), Destruc
     assert.equal(zeroRes.status, 'not_found');
     assert.equal(zeroRes.llmCalled, false);
     assert.equal(llmCallCount, callsBeforeZeroMatch, 'LLM must never be called on 0 matches');
+
+    // 5. readOnly: true natural question skips extractActionJson and makes AT MOST 1 LLM call
+    const callsBeforeReadOnlyQ = llmCallCount;
+    const roRes = await orchestrator.handleUtterance({
+      text: 'Görevlerim arasında hangi güvenlik notu var?',
+      language: 'tr',
+      readOnly: true,
+      storeAdapter,
+      ragSearchFn: async (q: string, o?: { topK?: number; minScore?: number }) =>
+        db.searchHybridRag(q, o),
+      llmService: spyLlm,
+    });
+    assert.equal(roRes.status, 'answered');
+    assert.equal(roRes.readOnlyIsolated, true);
+    assert.equal(
+      llmCallCount - callsBeforeReadOnlyQ,
+      1,
+      'readOnly question MUST skip extractActionJson and invoke LLM only once',
+    );
   } finally {
     db.close();
   }

@@ -8,7 +8,45 @@
  * - Loads strictly over http://127.0.0.1:<port>/overlay.html (Chromium Secure Context for AudioWorklet)
  */
 
+const http = require('node:http');
 const path = require('node:path');
+
+function isLocalServerAppLocked(port) {
+  return new Promise((resolve) => {
+    if (!port) {
+      resolve(false);
+      return;
+    }
+    const req = http.get(
+      {
+        hostname: '127.0.0.1',
+        port,
+        path: '/api/security/lock/status',
+        timeout: 400,
+      },
+      (res) => {
+        let raw = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          if (raw.length < 4096) raw += chunk;
+        });
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(raw);
+            resolve(Boolean(parsed?.enabled && parsed?.locked));
+          } catch {
+            resolve(false);
+          }
+        });
+      },
+    );
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on('error', () => resolve(false));
+  });
+}
 
 function loadElectron() {
   if (!process.versions?.electron) {
@@ -39,6 +77,10 @@ class VoiceOverlayManager {
     this.preloadPath = options.preloadPath || path.join(__dirname, 'preload.cjs');
     this.idleDestroyMs =
       typeof options.idleDestroyMs === 'number' ? options.idleDestroyMs : IDLE_DESTROY_MS;
+    this.onBlockedByLock =
+      typeof options.onBlockedByLock === 'function' ? options.onBlockedByLock : null;
+    this.onVoiceActivity =
+      typeof options.onVoiceActivity === 'function' ? options.onVoiceActivity : null;
     this.window = null;
     this.idleTimer = null;
     this.isListening = false;
@@ -168,11 +210,20 @@ class VoiceOverlayManager {
 
   setListeningState(listening) {
     this.isListening = Boolean(listening);
+    if (this.isListening) {
+      this.onVoiceActivity?.();
+    }
     return { ok: true, listening: this.isListening };
   }
 
   async toggle(port) {
     if (!port) return { ok: false, error: 'Server port not ready.' };
+    if (await isLocalServerAppLocked(port)) {
+      this.hide();
+      this.onBlockedByLock?.();
+      return { ok: false, locked: true };
+    }
+    this.onVoiceActivity?.();
     this._clearIdleTimer();
     const win = await this.ensureWindow(port);
     const bounds = this._getTargetBounds();
@@ -199,6 +250,11 @@ class VoiceOverlayManager {
 
   async showInactive(port, action = 'start') {
     if (!port) return { ok: false, error: 'Server port not ready.' };
+    if (await isLocalServerAppLocked(port)) {
+      this.hide();
+      this.onBlockedByLock?.();
+      return { ok: false, locked: true };
+    }
     this._clearIdleTimer();
     const win = await this.ensureWindow(port);
     const bounds = this._getTargetBounds();
@@ -223,6 +279,11 @@ class VoiceOverlayManager {
   hide() {
     this.isListening = false;
     if (this.window && !this.window.isDestroyed()) {
+      try {
+        this.window.webContents.send('overlay:command', { action: 'cancel' });
+      } catch {
+        // Ignore destroyed webContents
+      }
       this.window.setFocusable(false);
       this.window.hide();
       this._scheduleIdleDestroy();

@@ -256,8 +256,35 @@ function ensureDynamicIconFiles(userDataDir, bgHex, fgHex) {
   const icoPath = path.join(iconsDir, `agendamea-${hash}.ico`);
   const trayPngPath = path.join(iconsDir, `agendamea-${hash}-32.png`);
   const notifPngPath = path.join(iconsDir, `agendamea-${hash}-256.png`);
+  const metaPath = path.join(userDataDir, 'active-icon.json');
 
-  if (!fs.existsSync(icoPath) || !fs.existsSync(trayPngPath) || !fs.existsSync(notifPngPath)) {
+  const filesExist =
+    fs.existsSync(icoPath) && fs.existsSync(trayPngPath) && fs.existsSync(notifPngPath);
+
+  // Fast no-op path when active-icon.json & generated icon files already match
+  if (filesExist) {
+    try {
+      if (fs.existsSync(metaPath)) {
+        const existing = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (
+          existing &&
+          existing.bg === normBg &&
+          existing.fg === normFg &&
+          existing.icoPath === icoPath &&
+          existing.trayPngPath === trayPngPath &&
+          existing.notifPngPath === notifPngPath
+        ) {
+          return { bg: normBg, fg: normFg, icoPath, trayPngPath, notifPngPath };
+        }
+      }
+    } catch {
+      // Fall through to rewrite active-icon.json
+    }
+  }
+
+  let regenerated = false;
+  if (!filesExist) {
+    regenerated = true;
     const { icoBuffer, trayPngBuffer, notifPngBuffer } = buildMultiSizeIcoBuffer(normBg, normFg);
     const tmpIco = `${icoPath}.tmp`;
     const tmpPng = `${trayPngPath}.tmp`;
@@ -271,7 +298,6 @@ function ensureDynamicIconFiles(userDataDir, bgHex, fgHex) {
   }
 
   // Persist active icon metadata so startup restores the exact icon synchronously before window creation
-  const metaPath = path.join(userDataDir, 'active-icon.json');
   try {
     fs.writeFileSync(
       metaPath,
@@ -282,24 +308,26 @@ function ensureDynamicIconFiles(userDataDir, bgHex, fgHex) {
     // Ignore metadata write failure
   }
 
-  // Clean up old stale dynamic icons (keep active hash files only)
-  try {
-    const keep = new Set([
-      path.basename(icoPath),
-      path.basename(trayPngPath),
-      path.basename(notifPngPath),
-    ]);
-    for (const file of fs.readdirSync(iconsDir)) {
-      if (file.startsWith('agendamea-') && !keep.has(file)) {
-        try {
-          fs.rmSync(path.join(iconsDir, file), { force: true });
-        } catch {
-          // Ignore locked icon file
+  // Clean up old stale dynamic icons only when a new icon set was actually generated
+  if (regenerated) {
+    try {
+      const keep = new Set([
+        path.basename(icoPath),
+        path.basename(trayPngPath),
+        path.basename(notifPngPath),
+      ]);
+      for (const file of fs.readdirSync(iconsDir)) {
+        if (file.startsWith('agendamea-') && !keep.has(file)) {
+          try {
+            fs.rmSync(path.join(iconsDir, file), { force: true });
+          } catch {
+            // Ignore locked icon file
+          }
         }
       }
+    } catch {
+      // Ignore cleanup errors
     }
-  } catch {
-    // Ignore cleanup errors
   }
 
   return { bg: normBg, fg: normFg, icoPath, trayPngPath, notifPngPath };

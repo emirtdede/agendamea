@@ -1,4 +1,4 @@
-import { Database, RefreshCw, Sparkles } from 'lucide-react';
+import { Database, RefreshCw } from 'lucide-react';
 import React, { useMemo } from 'react';
 import { useI18n } from '../../../i18n/I18nContext';
 import type { AiStatusPayload, AiTierId } from '../../../types';
@@ -54,9 +54,17 @@ export const TierSelectorSection = React.memo(function TierSelectorSection({
     ],
   );
 
+  const externalDetected = Boolean(
+    status?.recommendation.externalOllama.detected ||
+      status?.recommendation.externalLmStudio.detected,
+  );
+
   return (
-    <section className="space-y-2.5" data-testid="ai-tier-selector">
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+    <section
+      className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:p-5 space-y-4"
+      data-testid="ai-tier-selector"
+    >
+      <div className="grid grid-cols-1 border-y border-[var(--border)] divide-y divide-[var(--border)] sm:grid-cols-3 sm:divide-y-0 sm:divide-x">
         {tierCards.map((card) => {
           const tierMeta = status?.recommendation.tiers.find((item) => item.id === card.id);
           const isSelected = selectedTier === card.id;
@@ -67,27 +75,34 @@ export const TierSelectorSection = React.memo(function TierSelectorSection({
               type="button"
               data-testid={`ai-tier-${card.id}`}
               onClick={() => onSelectTier(card.id)}
-              className={`flex flex-col items-start gap-1.5 rounded-xl border p-3.5 text-start transition-all ${
-                isSelected
-                  ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-                  : 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]'
+              className={`relative flex flex-col items-start gap-1.5 px-3.5 py-3.5 text-start transition-colors ${
+                isSelected ? 'bg-[var(--surface)]/70' : 'bg-transparent ag-hover-glow'
               }`}
             >
-              <span className="w-full text-xs font-semibold leading-snug text-[var(--text-primary)]">
+              <span
+                aria-hidden="true"
+                className={`absolute inset-x-0 top-0 h-[1.5px] transition-opacity ${
+                  isSelected ? 'bg-[var(--text-primary)] opacity-100' : 'opacity-0'
+                }`}
+              />
+              <span
+                className={`w-full text-[13px] font-semibold leading-snug ${
+                  isSelected ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                }`}
+              >
                 {card.title}
               </span>
-              <p className="text-[11px] leading-snug text-[var(--text-muted)]">{card.desc}</p>
-              <div className="mt-auto flex w-full flex-wrap items-center justify-between gap-1.5 pt-1.5">
-                <span className="font-mono-tabular text-[10.5px] text-[var(--text-secondary)] whitespace-nowrap">
+              <p className="text-[11.5px] leading-relaxed text-[var(--text-muted)]">{card.desc}</p>
+              <div className="mt-auto flex w-full flex-wrap items-baseline justify-between gap-1.5 pt-2">
+                <span className="font-mono-tabular text-[11px] text-[var(--text-secondary)] whitespace-nowrap">
                   {tierMeta ? formatBytes(tierMeta.totalBytes) : ''}
                 </span>
                 {isRecommended && (
                   <span
                     data-testid="ai-recommended-badge"
-                    className="inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
+                    className="text-[10.5px] font-medium text-[var(--text-muted)]"
                   >
-                    <Sparkles className="h-2.5 w-2.5 shrink-0" />
-                    <span className="truncate">{t.aiTierRecommendedBadge}</span>
+                    {t.aiTierRecommendedBadge}
                   </span>
                 )}
               </div>
@@ -96,14 +111,8 @@ export const TierSelectorSection = React.memo(function TierSelectorSection({
         })}
       </div>
 
-      {/* External Ollama / LM Studio Zero-Download Card + Model Picker */}
-      <div
-        className={`rounded-xl border transition-all ${
-          isExternalTierSelected
-            ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
-            : 'border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]'
-        }`}
-      >
+      {/* External Ollama / LM Studio Row */}
+      <div className="pt-1">
         <button
           type="button"
           data-testid="ai-tier-external-ollama"
@@ -115,34 +124,42 @@ export const TierSelectorSection = React.memo(function TierSelectorSection({
                 : 'external-ollama',
             )
           }
-          className="flex w-full items-center justify-between gap-3 p-3.5 text-start"
+          className="flex w-full items-center justify-between gap-3 py-1 text-start ag-hover-glow"
         >
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">
-              <Database className="h-3.5 w-3.5 text-[var(--accent)]" />
-              <span className="text-xs font-semibold text-[var(--text-primary)]">
+              <Database className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0" />
+              <span
+                className={`text-[13px] font-medium ${
+                  isExternalTierSelected
+                    ? 'text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)]'
+                }`}
+              >
                 {t.aiExternalOllamaTitle}
               </span>
-              {(status?.recommendation.externalOllama.detected ||
-                status?.recommendation.externalLmStudio.detected) && (
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                  {t.aiExternalDetectedBadge}
+              {externalDetected && (
+                <span className="text-[11px] font-medium text-[var(--text-muted)]">
+                  · {t.aiExternalDetectedBadge}
                 </span>
               )}
             </div>
-            <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">{t.aiExternalOllamaDesc}</p>
+            <p className="text-xs text-[var(--text-muted)] ps-5.5">{t.aiExternalOllamaDesc}</p>
           </div>
+          {isExternalTierSelected && (
+            <span className="text-[11px] font-medium text-[var(--text-primary)] shrink-0">
+              {t.cmdPaletteActiveBadge}
+            </span>
+          )}
         </button>
 
         {isExternalTierSelected && (
           <div
             data-testid="ai-external-model-panel"
-            className="animate-accordion border-t border-[var(--border)]/70 px-3.5 py-3 space-y-2.5"
+            className="animate-accordion mt-3 ps-5.5 space-y-2.5"
           >
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium text-[var(--text-secondary)]">
-                {t.aiExternalModelLabel}:
-              </span>
+              <span className="text-xs text-[var(--text-muted)]">{t.aiExternalModelLabel}:</span>
               {detectedExternalModels.length > 0 ? (
                 <SelectField
                   data-testid="ai-external-model-select"
@@ -165,7 +182,7 @@ export const TierSelectorSection = React.memo(function TierSelectorSection({
                   onChange={(e) => onChangeExternalModelDraft(e.target.value)}
                   onBlur={(e) => onCommitExternalModel(e.target.value)}
                   placeholder={t.aiExternalModelCustomPlaceholder}
-                  className="min-w-[200px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)] sm:max-w-[280px]"
+                  className="min-w-[200px] flex-1 rounded-lg border border-[var(--border)] bg-transparent px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--text-secondary)] sm:max-w-[280px]"
                 />
               )}
               <button
@@ -173,16 +190,14 @@ export const TierSelectorSection = React.memo(function TierSelectorSection({
                 data-testid="ai-external-rescan-btn"
                 disabled={rescanning}
                 onClick={onRescanExternal}
-                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-45"
               >
                 <RefreshCw className={`h-3 w-3 ${rescanning ? 'animate-spin' : ''}`} />
                 <span>{t.aiHardwareRescanButton}</span>
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium text-[var(--text-secondary)]">
-                {t.aiExternalBaseUrlLabel}:
-              </span>
+              <span className="text-xs text-[var(--text-muted)]">{t.aiExternalBaseUrlLabel}:</span>
               <input
                 type="url"
                 data-testid="ai-external-baseurl-input"
@@ -190,11 +205,11 @@ export const TierSelectorSection = React.memo(function TierSelectorSection({
                 onChange={(e) => onChangeExternalBaseUrlDraft(e.target.value)}
                 onBlur={(e) => onCommitExternalBaseUrl(e.target.value)}
                 placeholder="http://127.0.0.1:11434"
-                className="min-w-[220px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1.5 font-mono-tabular text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)] sm:max-w-[320px]"
+                className="min-w-[220px] flex-1 rounded-lg border border-[var(--border)] bg-transparent px-2.5 py-1.5 font-mono-tabular text-xs text-[var(--text-primary)] outline-none focus:border-[var(--text-secondary)] sm:max-w-[320px]"
               />
             </div>
             {detectedExternalModels.length === 0 && (
-              <p className="text-[11px] text-[var(--text-muted)]">{t.aiExternalOfflineHint}</p>
+              <p className="text-xs text-[var(--text-muted)]">{t.aiExternalOfflineHint}</p>
             )}
           </div>
         )}

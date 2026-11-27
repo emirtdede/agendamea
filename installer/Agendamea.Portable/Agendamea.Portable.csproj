@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Agendamea.Portable</AssemblyName>
+    <RootNamespace>Agendamea.Portable</RootNamespace>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <Product>Agendamea</Product>
+    <Company>Vellium Teknoloji A.S.</Company>
+    <Copyright>Copyright (c) 2026 Vellium Teknoloji A.S.</Copyright>
+    <Description>Fast NativeAOT smart-cached single-file portable launcher for Agendamea.</Description>
+    <ApplicationIcon>..\..\electron-resources\icon.ico</ApplicationIcon>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <IlcDisableReflection>true</IlcDisableReflection>
+  </PropertyGroup>
+</Project>

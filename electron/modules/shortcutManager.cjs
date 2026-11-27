@@ -44,6 +44,34 @@ function createShortcutAndStartupManager({
       activeLaunchMinimizedToTray = minimizedToTray;
     }
     try {
+      if (process.platform === 'win32' && process.windowsStore) {
+        // MSIX packages manage startup via the declared windows.startupTask (TaskId="AgendameaStartup")
+        const actionCmd = activeLaunchAtStartup
+          ? '$op2 = $task.RequestEnableAsync(); $null = $asTask.MakeGenericMethod([Windows.ApplicationModel.StartupTaskState]).Invoke($null, @($op2)).GetAwaiter().GetResult()'
+          : '$task.Disable()';
+        const psScript = [
+          'Add-Type -AssemblyName System.Runtime.WindowsRuntime',
+          "$asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]",
+          '$null = [Windows.ApplicationModel.StartupTask, Windows.ApplicationModel, ContentType=WindowsRuntime]',
+          "$op = [Windows.ApplicationModel.StartupTask]::GetAsync('AgendameaStartup')",
+          '$task = $asTask.MakeGenericMethod([Windows.ApplicationModel.StartupTask]).Invoke($null, @($op)).GetAwaiter().GetResult()',
+          `if ($task) { ${actionCmd} }`,
+        ].join('; ');
+        try {
+          const child = execFile(
+            'powershell.exe',
+            ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', psScript],
+            { windowsHide: true, timeout: 4000 },
+            () => {
+              // Best-effort MSIX StartupTask synchronization
+            },
+          );
+          child.unref?.();
+        } catch {
+          // Ignore if WinRT StartupTask API is unavailable
+        }
+        return activeLaunchAtStartup;
+      }
       if (process.platform === 'win32' && typeof app.setLoginItemSettings === 'function') {
         app.setLoginItemSettings({
           openAtLogin: activeLaunchAtStartup,

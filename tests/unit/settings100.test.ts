@@ -41,9 +41,12 @@ test('SQLite settings codec round-trips all 24 new personalization & runtime set
     const updated = db.updateSettings({
       listDensity: 'compact',
       fontFamily: 'mono',
+      fontScale: 'large',
+      readableSpacing: true,
       recentCustomColors: ['#112233', '#abcdef', '#ff0055'],
       colorBlindShapes: true,
       strongFocusRing: true,
+      aiTier: 'gpu-strong',
       weekStartsOn: 'sunday',
       timeFormat: '12h',
       defaultStartupView: 'today',
@@ -69,9 +72,12 @@ test('SQLite settings codec round-trips all 24 new personalization & runtime set
     for (const target of [updated, reread]) {
       assert.equal(target.listDensity, 'compact');
       assert.equal(target.fontFamily, 'mono');
+      assert.equal(target.fontScale, 'large');
+      assert.equal(target.readableSpacing, true);
       assert.deepEqual(target.recentCustomColors, ['#112233', '#abcdef', '#ff0055']);
       assert.equal(target.colorBlindShapes, true);
       assert.equal(target.strongFocusRing, true);
+      assert.equal(target.aiTier, 'gpu-strong');
       assert.equal(target.weekStartsOn, 'sunday');
       assert.equal(target.timeFormat, '12h');
       assert.equal(target.defaultStartupView, 'today');

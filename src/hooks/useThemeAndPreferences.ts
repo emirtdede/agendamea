@@ -23,6 +23,7 @@ export { readInitialTheme };
  */
 export function useThemeAndPreferences() {
   const language = usePreferencesSelector((s) => s.language, Object.is);
+  const pendingLanguage = usePreferencesSelector((s) => s.pendingLanguage, Object.is);
   const sidebarCollapsed = usePreferencesSelector((s) => s.sidebarCollapsed, Object.is);
   const dragLocked = usePreferencesSelector((s) => s.dragLocked, Object.is);
 
@@ -50,6 +51,9 @@ export function useThemeAndPreferences() {
       if (forceSystemTick || themeKey !== prevThemeKey) {
         prevThemeKey = themeKey;
         applyThemeToDocument(s.themeId, s.themeMode, s.customThemeColor);
+        void window.agendameaWindow?.setWindowThemeMode?.(s.themeMode)?.catch(() => {
+          /* ignore */
+        });
       }
 
       const iconKey = `${s.appIconId}|${s.customIconColor}|${themeKey}`;
@@ -63,16 +67,33 @@ export function useThemeAndPreferences() {
           s.customIconColor,
         );
         applyAppIconTokensToDocument(colors);
+        let legacyWhiteNeedsRepair = false;
         try {
+          const prevRaw = localStorage.getItem('agendamea-app-icon-tokens');
+          if (prevRaw && s.appIconId === 'match-theme' && s.themeId === 'obsidian') {
+            const parsedPrev = JSON.parse(prevRaw) as { bg?: string };
+            if (typeof parsedPrev?.bg === 'string' && parsedPrev.bg.toLowerCase() === '#fafafa') {
+              legacyWhiteNeedsRepair = true;
+            }
+          }
           localStorage.setItem('agendamea-app-icon-tokens', JSON.stringify(colors));
         } catch {
           // Ignore storage restrictions
         }
-        if (preferencesStore.consumeIconDirty()) {
+        if (preferencesStore.consumeIconDirty() || legacyWhiteNeedsRepair) {
           pendingIconShortcuts = true;
         }
         if (!iconInitialized && !pendingIconShortcuts) {
           iconInitialized = true;
+          void window.agendameaWindow
+            ?.applyAppIcon?.({
+              bg: colors.bg,
+              fg: colors.fg,
+              updateShortcuts: false,
+            })
+            ?.catch(() => {
+              /* ignore */
+            });
         } else {
           iconInitialized = true;
           if (iconApplyTimer !== null) {
@@ -95,13 +116,15 @@ export function useThemeAndPreferences() {
         }
       }
 
-      const a11yKey = `${s.zoomPercent}|${s.highContrast}|${s.reducedMotion}|${s.listDensity}|${s.fontFamily}|${s.colorBlindShapes}|${s.strongFocusRing}`;
+      const a11yKey = `${s.zoomPercent}|${s.fontScale}|${s.highContrast}|${s.reducedMotion}|${s.readableSpacing}|${s.listDensity}|${s.fontFamily}|${s.colorBlindShapes}|${s.strongFocusRing}`;
       if (a11yKey !== prevA11yKey) {
         prevA11yKey = a11yKey;
         applyAccessibilityToDocument({
           zoomPercent: s.zoomPercent,
+          fontScale: s.fontScale,
           highContrast: s.highContrast,
           reducedMotion: s.reducedMotion,
+          readableSpacing: s.readableSpacing,
           listDensity: s.listDensity,
           fontFamily: s.fontFamily,
           colorBlindShapes: s.colorBlindShapes,
@@ -168,6 +191,7 @@ export function useThemeAndPreferences() {
 
   return {
     language,
+    pendingLanguage,
     sidebarCollapsed,
     dragLocked,
     langMeta,

@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, FolderOpen, HardDrive, Trash2, X } from 'lucide-react';
+import { Check, Download, FolderOpen, Trash2, X } from 'lucide-react';
 import React, { useEffect, useRef } from 'react';
 import { useI18n } from '../../../i18n/I18nContext';
 import type { AiStatusPayload } from '../../../types';
@@ -8,6 +8,7 @@ interface ModelCatalogSectionProps {
   status: AiStatusPayload | null;
   busyModelId: string | null;
   onDownloadModel: (modelId: string) => void;
+  onActivateModel?: (modelId: string) => void;
   onCancelDownload: (modelId: string) => void;
   onDeleteModel: (modelId: string) => void;
   onDeleteAll: () => void;
@@ -17,6 +18,7 @@ export const ModelCatalogSection = React.memo(function ModelCatalogSection({
   status,
   busyModelId,
   onDownloadModel,
+  onActivateModel,
   onCancelDownload,
   onDeleteModel,
   onDeleteAll,
@@ -59,24 +61,21 @@ export const ModelCatalogSection = React.memo(function ModelCatalogSection({
     <section
       aria-label={t.aiModelsSectionTitle}
       data-setting-id="ai-models"
-      className="space-y-2.5"
+      className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:p-5 space-y-3"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <HardDrive className="h-4 w-4 text-[var(--accent)]" />
-          <h3 className="font-display text-xs font-semibold text-[var(--text-muted)]">
-            {t.aiModelsSectionTitle}
-          </h3>
-        </div>
-        <div className="flex items-center gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+          {t.aiModelsSectionTitle}
+        </h3>
+        <div className="flex items-center gap-4">
           {hasDesktopBridge && (
             <button
               type="button"
               data-testid="ai-open-models-folder-btn"
               onClick={() => void window.agendameaWindow?.openModelsFolder?.()}
-              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]"
             >
-              <FolderOpen className="h-3 w-3 text-[var(--accent)]" />
+              <FolderOpen className="h-3.5 w-3.5" />
               <span>{t.aiOpenModelsFolderButton}</span>
             </button>
           )}
@@ -86,137 +85,166 @@ export const ModelCatalogSection = React.memo(function ModelCatalogSection({
               data-testid="ai-delete-all-models-btn"
               disabled={busyModelId !== null}
               onClick={onDeleteAll}
-              className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-600 dark:text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] ag-hover-danger-glow hover:text-red-500 disabled:opacity-45"
             >
-              <Trash2 className="h-3 w-3" />
+              <Trash2 className="h-3.5 w-3.5" />
               <span>{t.aiDeleteAllModelsButton}</span>
             </button>
           )}
         </div>
       </div>
 
-      <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <div className="border-y border-[var(--border)] divide-y divide-[var(--border)]/75">
         {!status ? (
           <div
             data-testid="ai-models-skeleton"
-            className="divide-y divide-[var(--border)] animate-pulse"
+            className="divide-y divide-[var(--border)]/75 animate-pulse"
           >
             {[0, 1, 2, 3, 4].map((idx) => (
-              <div key={idx} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div key={idx} className="flex items-center justify-between gap-3 py-3">
                 <div className="flex items-center gap-2">
                   <div className="h-3.5 w-32 rounded bg-[var(--surface-subtle)]" />
-                  <div className="h-4 w-20 rounded bg-[var(--surface-subtle)]" />
-                  <div className="h-3 w-12 rounded bg-[var(--surface-subtle)]" />
+                  <div className="h-3 w-20 rounded bg-[var(--surface-subtle)]" />
                 </div>
-                <div className="h-7 w-16 rounded-lg bg-[var(--surface-subtle)]" />
+                <div className="h-6 w-14 rounded bg-[var(--surface-subtle)]" />
               </div>
             ))}
           </div>
         ) : (
-          status.models.map((m) => (
-            <div
-              key={m.id}
-              data-testid={`ai-model-row-${m.id}`}
-              className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5"
-            >
-              <div className="min-w-0 flex-1 space-y-0.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-[var(--text-primary)]">
-                    {m.label}
-                  </span>{' '}
-                  <span
-                    lang="en"
-                    className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10px] uppercase text-[var(--text-muted)]"
-                  >
-                    {m.role} · {m.license}
-                  </span>{' '}
-                  <span className="font-mono-tabular text-[10.5px] text-[var(--text-muted)]">
-                    {formatBytes(m.expectedBytes)}
-                  </span>
-                  {m.verified && (
-                    <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-emerald-600 dark:text-emerald-400">
-                      <CheckCircle2 className="h-3 w-3" />
-                      <span>{t.aiModelInstalledBadge}</span>
+          status.models.map((m) => {
+            const isActiveForRole = Boolean(
+              m.present &&
+                ((m.role === 'stt' && status.settings.aiSttModelId === m.id) ||
+                  (m.role === 'llm' &&
+                    !status.settings.aiUseExternalOllama &&
+                    status.settings.aiLlmModelId === m.id) ||
+                  (m.role === 'embed' && status.settings.aiEmbedModelId === m.id)),
+            );
+            return (
+              <div
+                key={m.id}
+                data-testid={`ai-model-row-${m.id}`}
+                className="flex flex-wrap items-center justify-between gap-3 py-3"
+              >
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+                    <span className="text-[13px] font-medium text-[var(--text-primary)]">
+                      {m.label}
                     </span>
-                  )}
-                  {m.fitsHardware === false && (
                     <span
-                      data-testid={`ai-model-hw-warn-${m.id}`}
-                      title={m.warningCode || t.aiHardwareMemoryWarningBadge}
-                      className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono-tabular text-[10px] font-semibold text-amber-600 dark:text-amber-400"
+                      lang="en"
+                      className="font-mono-tabular text-[11px] uppercase text-[var(--text-muted)]"
                     >
-                      {t.aiHardwareMemoryWarningBadge}
+                      {m.role} · {m.license}
                     </span>
+                    <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                      {formatBytes(m.expectedBytes)}
+                    </span>
+                    {isActiveForRole ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--text-primary)]">
+                        <Check className="h-3 w-3" />
+                        <span>{t.cmdPaletteActiveBadge}</span>
+                      </span>
+                    ) : (
+                      m.verified && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-[var(--text-secondary)]">
+                          <Check className="h-3 w-3" />
+                          <span>{t.aiModelInstalledBadge}</span>
+                        </span>
+                      )
+                    )}
+                    {m.fitsHardware === false && (
+                      <span
+                        data-testid={`ai-model-hw-warn-${m.id}`}
+                        title={m.warningCode || t.aiHardwareMemoryWarningBadge}
+                        className="font-mono-tabular text-[10.5px] text-[var(--text-muted)]"
+                      >
+                        · {t.aiHardwareMemoryWarningBadge}
+                      </span>
+                    )}
+                  </div>
+                  {m.downloading && m.progress && (
+                    <div className="mt-1.5 w-full max-w-xs space-y-1">
+                      <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
+                        <div
+                          className="h-full bg-[var(--accent)] transition-all"
+                          style={{ width: `${m.progress.percent}%` }}
+                        />
+                      </div>
+                      <p className="font-mono-tabular text-[10.5px] text-[var(--text-muted)]">
+                        {t.aiModelDownloadingLabel} {m.progress.percent}% (
+                        {formatBytes(m.progress.receivedBytes)} /{' '}
+                        {formatBytes(m.progress.totalBytes)}){(() => {
+                          const tr = speedTrackerRef.current.get(m.id);
+                          if (!tr || tr.bps < 1024) return '';
+                          const mbps = (tr.bps / (1024 * 1024)).toFixed(1);
+                          const remBytes = Math.max(
+                            0,
+                            m.progress.totalBytes - m.progress.receivedBytes,
+                          );
+                          const etaSec = Math.ceil(remBytes / tr.bps);
+                          const etaStr =
+                            etaSec >= 60
+                              ? `${Math.floor(etaSec / 60)}m ${etaSec % 60}s`
+                              : `${etaSec}s`;
+                          return ` · ${mbps} MB/s · ~${etaStr}`;
+                        })()}
+                      </p>
+                    </div>
                   )}
                 </div>
-                {m.downloading && m.progress && (
-                  <div className="mt-1.5 w-full max-w-xs space-y-1">
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-subtle)]">
-                      <div
-                        className="h-full bg-[var(--accent)] transition-all"
-                        style={{ width: `${m.progress.percent}%` }}
-                      />
-                    </div>
-                    <p className="font-mono-tabular text-[10px] text-[var(--text-muted)]">
-                      {t.aiModelDownloadingLabel} {m.progress.percent}% (
-                      {formatBytes(m.progress.receivedBytes)} / {formatBytes(m.progress.totalBytes)}
-                      ){(() => {
-                        const tr = speedTrackerRef.current.get(m.id);
-                        if (!tr || tr.bps < 1024) return '';
-                        const mbps = (tr.bps / (1024 * 1024)).toFixed(1);
-                        const remBytes = Math.max(
-                          0,
-                          m.progress.totalBytes - m.progress.receivedBytes,
-                        );
-                        const etaSec = Math.ceil(remBytes / tr.bps);
-                        const etaStr =
-                          etaSec >= 60
-                            ? `${Math.floor(etaSec / 60)}m ${etaSec % 60}s`
-                            : `${etaSec}s`;
-                        return ` · ${mbps} MB/s · ~${etaStr}`;
-                      })()}
-                    </p>
-                  </div>
-                )}
-              </div>
 
-              <div className="flex shrink-0 items-center gap-1.5">
-                {m.downloading ? (
-                  <button
-                    type="button"
-                    data-testid={`ai-model-cancel-${m.id}`}
-                    onClick={() => onCancelDownload(m.id)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    <span>{t.aiModelCancelButton}</span>
-                  </button>
-                ) : m.present ? (
-                  <button
-                    type="button"
-                    data-testid={`ai-model-delete-${m.id}`}
-                    disabled={busyModelId === m.id}
-                    onClick={() => onDeleteModel(m.id)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/20 disabled:opacity-50"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>{t.aiModelDeleteButton}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    data-testid={`ai-model-download-${m.id}`}
-                    disabled={busyModelId === m.id}
-                    onClick={() => onDownloadModel(m.id)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
-                  >
-                    <Download className="h-3.5 w-3.5 text-[var(--accent)]" />
-                    <span>{t.aiModelDownloadButton}</span>
-                  </button>
-                )}
+                <div className="flex shrink-0 items-center gap-3">
+                  {m.downloading ? (
+                    <button
+                      type="button"
+                      data-testid={`ai-model-cancel-${m.id}`}
+                      onClick={() => onCancelDownload(m.id)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      <span>{t.aiModelCancelButton}</span>
+                    </button>
+                  ) : m.present ? (
+                    <>
+                      {!isActiveForRole && onActivateModel && (
+                        <button
+                          type="button"
+                          data-testid={`ai-model-activate-${m.id}`}
+                          disabled={busyModelId === m.id}
+                          onClick={() => onActivateModel(m.id)}
+                          className="text-xs font-medium text-[var(--text-primary)] ag-hover-glow disabled:opacity-45"
+                        >
+                          {t.aiModelActivateButton}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        data-testid={`ai-model-delete-${m.id}`}
+                        disabled={busyModelId === m.id}
+                        onClick={() => onDeleteModel(m.id)}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] ag-hover-danger-glow hover:text-red-500 disabled:opacity-45"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>{t.aiModelDeleteButton}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      data-testid={`ai-model-download-${m.id}`}
+                      disabled={busyModelId === m.id}
+                      onClick={() => onDownloadModel(m.id)}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-45"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>{t.aiModelDownloadButton}</span>
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </section>

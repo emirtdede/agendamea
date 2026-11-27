@@ -663,17 +663,22 @@ test('QA-AUDIT-12: ModelManager manifest mtime cache hits on unchanged disk file
   }
 
   const { loadLocaleBundle, isLocaleLoaded } = await import('../src/i18n/localeLoader');
-  assert.equal(isLocaleLoaded('tr'), true, 'Core tr locale must be eagerly available');
-  assert.equal(isLocaleLoaded('en'), true, 'Core en locale must be eagerly available');
+  assert.equal(isLocaleLoaded('tr'), false, 'No locale should be eagerly loaded before boot');
+  assert.equal(isLocaleLoaded('en'), false, 'No locale should be eagerly loaded before boot');
+
+  const trBundle = await loadLocaleBundle('tr');
+  assert.equal(isLocaleLoaded('tr'), true, 'Requested tr locale must load on demand');
+  assert.equal(isLocaleLoaded('en'), false, 'Unused en locale must stay unloaded when tr loads');
+  assert.equal(Object.keys(trBundle.dict).length, 1112);
 
   const [deBundle, arBundle, jaBundle] = await Promise.all([
     loadLocaleBundle('de'),
     loadLocaleBundle('ar'),
     loadLocaleBundle('ja'),
   ]);
-  assert.equal(Object.keys(deBundle.dict).length, 853);
-  assert.equal(Object.keys(arBundle.dict).length, 853);
-  assert.equal(Object.keys(jaBundle.dict).length, 853);
+  assert.equal(Object.keys(deBundle.dict).length, 1112);
+  assert.equal(Object.keys(arBundle.dict).length, 1112);
+  assert.equal(Object.keys(jaBundle.dict).length, 1112);
   assert.ok(deBundle.dict.aiHardwareGpuVramLabel.length > 0);
   assert.ok(arBundle.dict.aiHardwareMemoryWarningBadge.length > 0);
   assert.ok(jaBundle.legal.privacy.sections.length > 0);

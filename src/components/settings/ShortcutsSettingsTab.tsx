@@ -10,8 +10,10 @@ import {
   formatShortcutDisplay,
   type ShortcutActionId,
 } from '../../utils/shortcuts';
+import { InfoTooltip } from '../InfoTooltip';
 import { ShortcutRecorder } from '../ShortcutRecorder';
 import { ToggleSwitch } from '../ToggleSwitch';
+import { SettingsAdvancedSection } from './SettingsAdvancedSection';
 import { SettingsTabHeader } from './SettingsTabHeader';
 
 interface ShortcutsSettingsTabProps {
@@ -22,6 +24,7 @@ interface ShortcutsSettingsTabProps {
   voiceShortcut: string;
   voiceRegistered: boolean;
   customShortcuts: CustomShortcutsMap;
+  revealSettingId?: string;
   onToggleGlobalQuickAddShortcut: (enabled: boolean) => void;
   onChangeGlobalQuickAddShortcutKey: (nextKey: string) => void;
   onToggleVoiceShortcutEnabled: (enabled: boolean) => void;
@@ -40,6 +43,7 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
   voiceShortcut,
   voiceRegistered,
   customShortcuts,
+  revealSettingId,
   onToggleGlobalQuickAddShortcut,
   onChangeGlobalQuickAddShortcutKey,
   onToggleVoiceShortcutEnabled,
@@ -143,8 +147,11 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
     isElectronDesktop &&
     ((globalQuickAddShortcut && !quickAddRegistered) || (voiceShortcutEnabled && !voiceRegistered));
 
+  const primaryInAppRows = inAppRows.slice(0, 3);
+  const advancedInAppRows = inAppRows.slice(3);
+
   return (
-    <div className="space-y-6" data-testid="settings-shortcuts-section">
+    <div className="space-y-5 pb-4 animate-tab-enter" data-testid="settings-shortcuts-section">
       <SettingsTabHeader
         subtitle={t.shortcutsSubtitle}
         onReset={onResetAllShortcuts}
@@ -157,7 +164,7 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
         <div
           role="alert"
           data-testid="shortcuts-conflict-alert"
-          className="flex items-start gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-800 dark:text-amber-300"
+          className="flex items-start gap-2.5 rounded-xl border border-amber-500/35 bg-amber-500/[0.08] px-4 py-3 text-xs text-amber-800 dark:text-amber-300"
         >
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
           <span>{t.shortcutsConflictWarning}</span>
@@ -169,7 +176,7 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
         <div
           role="alert"
           data-testid="shortcuts-os-conflict-alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-700 dark:text-red-300"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-500/35 bg-red-500/[0.08] px-4 py-3 text-xs text-red-700 dark:text-red-300"
         >
           <div className="flex items-start gap-2.5 min-w-0 flex-1">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -180,7 +187,7 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
             data-testid="shortcuts-os-resolve-btn"
             disabled={resolvingOs}
             onClick={() => void handleResolveOsConflict()}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/15 px-2.5 py-1 text-[11px] font-semibold text-red-700 transition-colors hover:bg-red-500/25 disabled:opacity-50 dark:text-red-200 whitespace-nowrap"
+            className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-300 ag-hover-danger-glow disabled:opacity-50 whitespace-nowrap"
           >
             <RefreshCw className={`h-3 w-3 ${resolvingOs ? 'animate-spin' : ''}`} />
             <span>{t.retry}</span>
@@ -188,19 +195,20 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
         </div>
       )}
 
-      {/* System-Wide Global Shortcuts (Desktop) */}
+      {/* System-Wide Global Shortcuts Card */}
       {isElectronDesktop && (
         <section
           aria-label={t.shortcutsGlobalSectionTitle}
           data-setting-id="shortcuts-global"
-          className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] divide-y divide-[var(--border)]"
+          className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-[var(--canvas)]/60">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-5">
             <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-[var(--accent)]" />
-              <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+              <Globe className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
                 {t.shortcutsGlobalSectionTitle}
               </h3>
+              <InfoTooltip text={t.shortcutsGlobalTooltip} testId="shortcuts-global-info" />
             </div>
             <span className="text-[11px] text-[var(--text-muted)]">
               {t.shortcutRequireModifierHint}
@@ -208,26 +216,26 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
           </div>
 
           {/* Global Quick Add */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:px-5">
             <div className="flex items-start gap-2.5 min-w-0 flex-1">
-              <Zap className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
+              <Zap className="h-4 w-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-baseline gap-2">
                   <p className="text-sm font-medium text-[var(--text-primary)]">
                     {quickAddTitleClean}
                   </p>
                   {globalQuickAddShortcut && (
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      className={`inline-flex items-center gap-1 text-[11px] ${
                         quickAddRegistered
-                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-red-500/15 text-red-600 dark:text-red-400'
+                          ? 'text-[var(--text-muted)]'
+                          : 'text-red-600 dark:text-red-400 font-medium'
                       }`}
                     >
                       {quickAddRegistered ? (
-                        <CheckCircle2 className="h-2.5 w-2.5" />
+                        <CheckCircle2 className="h-3 w-3" />
                       ) : (
-                        <AlertTriangle className="h-2.5 w-2.5" />
+                        <AlertTriangle className="h-3 w-3" />
                       )}
                       <span>
                         {quickAddRegistered
@@ -262,26 +270,26 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
           </div>
 
           {/* Global Voice Dictation */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:px-5">
             <div className="flex items-start gap-2.5 min-w-0 flex-1">
-              <Mic className="h-4 w-4 text-[var(--accent)] mt-0.5 shrink-0" />
+              <Mic className="h-4 w-4 text-[var(--text-muted)] mt-0.5 shrink-0" />
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-baseline gap-2">
                   <p className="text-sm font-medium text-[var(--text-primary)]">
                     {t.aiVoiceShortcutLabel}
                   </p>
                   {voiceShortcutEnabled && (
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      className={`inline-flex items-center gap-1 text-[11px] ${
                         voiceRegistered
-                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-red-500/15 text-red-600 dark:text-red-400'
+                          ? 'text-[var(--text-muted)]'
+                          : 'text-red-600 dark:text-red-400 font-medium'
                       }`}
                     >
                       {voiceRegistered ? (
-                        <CheckCircle2 className="h-2.5 w-2.5" />
+                        <CheckCircle2 className="h-3 w-3" />
                       ) : (
-                        <AlertTriangle className="h-2.5 w-2.5" />
+                        <AlertTriangle className="h-3 w-3" />
                       )}
                       <span>
                         {voiceRegistered ? t.shortcutsOsRegisteredBadge : t.shortcutsOsBlockedBadge}
@@ -315,27 +323,22 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
         </section>
       )}
 
-      {/* In-App Keyboard Shortcuts */}
+      {/* Primary In-App Keyboard Shortcuts Card */}
       <section
         aria-label={t.keyboardShortcutsTitle}
         data-setting-id="shortcuts-inapp"
-        className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]"
+        className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70"
       >
-        <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--canvas)]/60 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <Keyboard className="h-4 w-4 text-[var(--accent)]" />
-            <h3 className="font-display text-xs font-semibold text-[var(--text-primary)]">
-              {t.keyboardShortcutsTitle}
-            </h3>
-          </div>
+        <div className="flex items-center gap-2 px-4 py-3 sm:px-5">
+          <Keyboard className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+            {t.keyboardShortcutsTitle}
+          </h3>
         </div>
 
-        <div className="divide-y divide-[var(--border)]">
-          {inAppRows.map((row) => (
-            <div
-              key={row.id}
-              className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5"
-            >
+        <div className="divide-y divide-[var(--border)]/70 px-4 sm:px-5">
+          {primaryInAppRows.map((row) => (
+            <div key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
               <span className="text-xs font-medium text-[var(--text-primary)]">{row.label}</span>
               <ShortcutRecorder
                 value={customShortcuts[row.id] ?? DEFAULT_CUSTOM_SHORTCUTS[row.id]}
@@ -349,6 +352,29 @@ export const ShortcutsSettingsTab = React.memo(function ShortcutsSettingsTab({
           ))}
         </div>
       </section>
+
+      {/* Advanced In-App Navigation & View Shortcuts */}
+      <SettingsAdvancedSection
+        forceOpen={revealSettingId === 'shortcuts-inapp' || hasAnyConflict}
+        testId="shortcuts-advanced-section"
+        toggleTestId="shortcuts-advanced-toggle"
+      >
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70 px-4 sm:px-5">
+          {advancedInAppRows.map((row) => (
+            <div key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              <span className="text-xs font-medium text-[var(--text-primary)]">{row.label}</span>
+              <ShortcutRecorder
+                value={customShortcuts[row.id] ?? DEFAULT_CUSTOM_SHORTCUTS[row.id]}
+                defaultValue={DEFAULT_CUSTOM_SHORTCUTS[row.id]}
+                allowClear
+                hasConflict={conflicts.has(row.id)}
+                testId={`shortcut-recorder-${row.id}`}
+                onChange={(next) => onChangeCustomShortcut(row.id, next)}
+              />
+            </div>
+          ))}
+        </div>
+      </SettingsAdvancedSection>
     </div>
   );
 });

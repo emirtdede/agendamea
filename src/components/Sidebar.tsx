@@ -1,7 +1,8 @@
-import { Heart, Pencil, Pin, Plus, Settings, Trash2 } from 'lucide-react';
+import { Eye, Heart, Home, Lock, Pencil, Pin, Plus, Settings, Trash2 } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDelayedFocus } from '../hooks/useDelayedFocus';
 import { useI18n } from '../i18n/I18nContext';
+import { preferencesStore } from '../store/preferencesStore';
 import type { ActiveView, Category, CategoryPatch, SmartView } from '../types';
 import { createClientId } from '../utils/id';
 import { CATEGORY_COLORS } from '../utils/themes';
@@ -35,8 +36,14 @@ interface SidebarProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   searchInputRef: React.RefObject<HTMLInputElement | null>;
+  onOpenCommandPalette?: () => void;
   isSettingsOpen?: boolean;
   onOpenSettings: () => void;
+  appLockEnabled?: boolean;
+  onLockAppNow?: () => void;
+  onNewTaskInView?: (view: ActiveView) => void;
+  onClearAllCompleted?: () => void;
+  onNotifyInfo?: (message: string) => void;
   onCreateCategory: (payload: { id: string; name: string; color: string }) => Promise<void>;
   onUpdateCategory: (id: string, patch: CategoryPatch) => Promise<void>;
   onTogglePinCategory: (id: string, pinned: boolean) => Promise<void>;
@@ -57,8 +64,14 @@ export const Sidebar = React.memo(function Sidebar({
   searchQuery,
   onSearchChange,
   searchInputRef,
+  onOpenCommandPalette,
   isSettingsOpen = false,
   onOpenSettings,
+  appLockEnabled = false,
+  onLockAppNow,
+  onNewTaskInView,
+  onClearAllCompleted,
+  onNotifyInfo,
   onCreateCategory,
   onUpdateCategory,
   onTogglePinCategory,
@@ -87,6 +100,11 @@ export const Sidebar = React.memo(function Sidebar({
     x: number;
     y: number;
     category: Category;
+  } | null>(null);
+  const [smartContextMenu, setSmartContextMenu] = useState<{
+    x: number;
+    y: number;
+    viewId: SmartView;
   } | null>(null);
 
   const addInputRef = useRef<HTMLInputElement>(null);
@@ -216,9 +234,18 @@ export const Sidebar = React.memo(function Sidebar({
     onCloseMobile();
   };
 
-  const handleCollapsedSearchClick = () => {
-    onToggleCollapse();
-    scheduleFocus(() => searchInputRef.current?.focus(), 60);
+  const handleOpenCommandPalette = () => {
+    if (onOpenCommandPalette) {
+      onCloseMobile();
+      onOpenCommandPalette();
+      return;
+    }
+    if (isCollapsed) {
+      onToggleCollapse();
+      scheduleFocus(() => searchInputRef.current?.focus(), 60);
+    } else {
+      searchInputRef.current?.focus();
+    }
   };
 
   const renderSidebar = (compact: boolean) => (
@@ -236,7 +263,7 @@ export const Sidebar = React.memo(function Sidebar({
         onToggleCollapse={onToggleCollapse}
         onCloseMobile={onCloseMobile}
         onSearchChange={onSearchChange}
-        onCollapsedSearchClick={handleCollapsedSearchClick}
+        onOpenCommandPalette={handleOpenCommandPalette}
       />
 
       <div className={`flex-1 overflow-y-auto py-3 space-y-5 ${compact ? 'px-2' : 'px-3'}`}>
@@ -246,6 +273,9 @@ export const Sidebar = React.memo(function Sidebar({
           isSettingsOpen={isSettingsOpen}
           smartCounts={counts.smart}
           onSelectView={handleSelectAndClose}
+          onSmartViewContextMenu={(e, viewId) =>
+            setSmartContextMenu({ x: e.clientX, y: e.clientY, viewId })
+          }
         />
 
         <div className="mx-2 h-px bg-[var(--border)]" />
@@ -264,7 +294,7 @@ export const Sidebar = React.memo(function Sidebar({
                 }
                 aria-label={t.newCategory}
                 title={t.newCategory}
-                className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors"
               >
                 <Plus className="h-3.5 w-3.5" />
               </button>
@@ -323,7 +353,31 @@ export const Sidebar = React.memo(function Sidebar({
         </section>
       </div>
 
-      <div className={compact ? 'px-2 pb-2 pt-1' : 'px-3 pb-2.5 pt-1'}>
+      <div className={compact ? 'px-2 pb-2 pt-1 space-y-1' : 'px-3 pb-2.5 pt-1 space-y-1'}>
+        {appLockEnabled && onLockAppNow && (
+          <button
+            type="button"
+            data-testid="sidebar-lock-now-btn"
+            onClick={() => {
+              onCloseMobile();
+              onLockAppNow();
+            }}
+            aria-label={compact ? t.appLockLockNowButton : undefined}
+            title={compact ? t.appLockLockNowButton : undefined}
+            className={
+              compact
+                ? 'mx-auto flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-muted)] ag-hover-glow'
+                : 'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium text-[var(--text-secondary)] ag-hover-glow'
+            }
+          >
+            <Lock
+              className={`shrink-0 ${
+                compact ? 'h-[18px] w-[18px]' : 'h-4 w-4 text-[var(--text-muted)]'
+              }`}
+            />
+            {!compact && <span className="whitespace-nowrap">{t.appLockLockNowButton}</span>}
+          </button>
+        )}
         <button
           type="button"
           data-testid="open-settings-button"
@@ -336,25 +390,23 @@ export const Sidebar = React.memo(function Sidebar({
           title={compact ? t.settings : undefined}
           className={
             compact
-              ? `mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-                  isSettingsOpen
-                    ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
-                    : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+              ? `mx-auto flex h-9 w-9 items-center justify-center rounded-lg ag-hover-glow ${
+                  isSettingsOpen ? 'ag-minimal-active' : 'text-[var(--text-muted)]'
                 }`
-              : `flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium transition-colors ${
+              : `flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] font-medium ag-hover-glow ${
                   isSettingsOpen
                     ? 'bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                    : 'text-[var(--text-secondary)]'
                 }`
           }
         >
           <Settings
-            className={`h-4 w-4 shrink-0 ${
-              !compact && isSettingsOpen
-                ? 'text-[var(--accent)]'
-                : !compact
-                  ? 'text-[var(--text-muted)]'
-                  : ''
+            className={`shrink-0 ${
+              compact
+                ? 'h-[18px] w-[18px]'
+                : isSettingsOpen
+                  ? 'h-4 w-4 text-[var(--accent)]'
+                  : 'h-4 w-4 text-[var(--text-muted)]'
             }`}
           />
           {!compact && <span className="whitespace-nowrap">{t.settings}</span>}
@@ -376,7 +428,7 @@ export const Sidebar = React.memo(function Sidebar({
               rel="noopener noreferrer"
               aria-label="GitHub"
               title="GitHub"
-              className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+              className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-muted)] ag-hover-glow"
             >
               <GithubMark className="h-4 w-4" />
             </a>
@@ -387,9 +439,9 @@ export const Sidebar = React.memo(function Sidebar({
                 rel="noopener noreferrer"
                 aria-label={t.sponsor}
                 title={t.sponsor}
-                className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                className="group mx-auto flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-muted)] ag-hover-glow"
               >
-                <Heart className="h-4 w-4" />
+                <Heart className="h-4 w-4 transition-colors group-hover:text-rose-400" />
               </a>
             )}
           </>
@@ -407,9 +459,10 @@ export const Sidebar = React.memo(function Sidebar({
               rel="noopener noreferrer"
               onClick={onCloseMobile}
               title="GitHub"
-              className="flex min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)]/60 px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+              data-testid="sidebar-github-btn"
+              className="group flex min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)]/50 px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--text-secondary)] ag-hover-card-glow"
             >
-              <GithubMark className="h-3.5 w-3.5 shrink-0" />
+              <GithubMark className="h-3.5 w-3.5 shrink-0 transition-transform duration-150 group-hover:scale-105" />
               <span className="truncate">GitHub</span>
             </a>
             {!window.agendameaWindow?.isWindowsStore && (
@@ -419,9 +472,10 @@ export const Sidebar = React.memo(function Sidebar({
                 rel="noopener noreferrer"
                 onClick={onCloseMobile}
                 title={t.sponsor}
-                className="flex min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)]/60 px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                data-testid="sidebar-sponsor-btn"
+                className="group flex min-w-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)]/50 px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--text-secondary)] ag-hover-card-glow"
               >
-                <Heart className="h-3.5 w-3.5 shrink-0" />
+                <Heart className="h-3.5 w-3.5 shrink-0 transition-all duration-150 group-hover:scale-105 group-hover:text-rose-400" />
                 <span className="truncate">{t.sponsor}</span>
               </a>
             )}
@@ -447,6 +501,67 @@ export const Sidebar = React.memo(function Sidebar({
             {renderSidebar(false)}
           </div>
         </div>
+      )}
+
+      {smartContextMenu && (
+        <ContextMenu
+          testId="smart-view-context-menu"
+          x={smartContextMenu.x}
+          y={smartContextMenu.y}
+          onClose={() => setSmartContextMenu(null)}
+          items={[
+            {
+              id: 'open-view',
+              label: t.ctxOpenView,
+              icon: <Eye className="h-3.5 w-3.5" />,
+              onSelect: () => handleSelectAndClose({ type: 'smart', id: smartContextMenu.viewId }),
+            },
+            ...(smartContextMenu.viewId !== 'completed' && onNewTaskInView
+              ? [
+                  {
+                    id: 'new-task-in-view',
+                    label: t.shortcutNewTask,
+                    icon: <Plus className="h-3.5 w-3.5" />,
+                    onSelect: () => {
+                      onCloseMobile();
+                      onNewTaskInView({ type: 'smart', id: smartContextMenu.viewId });
+                    },
+                  },
+                ]
+              : []),
+            ...(smartContextMenu.viewId === 'all' ||
+            smartContextMenu.viewId === 'today' ||
+            smartContextMenu.viewId === 'important'
+              ? [
+                  { id: 'div-startup', divider: true as const },
+                  {
+                    id: 'set-startup',
+                    label: t.ctxSetStartupView,
+                    icon: <Home className="h-3.5 w-3.5" />,
+                    onSelect: () => {
+                      const target = smartContextMenu.viewId as 'all' | 'today' | 'important';
+                      preferencesStore.setDefaultStartupView(target);
+                      onNotifyInfo?.(t.ctxStartupViewUpdatedToast);
+                    },
+                  },
+                ]
+              : []),
+            ...(smartContextMenu.viewId === 'completed' &&
+            counts.smart.completed > 0 &&
+            onClearAllCompleted
+              ? [
+                  { id: 'div-clear', divider: true as const },
+                  {
+                    id: 'clear-completed',
+                    label: t.clearCompleted,
+                    icon: <Trash2 className="h-3.5 w-3.5" />,
+                    danger: true,
+                    onSelect: () => onClearAllCompleted(),
+                  },
+                ]
+              : []),
+          ]}
+        />
       )}
 
       {catContextMenu && (

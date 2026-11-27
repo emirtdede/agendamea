@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import settingsCodec from '../../shared/settingsCodec.cjs';
 import sqliteCore from '../../shared/sqliteCore.cjs';
 import todoRepository from '../../shared/todoRepository.cjs';
-import { isValidLanguageCode } from '../i18n/languages.ts';
+import { isValidLanguageCode, resolveSystemLanguage } from '../i18n/languages.ts';
 import type {
   AppSettings,
   BootstrapPayload,
@@ -83,6 +83,7 @@ const SETTINGS_CODEC_OPTIONS = {
 export class TodoDatabase {
   private db: Database.Database;
   private dbPath: string;
+  private cachedSettings: AppSettings | null = null;
 
   constructor(dbPath?: string) {
     const defaultDir = process.env.AGENDAMEA_DATA_DIR
@@ -99,7 +100,23 @@ export class TodoDatabase {
     }
 
     this.db = this.openDatabaseWithRecovery(resolvedPath);
-    sqliteCore.seedDefaultSettings(this.db);
+    const envInitialLocale = process.env.AGENDAMEA_INITIAL_LOCALE?.trim();
+    const resolvedInitialLocale =
+      resolvedPath !== ':memory:' && envInitialLocale
+        ? resolveSystemLanguage([envInitialLocale], 'en')
+        : 'tr';
+    sqliteCore.seedDefaultSettings(this.db, resolvedInitialLocale);
+
+    // If Setup explicitly wrote a fresh installer language marker, honor it immediately on startup
+    const envInstallerLocale = process.env.AGENDAMEA_INSTALLER_LOCALE?.trim();
+    if (resolvedPath !== ':memory:' && envInstallerLocale) {
+      const setupLocale = resolveSystemLanguage([envInstallerLocale], 'en');
+      if (isValidLanguageCode(setupLocale)) {
+        this.db
+          .prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)')
+          .run('language', setupLocale);
+      }
+    }
   }
 
   private openDatabaseWithRecovery(resolvedPath: string): Database.Database {
@@ -109,6 +126,11 @@ export class TodoDatabase {
       instance.pragma('synchronous = NORMAL');
       instance.pragma('foreign_keys = ON');
       instance.pragma('busy_timeout = 5000');
+      instance.pragma('cache_size = -16000');
+      instance.pragma('temp_store = MEMORY');
+      if (resolvedPath !== ':memory:') {
+        instance.pragma('mmap_size = 67108864');
+      }
       sqliteCore.applyAgendameaSchema(this.db, { selfHealFts: true });
       return instance;
     };
@@ -141,11 +163,18 @@ export class TodoDatabase {
   }
 
   getSettings(): AppSettings {
-    return settingsCodec.readSettingsFromDb(this.db, SETTINGS_CODEC_OPTIONS) as AppSettings;
+    if (!this.cachedSettings) {
+      this.cachedSettings = settingsCodec.readSettingsFromDb(
+        this.db,
+        SETTINGS_CODEC_OPTIONS,
+      ) as AppSettings;
+    }
+    return { ...this.cachedSettings };
   }
 
   private applySettingsPatchInTx(patch: Partial<AppSettings>): void {
     settingsCodec.applySettingsPatchToDb(this.db, patch, SETTINGS_CODEC_OPTIONS);
+    this.cachedSettings = null;
   }
 
   updateSettings(patch: Partial<AppSettings>): AppSettings {
@@ -153,6 +182,7 @@ export class TodoDatabase {
       this.applySettingsPatchInTx(patch);
     });
     tx();
+    this.cachedSettings = null;
     return this.getSettings();
   }
 
@@ -166,6 +196,10 @@ export class TodoDatabase {
 
   getTodos(): Todo[] {
     return todoRepository.getActiveTodos(this.db, REPO_MAP_OPTIONS) as Todo[];
+  }
+
+  getScheduledActiveTodos(): Todo[] {
+    return todoRepository.getScheduledActiveTodos(this.db, REPO_MAP_OPTIONS) as Todo[];
   }
 
   getTrashedTodos(): Todo[] {
@@ -325,6 +359,7 @@ export class TodoDatabase {
 
   importBackup(payload: Partial<BootstrapPayload>): BootstrapPayload {
     importBackupDao(this.db, payload, (patch) => this.applySettingsPatchInTx(patch));
+    this.cachedSettings = null;
     return this.getBootstrap();
   }
 
@@ -332,6 +367,7 @@ export class TodoDatabase {
     const resetSettings = Boolean(options?.resetSettings);
     const currentLang = this.getSettings().language ?? 'en';
     todoRepository.resetAllDataTx(this.db, { resetSettings, currentLang });
+    this.cachedSettings = null;
     return this.getBootstrap();
   }
 

@@ -176,7 +176,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
           if (a.completed !== b.completed) return a.completed ? 1 : -1;
           const timeA = a.dueTime || '99:99';
           const timeB = b.dueTime || '99:99';
-          if (timeA !== timeB) return timeA.localeCompare(timeB);
+          if (timeA !== timeB) return timeA < timeB ? -1 : 1;
           return a.sortOrder - b.sortOrder;
         });
       }
@@ -265,14 +265,14 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
               type="button"
               onClick={() => stepMonth(-1)}
               aria-label={t.calendarPrevMonth}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]"
             >
               <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
             </button>
             <button
               type="button"
               onClick={jumpToToday}
-              className="px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] rounded-md"
+              className="px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] ag-hover-glow rounded-md"
             >
               {t.today}
             </button>
@@ -280,7 +280,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
               type="button"
               onClick={() => stepMonth(1)}
               aria-label={t.calendarNextMonth}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]"
             >
               <ChevronRight className="h-4 w-4 rtl:rotate-180" />
             </button>
@@ -465,7 +465,7 @@ export const CalendarPlannerView = React.memo(function CalendarPlannerView({
                         type="button"
                         onClick={() => toggleExpandDate(cell.dateStr)}
                         aria-expanded={isDayExpanded}
-                        className="w-full rounded px-1 py-0.5 text-start font-mono-tabular text-[10px] font-medium text-[var(--accent)] hover:bg-[var(--surface-hover)] transition-colors"
+                        className="w-full rounded px-1 py-0.5 text-start font-mono-tabular text-[10px] font-medium text-[var(--accent)] ag-hover-glow transition-colors"
                       >
                         {isDayExpanded ? '-' : `+${dayTodos.length - 4}`}
                       </button>

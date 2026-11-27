@@ -4,6 +4,15 @@ import { createComponentLogger } from '../services/logger.ts';
 
 const httpLog = createComponentLogger('http');
 
+const QUIET_POLL_PATHS = new Set([
+  '/api/health',
+  '/api/system/info',
+  '/api/ai/status',
+  '/api/ai/models',
+  '/api/ai/models/progress',
+  '/api/cloud/status',
+]);
+
 export function registerRequestLogger(app: express.Express): void {
   app.use((req, res, next) => {
     const incomingId =
@@ -35,6 +44,8 @@ export function registerRequestLogger(app: express.Express): void {
         httpLog.error(meta, 'API request failed');
       } else if (res.statusCode >= 400) {
         httpLog.warn(meta, 'API request rejected');
+      } else if (req.method === 'GET' && QUIET_POLL_PATHS.has(req.path)) {
+        httpLog.debug(meta, 'API poll completed');
       } else {
         httpLog.info(meta, 'API request completed');
       }

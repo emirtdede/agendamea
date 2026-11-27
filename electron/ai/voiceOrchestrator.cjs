@@ -150,8 +150,9 @@ class VoiceOrchestrator {
     let query = parsed.query || '';
     let parserUsed = 'fast-path';
 
-    // Optional LLM fallback ONLY when Fast Path confidence < 0.85 and LLM is available
+    // Optional LLM fallback ONLY when not in strict readOnly mode, Fast Path confidence < 0.85, and LLM is available
     if (
+      !readOnly &&
       confidence < 0.85 &&
       llmService &&
       typeof llmService.isAvailable === 'function' &&
@@ -448,14 +449,26 @@ class VoiceOrchestrator {
     }
 
     // 5. Low-confidence fallback (R-13): offer editable quick-add preview without unintended mutation
-    const previewTitle = String(payload?.title || text || '').trim();
+    const { extractUniversalTaskFields } = require('../../shared/voiceIntentParser.cjs');
+    const previewRaw = String(payload?.title || text || '').trim();
+    const parsedFields = extractUniversalTaskFields(previewRaw, now);
+    const previewTitle = parsedFields.cleaned || previewRaw;
     return {
       ok: true,
       status: 'preview',
       intent: 'add_task',
       parser: parserUsed,
       mutated: false,
-      payload: { title: previewTitle },
+      payload: {
+        title: previewTitle,
+        dueDate: parsedFields.dueDate,
+        dueTime: parsedFields.dueTime,
+        priority: parsedFields.priority,
+        important: parsedFields.important,
+        pinned: parsedFields.pinned,
+        category: parsedFields.category,
+        tags: parsedFields.tags,
+      },
       spokenText: tVoice(lang, 'voiceConfirmAddTask'),
       displayText: previewTitle,
     };

@@ -89,7 +89,7 @@ export const ShortcutRecorder = React.memo(function ShortcutRecorder({
               ? 'border-red-500/60 bg-red-500/10 text-red-700 dark:text-red-300'
               : hasConflict
                 ? 'border-amber-500/60 bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-primary)] hover:border-[var(--accent)] hover:bg-[var(--surface-hover)]'
+                : 'border-[var(--border)] bg-transparent text-[var(--text-primary)] hover:border-[var(--border-strong)] ag-hover-glow'
         }`}
       >
         <Keyboard className="h-3 w-3 shrink-0 opacity-75" />
@@ -109,9 +109,9 @@ export const ShortcutRecorder = React.memo(function ShortcutRecorder({
           onClick={() => onChange('')}
           title={t.shortcutsClearBindingButton}
           aria-label={t.shortcutsClearBindingButton}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-red-500"
+          className="inline-flex h-6 w-6 items-center justify-center text-[var(--text-muted)] transition-colors ag-hover-danger-glow hover:text-red-500"
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5" />
         </button>
       )}
 
@@ -121,9 +121,9 @@ export const ShortcutRecorder = React.memo(function ShortcutRecorder({
           onClick={() => onChange(defaultValue)}
           title={t.shortcutResetDefaults}
           aria-label={t.shortcutResetDefaults}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+          className="inline-flex h-6 w-6 items-center justify-center text-[var(--text-muted)] transition-colors ag-hover-glow hover:text-[var(--text-primary)]"
         >
-          <RotateCcw className="h-3 w-3" />
+          <RotateCcw className="h-3.5 w-3.5" />
         </button>
       )}
     </div>

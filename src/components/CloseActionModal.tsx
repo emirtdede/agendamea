@@ -55,7 +55,7 @@ export function CloseActionModal({ onSelectAction, onCancel }: CloseActionModalP
             type="button"
             aria-label={t.cancelButton}
             onClick={onCancel}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -67,7 +67,7 @@ export function CloseActionModal({ onSelectAction, onCancel }: CloseActionModalP
             type="button"
             data-testid="close-action-tray"
             onClick={() => onSelectAction('tray', rememberChoice)}
-            className="group flex w-full items-center gap-3 px-3.5 py-3 text-start hover:bg-[var(--accent-soft)] transition-colors"
+            className="group flex w-full items-center gap-3 px-3.5 py-3 text-start ag-hover-glow transition-colors"
           >
             <ArrowDownToLine className="h-4 w-4 shrink-0 text-[var(--accent)]" />
             <span className="min-w-0 flex-1">
@@ -85,7 +85,7 @@ export function CloseActionModal({ onSelectAction, onCancel }: CloseActionModalP
             type="button"
             data-testid="close-action-quit"
             onClick={() => onSelectAction('quit', rememberChoice)}
-            className="group flex w-full items-center gap-3 px-3.5 py-3 text-start hover:bg-[var(--danger-soft)] transition-colors"
+            className="group flex w-full items-center gap-3 px-3.5 py-3 text-start ag-hover-danger-glow transition-colors"
           >
             <Power className="h-4 w-4 shrink-0 text-[var(--danger)]" />
             <span className="min-w-0 flex-1">
@@ -117,7 +117,7 @@ export function CloseActionModal({ onSelectAction, onCancel }: CloseActionModalP
             type="button"
             data-testid="close-action-cancel"
             onClick={onCancel}
-            className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
+            className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
           >
             {t.cancelButton}
           </button>

@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildSfxV2Bundle } from './pack-sfx-payload.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,7 +22,6 @@ const setupPublishDir = path.join(
 );
 const stubExePath = path.join(setupPublishDir, 'Agendamea.Setup.exe');
 const unpackedDir = path.join(rootDir, 'release', 'win-unpacked');
-const tempZipPath = path.join(rootDir, 'release', `Agendamea-${version}-payload.zip`);
 const finalSetupExe = path.join(rootDir, 'release', `Agendamea-Setup-${version}-win-x64.exe`);
 
 function run(cmd, args, cwd = rootDir) {
@@ -76,55 +76,15 @@ if (!fs.existsSync(stubExePath)) {
   throw new Error(`Published WPF stub not found at ${stubExePath}`);
 }
 
-// 4. Zip win-unpacked cleanly using System.IO.Compression.ZipFile (fast, native, UTF-8 safe)
-if (fs.existsSync(tempZipPath)) {
-  fs.rmSync(tempZipPath, { force: true });
-}
-const psZipCmd = [
-  'Add-Type -AssemblyName System.IO.Compression.FileSystem;',
-  `[System.IO.Compression.ZipFile]::CreateFromDirectory('${unpackedDir.replace(/'/g, "''")}', '${tempZipPath.replace(/'/g, "''")}', [System.IO.Compression.CompressionLevel]::Optimal, $false)`,
-].join(' ');
-run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psZipCmd]);
+// 4. Pack win-unpacked into parallel indexed Brotli AGM_SFX2 directly onto the WPF stub
+const packStats = await buildSfxV2Bundle({
+  stubExePath,
+  sourceDir: unpackedDir,
+  outputExePath: finalSetupExe,
+  quality: 8,
+});
 
-// 5. Append ZIP payload + 24-byte AGM_SFX1 trailer onto the WPF stub executable
-fs.mkdirSync(path.dirname(finalSetupExe), { recursive: true });
-const stubStat = fs.statSync(stubExePath);
-const zipStat = fs.statSync(tempZipPath);
-const payloadOffset = BigInt(stubStat.size);
-const payloadLength = BigInt(zipStat.size);
-
-const outFd = fs.openSync(finalSetupExe, 'w');
-try {
-  const copyFileInto = (srcPath) => {
-    const inFd = fs.openSync(srcPath, 'r');
-    const buf = Buffer.allocUnsafe(1024 * 1024);
-    try {
-      let bytesRead = fs.readSync(inFd, buf, 0, buf.length, null);
-      while (bytesRead > 0) {
-        fs.writeSync(outFd, buf, 0, bytesRead);
-        bytesRead = fs.readSync(inFd, buf, 0, buf.length, null);
-      }
-    } finally {
-      fs.closeSync(inFd);
-    }
-  };
-
-  copyFileInto(stubExePath);
-  copyFileInto(tempZipPath);
-
-  const footer = Buffer.alloc(24);
-  footer.write('AGM_SFX1', 0, 8, 'ascii');
-  footer.writeBigInt64LE(payloadOffset, 8);
-  footer.writeBigInt64LE(payloadLength, 16);
-  fs.writeSync(outFd, footer, 0, footer.length);
-} finally {
-  fs.closeSync(outFd);
-}
-
-// Clean up temporary payload zip
-fs.rmSync(tempZipPath, { force: true });
-
-// 6. Emit electron-updater compatible release/latest.yml with exact SHA-512 & byte size
+// 5. Emit electron-updater compatible release/latest.yml with exact SHA-512 & byte size
 const finalStat = fs.statSync(finalSetupExe);
 const sha512Hash = crypto.createHash('sha512');
 {
@@ -157,5 +117,8 @@ const latestYml = [
 fs.writeFileSync(latestYmlPath, latestYml, 'utf8');
 
 const finalSizeMb = (finalStat.size / (1024 * 1024)).toFixed(2);
-console.log(`[modern-setup] Built single-file modern setup: ${finalSetupExe} (${finalSizeMb} MB)`);
+const rawMb = (packStats.rawBytes / (1024 * 1024)).toFixed(2);
+console.log(
+  `[modern-setup] Built single-file Brotli AGM_SFX2 setup: ${finalSetupExe} (${finalSizeMb} MB from ${rawMb} MB / ${packStats.fileCount} files in ${(packStats.elapsedMs / 1000).toFixed(1)}s)`,
+);
 console.log(`[modern-setup] Wrote updater manifest: ${latestYmlPath}`);

@@ -10,13 +10,20 @@
 
 const fs = require('node:fs');
 const { DEFAULT_OLLAMA_URL } = require('../../shared/constants.cjs');
+const { acquireSharedLlama, releaseSharedLlama } = require('./sharedLlama.cjs');
 
 const DEFAULT_IDLE_UNLOAD_MS = 180_000;
 const DEFAULT_INFERENCE_TIMEOUT_MS = 20_000;
 const CPU_FALLBACK_MIN_TIMEOUT_MS = 35_000;
-const CONTEXT_OPTIONS = Object.freeze({
+const GPU_CONTEXT_OPTIONS = Object.freeze({
   sequences: 1,
   contextSize: 3072,
+  batchSize: 512,
+  flashAttention: true,
+});
+const CPU_CONTEXT_OPTIONS = Object.freeze({
+  sequences: 1,
+  contextSize: 2048,
   batchSize: 512,
   flashAttention: false,
 });
@@ -136,6 +143,7 @@ class LlmService {
     this.externalBaseUrl = options.externalBaseUrl || DEFAULT_OLLAMA_URL;
     this.externalKind = options.externalKind || 'ollama'; // 'ollama' | 'lmstudio'
     this.externalModel = options.externalModel || '';
+    this._usesCustomImporter = typeof options.importer === 'function';
     this.importer = options.importer || (() => import('node-llama-cpp'));
     this.fetchFn = options.fetchFn || ((input, init) => globalThis.fetch(input, init));
     this.customCompleteFn = typeof options.completeFn === 'function' ? options.completeFn : null;
@@ -147,6 +155,7 @@ class LlmService {
         : DEFAULT_INFERENCE_TIMEOUT_MS;
 
     this.llama = null;
+    this._holdsSharedLlama = false;
     this.llamaModule = null;
     this.model = null;
     this.context = null;
@@ -211,6 +220,18 @@ class LlmService {
     this.context = null;
     this.model = null;
     this._loadedModelPath = null;
+    if (this._holdsSharedLlama) {
+      this._holdsSharedLlama = false;
+      this.llama = null;
+      await releaseSharedLlama();
+    } else if (this.llama && typeof this.llama.dispose === 'function') {
+      try {
+        await this.llama.dispose();
+      } catch {
+        // Ignore
+      }
+      this.llama = null;
+    }
   }
 
   isAvailable() {
@@ -287,19 +308,26 @@ class LlmService {
     if (!targetPath || !fs.existsSync(targetPath)) {
       throw new Error('LLM_MODEL_MISSING');
     }
-    const mod = this.llamaModule || (await this.importer());
-    if (!mod || typeof mod.getLlama !== 'function') {
-      throw new Error('LLM_ENGINE_UNAVAILABLE');
-    }
-    this.llamaModule = mod;
-
     if (!this.llama) {
-      try {
-        this.llama = await mod.getLlama({ gpu: 'vulkan' });
-        this.gpuFallbackUsed = false;
-      } catch {
-        this.llama = await mod.getLlama({ gpu: false });
-        this.gpuFallbackUsed = true;
+      if (!this._usesCustomImporter) {
+        const acquired = await acquireSharedLlama(this.importer);
+        this.llamaModule = acquired.mod;
+        this.llama = acquired.llama;
+        this.gpuFallbackUsed = acquired.gpuFallbackUsed;
+        this._holdsSharedLlama = true;
+      } else {
+        const mod = this.llamaModule || (await this.importer());
+        if (!mod || typeof mod.getLlama !== 'function') {
+          throw new Error('LLM_ENGINE_UNAVAILABLE');
+        }
+        this.llamaModule = mod;
+        try {
+          this.llama = await mod.getLlama({ gpu: 'vulkan' });
+          this.gpuFallbackUsed = false;
+        } catch {
+          this.llama = await mod.getLlama({ gpu: false });
+          this.gpuFallbackUsed = true;
+        }
       }
     }
 
@@ -307,7 +335,13 @@ class LlmService {
     let context = null;
     try {
       model = await this.llama.loadModel({ modelPath: targetPath });
-      context = await model.createContext(CONTEXT_OPTIONS);
+      const ctxOpts = this.gpuFallbackUsed ? CPU_CONTEXT_OPTIONS : GPU_CONTEXT_OPTIONS;
+      try {
+        context = await model.createContext(ctxOpts);
+      } catch {
+        // Automatic fallback if GGUF model or GPU driver rejects flashAttention
+        context = await model.createContext({ ...ctxOpts, flashAttention: false });
+      }
       this.model = model;
       this.context = context;
       this._loadedModelPath = targetPath;
@@ -471,6 +505,70 @@ class LlmService {
       maxTokens: 200,
     });
     return extractFirstJsonObject(raw);
+  }
+
+  /**
+   * Optional dictation polish inspired by Dikte: removes spoken filler artifacts
+   * and restores clean punctuation/capitalization without changing user meaning.
+   * Never throws; always falls back to raw transcript on timeout/error.
+   */
+  async cleanDictationText({ text, language = 'tr' }) {
+    const raw = String(text || '').trim();
+    if (!raw || raw.length < 4 || !this.isAvailable()) {
+      return { text: raw, cleaned: false };
+    }
+    const lowerLang = String(language || 'tr').toLowerCase();
+    const isTr = lowerLang.startsWith('tr');
+    const systemPrompt = isTr
+      ? [
+          '/no_think',
+          'Sen bir dikte metin duzeltme asistanisin. Kullanicinin sesle soyledigi metindeki noktalama, buyuk-kucuk harf ve bariz tekrar/dolgu sozcuklerini ("eee", "sey", "yani") duzelt.',
+          'Anlami asla degistirme, yeni bilgi ekleme, aciklama yazma. Yalnizca duzeltilmis metni dondur.',
+        ].join(' ')
+      : [
+          '/no_think',
+          'You clean speech-to-text dictation. Fix capitalization, punctuation, and obvious verbal fillers ("uh", "um") without changing meaning or adding commentary.',
+          'Return ONLY the cleaned text.',
+        ].join(' ');
+    try {
+      const cleaned = await this.complete({
+        systemPrompt,
+        userPrompt: raw,
+        tools: [],
+        maxTokens: Math.min(240, Math.max(64, Math.ceil(raw.length * 1.4))),
+      });
+      const trimmed = String(cleaned || '')
+        .replace(/^["'`]+|["'`]+$/g, '')
+        .trim();
+      if (!trimmed || trimmed.length > raw.length * 2.2) {
+        return { text: raw, cleaned: false };
+      }
+      return { text: trimmed, cleaned: true };
+    } catch {
+      return { text: raw, cleaned: false };
+    }
+  }
+
+  async warmup() {
+    if (!this.isAvailable()) {
+      return { ok: false, code: 'LLM_MODEL_MISSING' };
+    }
+    if (this.customCompleteFn || (this.useExternalOllama && this.externalModel)) {
+      return { ok: true, backend: this.getStatus().backend };
+    }
+    await this._acquireSlot();
+    try {
+      await this.ensureLocalModel();
+      return {
+        ok: true,
+        loaded: Boolean(this.model && this.context),
+        gpuFallbackUsed: this.gpuFallbackUsed,
+      };
+    } catch {
+      return { ok: false, code: 'LLM_UNAVAILABLE' };
+    } finally {
+      this._releaseSlot();
+    }
   }
 
   async unload() {

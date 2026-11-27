@@ -53,6 +53,14 @@ const VALID_AI_TIERS = new Set([
   'tier-light',
   'tier-medium',
   'tier-strong',
+  'cpu-light',
+  'cpu-balanced',
+  'gpu-very-weak',
+  'gpu-weak',
+  'gpu-balanced',
+  'gpu-strong',
+  'gpu-ultra',
+  'custom',
   'external-ollama',
   'external-lmstudio',
 ]);
@@ -61,6 +69,7 @@ const VALID_CHIME_PRESETS = new Set(['soft', 'crystal', 'studio', 'minimal', 'no
 const VALID_VOICE_SENSITIVITIES = new Set(['auto', 'low', 'medium', 'high']);
 const VALID_LIST_DENSITIES = new Set(['compact', 'comfortable', 'spacious']);
 const VALID_FONT_FAMILIES = new Set(['system', 'sans', 'mono', 'dyslexic']);
+const VALID_FONT_SCALES = new Set(['small', 'normal', 'large', 'xlarge']);
 const VALID_WEEK_STARTS = new Set(['monday', 'sunday', 'saturday']);
 const VALID_TIME_FORMATS = new Set(['24h', '12h']);
 const VALID_STARTUP_VIEWS = new Set(['all', 'today', 'important']);
@@ -69,6 +78,8 @@ const VALID_PRIORITIES = new Set(['low', 'normal', 'high']);
 const VALID_COMPLETED_BEHAVIORS = new Set(['show', 'bottom', 'hide']);
 const VALID_COMPLETION_SOUNDS = new Set(['none', 'pop', 'chime', 'soft']);
 const VALID_TRASH_PURGE_DAYS = new Set([0, 7, 30, 90]);
+const VALID_APP_LOCK_TYPES = new Set(['pin4', 'pin6', 'pin8', 'password']);
+const VALID_APP_LOCK_MINUTES = new Set([0, 1, 5, 15, 30, 60]);
 const HH_MM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 function sanitizeExternalBaseUrl(raw) {
@@ -88,16 +99,15 @@ function defaultIsValidNotifProfile(v) {
   return typeof v === 'string' && VALID_NOTIFICATION_PROFILES.has(v);
 }
 
+const SETTINGS_SELECT_SQL = `SELECT key, value FROM settings WHERE key IN (${sharedConstants.SETTING_KEYS.map(() => '?').join(', ')})`;
+
 /**
  * Decode a `settings` key/value SQLite table into canonical `AppSettings` object.
  * Optional properties remain omitted when unset/default so fresh-DB bootstrap shape stays clean.
  */
 function readSettingsFromDb(db, options = {}) {
   const keys = sharedConstants.SETTING_KEYS;
-  const placeholders = keys.map(() => '?').join(', ');
-  const rows = db
-    .prepare(`SELECT key, value FROM settings WHERE key IN (${placeholders})`)
-    .all(...keys);
+  const rows = db.prepare(SETTINGS_SELECT_SQL).all(...keys);
 
   const map = new Map(rows.map((r) => [r.key, r.value]));
   return decodeSettingsMap(map, options);
@@ -336,6 +346,13 @@ function decodeSettingsMap(map, options = {}) {
   if (rawFontFamily && VALID_FONT_FAMILIES.has(rawFontFamily)) {
     settings.fontFamily = rawFontFamily;
   }
+  const rawFontScale = map.get('fontScale');
+  if (rawFontScale && VALID_FONT_SCALES.has(rawFontScale)) {
+    settings.fontScale = rawFontScale;
+  }
+  if (map.get('readableSpacing') === '1' || map.get('readableSpacing') === 'true') {
+    settings.readableSpacing = true;
+  }
   const rawRecentColors = map.get('recentCustomColors');
   if (rawRecentColors) {
     try {
@@ -430,6 +447,23 @@ function decodeSettingsMap(map, options = {}) {
   if (rawAiExternalBaseUrl) {
     const cleanUrl = sanitizeExternalBaseUrl(rawAiExternalBaseUrl);
     if (cleanUrl) settings.aiExternalBaseUrl = cleanUrl;
+  }
+  if (map.get('appLockEnabled') === '1' || map.get('appLockEnabled') === 'true') {
+    settings.appLockEnabled = true;
+  }
+  const rawAppLockType = map.get('appLockType');
+  if (rawAppLockType && VALID_APP_LOCK_TYPES.has(rawAppLockType)) {
+    settings.appLockType = rawAppLockType;
+  }
+  const rawAppLockMinutes = map.get('appLockAutoLockMinutes');
+  if (rawAppLockMinutes !== undefined) {
+    const mins = Number(rawAppLockMinutes);
+    if (Number.isFinite(mins) && VALID_APP_LOCK_MINUTES.has(Math.trunc(mins))) {
+      settings.appLockAutoLockMinutes = Math.trunc(mins);
+    }
+  }
+  if (map.get('appLockOnMinimize') === '1' || map.get('appLockOnMinimize') === 'true') {
+    settings.appLockOnMinimize = true;
   }
 
   return settings;
@@ -526,6 +560,7 @@ function applySettingsPatchToDb(db, patch, options = {}) {
     'voiceNoiseSuppression',
     'colorBlindShapes',
     'strongFocusRing',
+    'readableSpacing',
     'confirmBeforeDelete',
     'launchMinimizedToTray',
     'voiceShortcutEnabled',
@@ -726,6 +761,9 @@ function applySettingsPatchToDb(db, patch, options = {}) {
   }
   if (typeof patch.fontFamily === 'string' && VALID_FONT_FAMILIES.has(patch.fontFamily)) {
     stmt.run('fontFamily', patch.fontFamily);
+  }
+  if (typeof patch.fontScale === 'string' && VALID_FONT_SCALES.has(patch.fontScale)) {
+    stmt.run('fontScale', patch.fontScale);
   }
   if (Array.isArray(patch.recentCustomColors)) {
     const seen = new Set();

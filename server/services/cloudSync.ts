@@ -55,7 +55,18 @@ async function atomicWriteJsonFileAsync(targetPath: string, jsonText: string): P
 export function createCloudSyncService(db: TodoDatabase) {
   let cachedCloudProviders: DetectedCloudProvider[] | null = null;
   let cachedCloudProvidersAt = 0;
-  const CLOUD_PROVIDERS_TTL_MS = 30_000;
+  const CLOUD_PROVIDERS_TTL_MS = 300_000;
+  const parsedBackupCache = new Map<
+    string,
+    {
+      mtimeMs: number;
+      size: number;
+      mtimeIso: string;
+      todoCount: number;
+      categoryCount: number;
+      payload: Record<string, unknown>;
+    }
+  >();
   let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
   let autoSyncInFlight = false;
   let autoSyncPendingAgain = false;
@@ -83,7 +94,14 @@ export function createCloudSyncService(db: TodoDatabase) {
       path.join(home, "Drive'ım"),
     ];
     if (process.platform === 'win32') {
-      for (const letter of ['G', 'H', 'I', 'D', 'E', 'F', 'J', 'K', 'M', 'Z']) {
+      // Only probe drive letters whose root actually exists (avoids 5x redundant stats per missing drive)
+      for (const letter of ['G', 'H', 'I', 'D', 'E', 'F']) {
+        const root = `${letter}:\\`;
+        try {
+          if (!fs.existsSync(root)) continue;
+        } catch {
+          continue;
+        }
         googleCandidates.push(`${letter}:\\My Drive`);
         googleCandidates.push(`${letter}:\\Drive'ım`);
         googleCandidates.push(`${letter}:\\Mon Drive`);
@@ -219,6 +237,61 @@ export function createCloudSyncService(db: TodoDatabase) {
     }
   }
 
+  function readCachedBackupFile(filePath: string): {
+    filePath: string;
+    mtimeIso: string;
+    sizeBytes: number;
+    todoCount: number;
+    categoryCount: number;
+    payload: Record<string, unknown>;
+  } | null {
+    try {
+      const stat = fs.statSync(filePath);
+      const cached = parsedBackupCache.get(filePath);
+      if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+        return {
+          filePath,
+          mtimeIso: cached.mtimeIso,
+          sizeBytes: stat.size,
+          todoCount: cached.todoCount,
+          categoryCount: cached.categoryCount,
+          payload: cached.payload,
+        };
+      }
+      const raw = fs.readFileSync(filePath, 'utf8');
+      if (!raw?.trim()) return null;
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      const todosArr = Array.isArray(parsed.todos) ? parsed.todos : null;
+      const catsArr = Array.isArray(parsed.categories) ? parsed.categories : null;
+      if (!todosArr && !catsArr) return null;
+      const entry = {
+        mtimeMs: stat.mtimeMs,
+        size: stat.size,
+        mtimeIso: stat.mtime.toISOString(),
+        todoCount: todosArr ? todosArr.length : 0,
+        categoryCount: catsArr ? catsArr.length : 0,
+        payload: parsed,
+      };
+      if (parsedBackupCache.size >= 24) {
+        const oldest = parsedBackupCache.keys().next().value;
+        if (oldest) parsedBackupCache.delete(oldest);
+      }
+      parsedBackupCache.set(filePath, entry);
+      return {
+        filePath,
+        mtimeIso: entry.mtimeIso,
+        sizeBytes: stat.size,
+        todoCount: entry.todoCount,
+        categoryCount: entry.categoryCount,
+        payload: parsed,
+      };
+    } catch {
+      parsedBackupCache.delete(filePath);
+      return null;
+    }
+  }
+
   function readValidOneDriveBackup(folderPath: string): {
     filePath: string;
     mtimeIso: string;
@@ -228,24 +301,15 @@ export function createCloudSyncService(db: TodoDatabase) {
   } | null {
     const candidates = listOneDriveBackupCandidateFiles(folderPath);
     for (const filePath of candidates) {
-      try {
-        const raw = fs.readFileSync(filePath, 'utf8');
-        if (!raw?.trim()) continue;
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
-        const todosArr = Array.isArray(parsed.todos) ? parsed.todos : null;
-        const catsArr = Array.isArray(parsed.categories) ? parsed.categories : null;
-        if (!todosArr && !catsArr) continue;
-        const stat = fs.statSync(filePath);
+      const entry = readCachedBackupFile(filePath);
+      if (entry) {
         return {
-          filePath,
-          mtimeIso: stat.mtime.toISOString(),
-          todoCount: todosArr ? todosArr.length : 0,
-          categoryCount: catsArr ? catsArr.length : 0,
-          payload: parsed,
+          filePath: entry.filePath,
+          mtimeIso: entry.mtimeIso,
+          todoCount: entry.todoCount,
+          categoryCount: entry.categoryCount,
+          payload: entry.payload,
         };
-      } catch {
-        // Automatically skip corrupted / half-synced file and fall back to previous snapshot
       }
     }
     return null;
@@ -475,33 +539,23 @@ export function createCloudSyncService(db: TodoDatabase) {
     const candidates = listOneDriveBackupCandidateFiles(folder);
     const results: CloudBackupFileEntry[] = [];
     for (const filePath of candidates) {
-      try {
-        const stat = fs.statSync(filePath);
-        const raw = fs.readFileSync(filePath, 'utf8');
-        if (!raw?.trim()) continue;
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
-        const todosArr = Array.isArray(parsed.todos) ? parsed.todos : null;
-        const catsArr = Array.isArray(parsed.categories) ? parsed.categories : null;
-        if (!todosArr && !catsArr) continue;
-        const fileName = path.basename(filePath);
-        const kind: CloudBackupFileEntry['kind'] =
-          fileName === 'agendamea-onedrive-sync.json'
-            ? 'primary'
-            : fileName === 'agendamea-onedrive-previous.json'
-              ? 'previous'
-              : 'daily';
-        results.push({
-          fileName,
-          kind,
-          mtimeIso: stat.mtime.toISOString(),
-          sizeBytes: stat.size,
-          todoCount: todosArr ? todosArr.length : 0,
-          categoryCount: catsArr ? catsArr.length : 0,
-        });
-      } catch {
-        // Skip unreadable or corrupted snapshot
-      }
+      const entry = readCachedBackupFile(filePath);
+      if (!entry) continue;
+      const fileName = path.basename(filePath);
+      const kind: CloudBackupFileEntry['kind'] =
+        fileName === 'agendamea-onedrive-sync.json'
+          ? 'primary'
+          : fileName === 'agendamea-onedrive-previous.json'
+            ? 'previous'
+            : 'daily';
+      results.push({
+        fileName,
+        kind,
+        mtimeIso: entry.mtimeIso,
+        sizeBytes: entry.sizeBytes,
+        todoCount: entry.todoCount,
+        categoryCount: entry.categoryCount,
+      });
     }
     return results;
   }

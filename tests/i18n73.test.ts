@@ -27,10 +27,10 @@ const EXPECTED_LEGAL_SHAPE: Record<LegalDocId, number[]> = {
   accessibility: [1, 1, 2],
 };
 
-test('73-language Desktop UI: all 853 keys non-empty, zero em/en-dash, zero emoji, zero TR/EN leakage', () => {
+test('73-language Desktop UI: all 1112 keys non-empty, zero em/en-dash, zero emoji, zero TR/EN leakage', () => {
   assert.equal(SUPPORTED_LANGUAGES.length, 73);
   const keys = Object.keys(EN_DICTIONARY) as Array<keyof typeof EN_DICTIONARY>;
-  assert.equal(keys.length, 853);
+  assert.equal(keys.length, 1112);
 
   for (const meta of SUPPORTED_LANGUAGES) {
     const dict = getDictionary(meta.code);

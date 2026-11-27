@@ -1,7 +1,11 @@
 import { registerSW } from 'virtual:pwa-register';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { api } from './api/client.ts';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { readInitialLanguage } from './i18n/I18nContext.tsx';
+import { loadLocaleBundle } from './i18n/localeLoader.ts';
+import './fonts.css';
 import './index.css';
 
 const isDesktopShell = typeof window !== 'undefined' && Boolean(window.agendameaWindow);
@@ -24,11 +28,20 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   }
 }
 
-const rootEl = document.getElementById('root');
-if (rootEl) {
-  createRoot(rootEl).render(
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>,
-  );
+async function bootstrapApp() {
+  // Start /api/bootstrap in parallel with active locale chunk loading to eliminate startup waterfall
+  api.prefetchBootstrap();
+  const initialLang = readInitialLanguage().code;
+  await loadLocaleBundle(initialLang);
+
+  const rootEl = document.getElementById('root');
+  if (rootEl) {
+    createRoot(rootEl).render(
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>,
+    );
+  }
 }
+
+void bootstrapApp();

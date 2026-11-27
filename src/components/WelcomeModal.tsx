@@ -167,7 +167,7 @@ export function WelcomeModal({ onComplete }: WelcomeModalProps) {
             type="button"
             aria-label={t.closeMenu}
             onClick={() => onComplete(false)}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors shrink-0"
           >
             <X className="h-4 w-4" />
           </button>
@@ -276,7 +276,7 @@ export function WelcomeModal({ onComplete }: WelcomeModalProps) {
                 type="button"
                 data-testid="welcome-step-back"
                 onClick={() => setStep((prev) => Math.max(0, prev - 1))}
-                className="inline-flex h-9 select-none items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex h-9 select-none items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow transition-colors whitespace-nowrap shrink-0"
               >
                 <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180 shrink-0" />
                 <span>{t.welcomeBackButton}</span>
@@ -287,7 +287,7 @@ export function WelcomeModal({ onComplete }: WelcomeModalProps) {
                 type="button"
                 data-testid="welcome-step-skip"
                 onClick={() => onComplete(false)}
-                className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
+                className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
               >
                 {t.welcomeSkipButton}
               </button>

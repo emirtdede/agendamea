@@ -28,6 +28,7 @@ export type AppIconId = 'match-theme' | 'obsidian-light' | ThemeId;
 export type CloseBehavior = 'ask' | 'tray' | 'quit';
 export type ListDensity = 'compact' | 'comfortable' | 'spacious';
 export type FontFamilyPreset = 'system' | 'sans' | 'mono' | 'dyslexic';
+export type FontScalePreset = 'small' | 'normal' | 'large' | 'xlarge';
 export type WeekStartDay = 'monday' | 'sunday' | 'saturday';
 export type TimeFormatPreference = '24h' | '12h';
 export type DefaultStartupView = 'all' | 'today' | 'important';
@@ -45,6 +46,7 @@ export type SettingsTabId =
   | 'data'
   | 'trash'
   | 'docs'
+  | 'guide'
   | 'webhooks'
   | 'legal'
   | 'about';
@@ -93,8 +95,40 @@ export type AiTierId =
   | 'tier-light'
   | 'tier-medium'
   | 'tier-strong'
+  | 'cpu-light'
+  | 'cpu-balanced'
+  | 'gpu-very-weak'
+  | 'gpu-weak'
+  | 'gpu-balanced'
+  | 'gpu-strong'
+  | 'gpu-ultra'
+  | 'custom'
   | 'external-ollama'
   | 'external-lmstudio';
+
+export type AiProfileGroup = 'gpu' | 'cpu' | 'custom';
+
+export interface AiProfilePreset {
+  id:
+    | 'cpu-light'
+    | 'cpu-balanced'
+    | 'gpu-very-weak'
+    | 'gpu-weak'
+    | 'gpu-balanced'
+    | 'gpu-strong'
+    | 'gpu-ultra';
+  group: 'cpu' | 'gpu';
+  legacyTier: 'tier-light' | 'tier-medium' | 'tier-strong';
+  minRamGb: number;
+  minVramGb: number;
+  sttModelId: string;
+  llmModelId: string;
+  embedModelId: string;
+  totalBytes: number;
+  recommended: boolean;
+  fitsHardware: boolean;
+  warningCode: string | null;
+}
 
 export type SmartView = 'all' | 'today' | 'important' | 'completed';
 
@@ -146,6 +180,20 @@ export interface Todo {
   updatedAt: string;
   deletedAt: string | null;
   subtasks: Subtask[];
+}
+
+export type AppLockType = 'pin4' | 'pin6' | 'pin8' | 'password';
+export type AppLockAutoLockMinutes = 0 | 1 | 5 | 15 | 30 | 60;
+
+export interface AppLockStatus {
+  enabled: boolean;
+  locked: boolean;
+  type: AppLockType;
+  autoLockMinutes: AppLockAutoLockMinutes;
+  lockOnMinimize: boolean;
+  hasRecoveryCode: boolean;
+  failedAttempts: number;
+  retryAfterSeconds: number;
 }
 
 export type WebhookFormat = 'auto' | 'generic' | 'discord' | 'slack';
@@ -209,6 +257,8 @@ export interface AppSettings {
   notificationChannels?: NotificationChannelsMap;
   listDensity?: ListDensity;
   fontFamily?: FontFamilyPreset;
+  fontScale?: FontScalePreset;
+  readableSpacing?: boolean;
   recentCustomColors?: string[];
   colorBlindShapes?: boolean;
   strongFocusRing?: boolean;
@@ -231,6 +281,10 @@ export interface AppSettings {
   dailyDigestTime?: string;
   voiceDictationLanguage?: string;
   aiExternalBaseUrl?: string;
+  appLockEnabled?: boolean;
+  appLockType?: AppLockType;
+  appLockAutoLockMinutes?: AppLockAutoLockMinutes;
+  appLockOnMinimize?: boolean;
 }
 
 export interface SystemInfoPayload {
@@ -309,10 +363,36 @@ export interface AiModelStatus {
   warningCode?: string | null;
 }
 
+export interface AiSetupState {
+  active: boolean;
+  tier: AiTierId;
+  phase: 'idle' | 'downloading' | 'configuring' | 'warming' | 'ready' | 'cancelled' | 'error';
+  stepIndex: number;
+  totalSteps: number;
+  currentModelId: string | null;
+  currentModelLabel: string | null;
+  overallPercent: number;
+  downloadedBytes: number;
+  totalBytes: number;
+  completedModelIds: string[];
+  error: string | null;
+  startedAt: number | null;
+  finishedAt: number | null;
+}
+
+export interface AiEngineReadiness {
+  dictationReady: boolean;
+  assistantReady: boolean;
+  semanticSearchReady: boolean;
+  fullyReady: boolean;
+}
+
 export interface AiStatusPayload {
   hardware: HardwareProfile;
   recommendation: {
     recommendedTier: 'tier-light' | 'tier-medium' | 'tier-strong';
+    recommendedProfileId?: AiProfilePreset['id'];
+    recommendedProfileGroup?: 'cpu' | 'gpu';
     primaryOptionId: AiTierId;
     preferExternalOllama: boolean;
     preferExternalLmStudio: boolean;
@@ -338,10 +418,37 @@ export interface AiStatusPayload {
       fitsHardware: boolean;
       warningCode: string | null;
     }>;
+    profiles?: AiProfilePreset[];
   };
   models: AiModelStatus[];
   installedDiskBytes: number;
   ragIndexedChunks: number;
+  engines?: {
+    stt: {
+      ready: boolean;
+      modelPresent: boolean;
+      modelId: string;
+      modelPath: string | null;
+      loaded: boolean;
+      gpuFallbackUsed: boolean;
+    };
+    llm: {
+      available: boolean;
+      loaded: boolean;
+      backend: string;
+      modelId: string | null;
+      modelPath: string | null;
+      gpuFallbackUsed: boolean;
+    };
+    embedding: {
+      available: boolean;
+      loaded: boolean;
+      modelId: string | null;
+      modelPath: string | null;
+    };
+  };
+  readiness?: AiEngineReadiness;
+  setup?: AiSetupState;
   settings: {
     aiEnabled: boolean;
     aiTier: AiTierId;
@@ -408,7 +515,16 @@ export interface VoiceAskResponse {
     score: number;
     snippet: string;
   }>;
-  payload?: { title?: string };
+  payload?: {
+    title?: string;
+    dueDate?: string | null;
+    dueTime?: string | null;
+    priority?: Priority;
+    important?: boolean;
+    pinned?: boolean;
+    category?: string | null;
+    tags?: string[];
+  };
 }
 
 export interface WebhookLogEntry {

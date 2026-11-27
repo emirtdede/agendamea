@@ -1,6 +1,7 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../api/client';
+import { AppLockRequiredError, api } from '../api/client';
 import type { UiDictionary } from '../i18n/translations';
+import { appLockStore } from '../store/appLockStore';
 import { preferencesStore } from '../store/preferencesStore';
 import { shortcutStore } from '../store/shortcutStore';
 import { updaterStore } from '../store/updaterStore';
@@ -92,6 +93,7 @@ export function useTodoWorkspaceData({
       updaterStore.hydrateAutoUpdateCheck(
         settings.autoUpdateCheck === undefined ? true : Boolean(settings.autoUpdateCheck),
       );
+      appLockStore.hydrateFromSettings(settings);
       webhookStore.hydrate(settings);
       shortcutStore.hydrate(settings, {
         fallbackDefaults: options?.fallbackShortcuts,
@@ -202,6 +204,16 @@ export function useTodoWorkspaceData({
         }
       } catch (err) {
         if (!isMountedRef.current || seq !== loadSeqRef.current) return;
+        if (err instanceof AppLockRequiredError) {
+          appLockStore.applyStatus(err.lock);
+          setCategories([]);
+          setTodos([]);
+          setTrashedCategories([]);
+          setTrashedTodos([]);
+          setOneDrivePrompt(null);
+          setLoadError(null);
+          return;
+        }
         if (!silent) {
           setLoadError(formatUiError(err, tRef.current.loadFailedError));
         }
@@ -215,6 +227,10 @@ export function useTodoWorkspaceData({
   );
 
   useEffect(() => {
+    if (appLockStore.getState().locked) {
+      setIsLoading(false);
+      return;
+    }
     void loadData(false);
   }, [loadData]);
 
@@ -599,6 +615,16 @@ export function useTodoWorkspaceData({
     });
   }, [oneDrivePrompt]);
 
+  const clearWorkspaceForLock = useCallback(() => {
+    clearUndoToast();
+    setCategories([]);
+    setTodos([]);
+    setTrashedCategories([]);
+    setTrashedTodos([]);
+    setOneDrivePrompt(null);
+    setLoadError(null);
+  }, [clearUndoToast]);
+
   return {
     categories,
     todos,
@@ -612,6 +638,7 @@ export function useTodoWorkspaceData({
     oneDrivePrompt,
     isRestoringOneDrivePrompt,
     loadData,
+    clearWorkspaceForLock,
     handleCreateCategory,
     handleUpdateCategory,
     handleTogglePinCategory,

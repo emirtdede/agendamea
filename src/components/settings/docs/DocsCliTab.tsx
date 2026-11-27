@@ -169,42 +169,43 @@ export const DocsCliTab = React.memo(function DocsCliTab({
 
   return (
     <div className="space-y-5" data-testid="docs-tab-cli">
-      {/* Desktop Controls or Web/PWA Notice */}
+      {/* Card 1: Desktop CLI Install & Dry-Run Controls (or Web/PWA Notice) */}
       {!hasDesktopBridge ? (
-        <div className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-xs text-[var(--text-secondary)]">
-          <Info className="h-4 w-4 text-[var(--accent)] shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 text-xs text-[var(--text-secondary)]">
+          <Info className="h-4 w-4 text-[var(--text-muted)] shrink-0 mt-0.5" />
           <span>{t.docsDesktopOnlyNotice}</span>
         </div>
       ) : (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:p-5 space-y-3.5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Terminal className="h-4 w-4 text-[var(--accent)]" />
-              <span className="font-display text-xs font-semibold text-[var(--text-primary)]">
+              <Terminal className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
                 {t.docsCliTitle}
               </span>
               {cliInstalled && (
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10.5px] font-medium text-emerald-600 dark:text-emerald-400">
-                  {t.docsCliInstalledBadge}
+                <span className="text-[11px] font-medium text-[var(--text-secondary)]">
+                  · {t.docsCliInstalledBadge}
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 data-testid="docs-install-cli-btn"
                 onClick={onInstallCli}
                 disabled={installingCli}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:opacity-90 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ag-hover-accent-glow disabled:opacity-50"
+                style={{ backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' }}
               >
-                <Download className="h-3.5 w-3.5 text-[var(--accent)]" />
+                <Download className="h-3.5 w-3.5" />
                 <span>{t.docsCliInstallButton}</span>
               </button>
               <button
                 type="button"
                 data-testid="docs-open-terminal-btn"
                 onClick={onOpenTerminal}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow"
               >
                 <Terminal className="h-3.5 w-3.5 text-[var(--text-muted)]" />
                 <span>{t.docsCliTryTerminalButton}</span>
@@ -213,13 +214,11 @@ export const DocsCliTab = React.memo(function DocsCliTab({
           </div>
 
           {installFeedback && (
-            <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              {installFeedback}
-            </p>
+            <p className="text-xs font-medium text-[var(--text-primary)]">{installFeedback}</p>
           )}
 
           {/* In-App Safe Dry-Run Runner */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3">
+          <div className="flex flex-wrap items-center gap-4 border-t border-[var(--border)]/70 pt-3">
             <span className="text-[11px] font-medium text-[var(--text-muted)]">
               {t.docsCliDryRunLabel}:
             </span>
@@ -228,9 +227,9 @@ export const DocsCliTab = React.memo(function DocsCliTab({
               data-testid="docs-cli-dry-stat"
               disabled={dryRunning !== null}
               onClick={() => void handleRunDry('stat')}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 font-mono-tabular text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+              className="inline-flex items-center gap-1 font-mono-tabular text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-50"
             >
-              <Play className="h-3 w-3 text-[var(--accent)]" />
+              <Play className="h-3 w-3 text-[var(--text-muted)]" />
               <span>ag stat</span>
             </button>
             <button
@@ -238,9 +237,9 @@ export const DocsCliTab = React.memo(function DocsCliTab({
               data-testid="docs-cli-dry-doctor"
               disabled={dryRunning !== null}
               onClick={() => void handleRunDry('doctor')}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 font-mono-tabular text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+              className="inline-flex items-center gap-1 font-mono-tabular text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-50"
             >
-              <Play className="h-3 w-3 text-[var(--accent)]" />
+              <Play className="h-3 w-3 text-[var(--text-muted)]" />
               <span>ag doctor</span>
             </button>
           </div>
@@ -248,7 +247,7 @@ export const DocsCliTab = React.memo(function DocsCliTab({
           {dryOutput && (
             <pre
               data-testid="docs-cli-dry-output"
-              className="max-h-48 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-3 font-mono-tabular text-[11px] leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap"
+              className="max-h-48 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--canvas)]/60 p-3 font-mono-tabular text-[11px] leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap"
             >
               {`$ ${dryOutput.cmd}\n${dryOutput.text}`}
             </pre>
@@ -256,91 +255,85 @@ export const DocsCliTab = React.memo(function DocsCliTab({
         </div>
       )}
 
-      {/* Categorized CLI Commands */}
-      <div className="space-y-3">
-        <button
-          type="button"
-          data-testid="docs-all-commands-toggle"
-          aria-expanded={commandsOpen || Boolean(q)}
-          onClick={() => setCommandsOpen((prev) => !prev)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
-        >
-          {commandsOpen || q ? (
-            <ChevronDown className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-          )}
-          <span>{t.docsCliAllCommandsToggle}</span>
-        </button>
+      {/* Card 2: Categorized CLI Commands + Flags & Piping */}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70">
+        <div className="p-4 sm:p-5 space-y-5">
+          <button
+            type="button"
+            data-testid="docs-all-commands-toggle"
+            aria-expanded={commandsOpen || Boolean(q)}
+            onClick={() => setCommandsOpen((prev) => !prev)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)] ag-hover-glow transition-colors"
+          >
+            {commandsOpen || q ? (
+              <ChevronDown className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+            )}
+            <span>{t.docsCliAllCommandsToggle}</span>
+          </button>
 
-        {(commandsOpen || Boolean(q)) &&
-          filteredGroups.map((group) => (
-            <section
-              key={group.title}
-              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
-            >
-              <div className="border-b border-[var(--border)] px-4 py-2.5">
-                <h4 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+          {(commandsOpen || Boolean(q)) &&
+            filteredGroups.map((group) => (
+              <section key={group.title} className="space-y-2">
+                <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
                   {group.title}
                 </h4>
-              </div>
-              <div className="divide-y divide-[var(--border)]">
-                {group.commands.map((item) => (
-                  <div
-                    key={item.cmd}
-                    className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-[var(--surface-hover)]/60 transition-colors"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <code className="block font-mono-tabular text-[11.5px] font-medium text-[var(--text-primary)] break-all">
-                        {item.cmd}
-                      </code>
-                      <span className="block text-[11px] text-[var(--text-muted)]">
-                        {item.desc}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onCopy(`cli-${item.cmd}`, item.cmd)}
-                      aria-label={t.docsCopyButton}
-                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                <div className="border-t border-[var(--border)]/70 divide-y divide-[var(--border)]/60">
+                  {group.commands.map((item) => (
+                    <div
+                      key={item.cmd}
+                      className="flex items-center justify-between gap-2 py-2.5 ag-row-luminous transition-colors"
                     >
-                      {copiedKey === `cli-${item.cmd}` ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-      </div>
-
-      {/* CLI Flags & Piping Cheat-Sheet */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-2.5">
-        <h4 className="font-display text-xs font-semibold text-[var(--text-primary)]">
-          {t.docsCliFlagsTitle}
-        </h4>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
-          {[
-            { flag: '--json', desc: t.docsCliFlagJsonDesc },
-            { flag: '--note "..." --sub "..."', desc: t.docsCliFlagNoteSubDesc },
-            { flag: 'echo "Task" | ag +', desc: t.docsCliPipeAddDesc },
-            { flag: 'ag export > backup.json', desc: t.docsCliPipeExportDesc },
-          ].map((f) => (
-            <div
-              key={f.flag}
-              className="rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2"
-            >
-              <code className="font-mono-tabular text-[11px] font-semibold text-[var(--accent)]">
-                {f.flag}
-              </code>
-              <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">{f.desc}</p>
-            </div>
-          ))}
+                      <div className="min-w-0 flex-1">
+                        <code className="block font-mono-tabular text-[12px] font-medium text-[var(--text-primary)] break-all">
+                          {item.cmd}
+                        </code>
+                        <span className="block text-[11px] text-[var(--text-muted)]">
+                          {item.desc}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onCopy(`cli-${item.cmd}`, item.cmd)}
+                        aria-label={t.docsCopyButton}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]"
+                      >
+                        {copiedKey === `cli-${item.cmd}` ? (
+                          <Check className="h-3.5 w-3.5 text-[var(--text-primary)]" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
         </div>
-      </section>
+
+        {/* CLI Flags & Piping Cheat-Sheet */}
+        <section className="p-4 sm:p-5 space-y-3">
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+            {t.docsCliFlagsTitle}
+          </h4>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 text-xs">
+            {[
+              { flag: '--json', desc: t.docsCliFlagJsonDesc },
+              { flag: '--note "..." --sub "..."', desc: t.docsCliFlagNoteSubDesc },
+              { flag: 'echo "Task" | ag +', desc: t.docsCliPipeAddDesc },
+              { flag: 'ag export > backup.json', desc: t.docsCliPipeExportDesc },
+            ].map((f) => (
+              <div key={f.flag} className="space-y-0.5">
+                <code className="font-mono-tabular text-[11.5px] font-medium text-[var(--text-primary)]">
+                  {f.flag}
+                </code>
+                <p className="text-[11px] text-[var(--text-muted)]">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 });

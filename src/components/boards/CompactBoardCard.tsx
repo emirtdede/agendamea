@@ -2,7 +2,7 @@ import { Check, Clock, Pin, Star } from 'lucide-react';
 import React, { useMemo } from 'react';
 import { useI18n } from '../../i18n/I18nContext';
 import { usePreferencesSelector } from '../../store/preferencesStore';
-import type { Category, Todo, TodoPatch } from '../../types';
+import type { Category, Priority, Todo, TodoPatch } from '../../types';
 import { formatTodoDateSchedule } from '../../utils/todoLogic';
 import { ColorDot } from '../ColorDot';
 
@@ -20,6 +20,11 @@ export interface SharedBoardViewProps {
   onTagClick?: (tag: string) => void;
   onTodoContextMenu?: (e: React.MouseEvent, todo: Todo) => void;
   onDayContextMenu?: (e: React.MouseEvent, dateStr: string) => void;
+  onQuickCreateInBoard?: (preset: {
+    priority?: Priority;
+    dueDate?: string | null;
+    important?: boolean;
+  }) => void;
 }
 
 export interface CompactBoardCardProps {
@@ -104,9 +109,10 @@ export const CompactBoardCard = React.memo(function CompactBoardCard({
       onContextMenu={(e) => {
         if (!onContextMenu) return;
         e.preventDefault();
+        e.stopPropagation();
         onContextMenu(e, todo);
       }}
-      className={`group relative flex flex-col gap-2 rounded-xl border p-3 transition-all duration-150 ${
+      className={`group relative flex flex-col gap-2 rounded-xl border p-3 transition-colors duration-150 ${
         isSelected
           ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
           : 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)]'

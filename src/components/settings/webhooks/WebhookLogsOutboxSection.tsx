@@ -26,20 +26,18 @@ export function WebhookLogsOutboxSection({
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
   return (
-    <div className="p-4 space-y-3" data-testid="docs-webhook-logs-panel">
+    <div className="pt-1 space-y-3" data-testid="docs-webhook-logs-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-[var(--text-primary)]">
-          {t.webhookLogsTitle}
-        </span>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-xs font-medium text-[var(--text-muted)]">{t.webhookLogsTitle}</span>
+        <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
             disabled={isLoadingLogs}
             onClick={() => void onRefresh()}
-            className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-45 transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-45 transition-colors"
           >
             <RefreshCw
-              className={`h-3 w-3 text-[var(--accent)] ${isLoadingLogs ? 'animate-spin' : ''}`}
+              className={`h-3 w-3 text-[var(--text-muted)] ${isLoadingLogs ? 'animate-spin' : ''}`}
             />
             <span>{t.webhookLogsRefreshBtn}</span>
           </button>
@@ -47,7 +45,7 @@ export function WebhookLogsOutboxSection({
             <button
               type="button"
               onClick={() => void onClearLogs()}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] hover:text-red-500 transition-colors"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] ag-hover-danger-glow hover:text-red-500 transition-colors"
             >
               <Trash2 className="h-3 w-3" />
               <span>{t.webhookLogsClearBtn}</span>
@@ -57,7 +55,7 @@ export function WebhookLogsOutboxSection({
       </div>
 
       {pendingOrDeadOutbox.length > 0 && (
-        <div className="space-y-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5">
+        <div className="space-y-1.5 border-s-2 border-amber-500/70 ps-3 py-1">
           <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
             {`${t.webhookOutboxTitle} (${pendingOrDeadOutbox.length})`}
           </p>
@@ -84,9 +82,9 @@ export function WebhookLogsOutboxSection({
                   type="button"
                   disabled={replayingId === item.id}
                   onClick={() => void onReplayOutbox(item.id)}
-                  className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-45 shrink-0"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-45 shrink-0"
                 >
-                  <RotateCcw className="h-3 w-3 text-[var(--accent)]" />
+                  <RotateCcw className="h-3 w-3 text-[var(--text-muted)]" />
                   <span>{t.webhookReplayBtn}</span>
                 </button>
               </div>
@@ -98,7 +96,7 @@ export function WebhookLogsOutboxSection({
       {logs.length === 0 ? (
         <p className="text-xs text-[var(--text-muted)]">{t.webhookLogsEmpty}</p>
       ) : (
-        <div className="max-h-64 overflow-y-auto divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] bg-[var(--canvas)]">
+        <div className="max-h-64 overflow-y-auto divide-y divide-[var(--border)]/70 border-y border-[var(--border)]">
           {logs.map((entry) => {
             const isOpen = expandedLogId === entry.id;
             return (
@@ -107,19 +105,17 @@ export function WebhookLogsOutboxSection({
                   type="button"
                   aria-expanded={isOpen}
                   onClick={() => setExpandedLogId((prev) => (prev === entry.id ? null : entry.id))}
-                  className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-start text-[11px] hover:bg-[var(--surface-hover)]/60 transition-colors"
+                  className="flex w-full flex-wrap items-center justify-between gap-2 py-2 text-start text-[11px] ag-row-luminous transition-colors"
                 >
-                  <div className="min-w-0 flex-1 flex flex-wrap items-center gap-1.5">
+                  <div className="min-w-0 flex-1 flex flex-wrap items-center gap-2">
                     {isOpen ? (
                       <ChevronDown className="h-3 w-3 text-[var(--text-muted)] shrink-0" />
                     ) : (
                       <ChevronRight className="h-3 w-3 text-[var(--text-muted)] shrink-0" />
                     )}
                     <span
-                      className={`rounded px-1.5 py-0.5 font-mono-tabular text-[10px] font-semibold ${
-                        entry.ok
-                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-red-500/15 text-red-600 dark:text-red-400'
+                      className={`font-mono-tabular text-[10.5px] font-semibold ${
+                        entry.ok ? 'text-[var(--text-primary)]' : 'text-red-600 dark:text-red-400'
                       }`}
                     >
                       {entry.ok
@@ -129,7 +125,7 @@ export function WebhookLogsOutboxSection({
                     <span
                       lang="en"
                       title={entry.direction}
-                      className="rounded bg-[var(--surface)] px-1.5 py-0.5 font-mono-tabular text-[10px] font-medium uppercase text-[var(--text-muted)]"
+                      className="font-mono-tabular text-[10px] font-medium uppercase text-[var(--text-muted)]"
                     >
                       {entry.direction === 'incoming' ? 'IN' : 'OUT'}
                     </span>
@@ -148,7 +144,7 @@ export function WebhookLogsOutboxSection({
                   </span>
                 </button>
                 {isOpen && (
-                  <div className="border-t border-[var(--border)]/60 bg-[var(--surface)] px-4 py-2.5 font-mono-tabular text-[10.5px] text-[var(--text-secondary)] space-y-1">
+                  <div className="border-s-2 border-[var(--border)] ms-3 mb-2 ps-3 py-1 font-mono-tabular text-[10.5px] text-[var(--text-secondary)] space-y-1">
                     <div>
                       <span className="text-[var(--text-muted)]">ID: </span>
                       {entry.id}

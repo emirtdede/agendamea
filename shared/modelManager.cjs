@@ -57,6 +57,16 @@ class ModelManager {
     this.pendingCleanParts = new Set();
     this.downloadProgress = new Map();
     this._manifestCache = new Map();
+    this._statusCache = new Map();
+    this._statusCacheTtlMs = 2000;
+  }
+
+  invalidateStatusCache(modelId = null) {
+    if (modelId) {
+      this._statusCache.delete(modelId);
+    } else {
+      this._statusCache.clear();
+    }
   }
 
   ensureDir() {
@@ -112,14 +122,34 @@ class ModelManager {
 
   getModelStatus(modelId, customSpec = null) {
     const spec = this.resolveModelSpec(modelId, customSpec);
+    const downloading = this.activeControllers.has(spec.id);
+    const active = this.downloadProgress.get(spec.id) || null;
+    if (!customSpec && !downloading) {
+      const cached = this._statusCache.get(spec.id);
+      if (cached && Date.now() - cached.at < this._statusCacheTtlMs) {
+        return { ...cached.status, downloading: false, progress: active };
+      }
+    }
     const full = path.join(this.modelsDir, spec.file);
     const part = `${full}.part`;
     const manifest = this.readManifest(modelId, customSpec);
-    const present = fs.existsSync(full);
-    const actualBytes = present ? fs.statSync(full).size : 0;
-    const partialBytes = fs.existsSync(part) ? fs.statSync(part).size : 0;
-    const active = this.downloadProgress.get(spec.id) || null;
-    return {
+    let present = false;
+    let actualBytes = 0;
+    try {
+      actualBytes = fs.statSync(full).size;
+      present = true;
+    } catch {
+      present = false;
+    }
+    let partialBytes = 0;
+    if (!present || downloading) {
+      try {
+        partialBytes = fs.statSync(part).size;
+      } catch {
+        partialBytes = 0;
+      }
+    }
+    const status = {
       id: spec.id,
       role: spec.role,
       tier: spec.tier,
@@ -135,11 +165,15 @@ class ModelManager {
         Boolean(manifest && manifest.sha256 === spec.sha256),
       bytes: actualBytes,
       partialBytes,
-      downloading: this.activeControllers.has(spec.id),
+      downloading,
       progress: active,
       modelPath: present ? full : null,
       manifest,
     };
+    if (!customSpec && !downloading) {
+      this._statusCache.set(spec.id, { at: Date.now(), status });
+    }
+    return status;
   }
 
   listModelsStatus() {
@@ -190,6 +224,7 @@ class ModelManager {
       this.activeControllers.delete(modelId);
     }
     this.downloadProgress.delete(modelId);
+    this.invalidateStatusCache(modelId);
     if (cleanPart && MODELS_BY_ID[modelId] && !this.activePromises.has(modelId)) {
       try {
         fs.rmSync(this.getPartPath(modelId), { force: true, maxRetries: 4, retryDelay: 40 });
@@ -212,6 +247,7 @@ class ModelManager {
     const part = `${full}.part`;
     const manifest = `${full}.manifest.json`;
     this._manifestCache.delete(manifest);
+    this.invalidateStatusCache(spec.id);
     let removed = false;
     for (const target of [full, part, manifest]) {
       try {
@@ -228,6 +264,7 @@ class ModelManager {
 
   deleteAllModels() {
     this._manifestCache.clear();
+    this.invalidateStatusCache();
     for (const activeId of Array.from(this.activeControllers.keys())) {
       this.cancelDownload(activeId, { cleanPart: true });
     }
@@ -276,6 +313,7 @@ class ModelManager {
       return await runPromise;
     } finally {
       this.activePromises.delete(spec.id);
+      this.invalidateStatusCache(spec.id);
     }
   }
 

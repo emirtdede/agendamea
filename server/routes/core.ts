@@ -488,15 +488,39 @@ export function registerCoreRoutes(ctx: ServerContext): () => void {
     }
   });
 
+  const isWinStoreRuntime = () =>
+    Boolean(
+      (process as NodeJS.Process & { windowsStore?: boolean }).windowsStore ||
+        process.env.AGENDAMEA_WINDOWS_STORE === '1',
+    );
+
   // Version & Update Check
   let updateCheckCache: { expiresAt: number; payload: Record<string, unknown> } | null = null;
   app.get('/api/update-check', async (req, res) => {
+    const checkedAt = new Date().toISOString();
+    if (isWinStoreRuntime()) {
+      res.json({
+        ok: true,
+        currentVersion: appVersion,
+        latestVersion: appVersion,
+        updateAvailable: false,
+        storeManaged: true,
+        releaseName: `Agendamea v${appVersion}`,
+        releaseNotes: '',
+        publishedAt: null,
+        releaseUrl: 'ms-windows-store://pdp/?ProductId=9MT5X1NGZJXZ',
+        setupUrl: null,
+        portableUrl: null,
+        msixUrl: null,
+        checkedAt,
+      });
+      return;
+    }
     const force = req.query.force === '1' || req.query.force === 'true';
     if (!force && updateCheckCache && Date.now() < updateCheckCache.expiresAt) {
       res.json(updateCheckCache.payload);
       return;
     }
-    const checkedAt = new Date().toISOString();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
     const fallbackPayload = {
@@ -543,9 +567,7 @@ export function registerCoreRoutes(ctx: ServerContext): () => void {
 
   let isMinimizing = false;
   app.post('/api/window/minimize', (req, res) => {
-    const isWinStore = Boolean(
-      (process as NodeJS.Process & { windowsStore?: boolean }).windowsStore,
-    );
+    const isWinStore = isWinStoreRuntime();
     if (process.platform !== 'win32' || isWinStore) {
       res.json({ ok: true, supported: false });
       return;
@@ -645,6 +667,9 @@ export function registerCoreRoutes(ctx: ServerContext): () => void {
     try {
       const resetSettings = Boolean(req.body?.resetSettings);
       const freshBootstrap = db.resetAllData({ resetSettings });
+      if (resetSettings) {
+        ctx.appLock?.resetLockState();
+      }
       webhooks.dispatchConfiguredWebhook('data.reset', { resetSettings });
       res.json(freshBootstrap);
     } catch (err) {

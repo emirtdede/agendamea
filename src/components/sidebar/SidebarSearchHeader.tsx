@@ -24,8 +24,9 @@ interface SidebarSearchHeaderProps {
   onToggleCollapse: () => void;
   onCloseMobile: () => void;
   onSearchChange: (value: string) => void;
-  onCollapsedSearchClick: () => void;
+  onOpenCommandPalette: () => void;
   onSelectView: (view: ActiveView) => void;
+  onSmartViewContextMenu?: (e: React.MouseEvent, id: SmartView) => void;
 }
 
 export function SidebarBrandAndSearch({
@@ -35,7 +36,7 @@ export function SidebarBrandAndSearch({
   onToggleCollapse,
   onCloseMobile,
   onSearchChange,
-  onCollapsedSearchClick,
+  onOpenCommandPalette,
 }: Pick<
   SidebarSearchHeaderProps,
   | 'compact'
@@ -44,31 +45,29 @@ export function SidebarBrandAndSearch({
   | 'onToggleCollapse'
   | 'onCloseMobile'
   | 'onSearchChange'
-  | 'onCollapsedSearchClick'
+  | 'onOpenCommandPalette'
 >) {
   const { t } = useI18n();
 
   return (
     <>
       {compact ? (
-        <div className="app-drag-region flex flex-col items-center gap-2 border-b border-[var(--border)] py-3">
+        <div className="app-drag-region flex h-14 shrink-0 items-center justify-center border-b border-[var(--border)]">
           <button
             type="button"
+            data-testid="sidebar-minimal-logo-toggle"
             onClick={onToggleCollapse}
             aria-label={t.expandSidebar}
             title={`Agendamea - ${t.expandSidebar}`}
-            className="app-no-drag flex h-9 w-9 items-center justify-center rounded-lg hover:bg-[var(--surface-hover)] transition-colors"
+            className="app-no-drag group relative flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-primary)] ag-hover-glow"
           >
-            <BrandMark className="h-6 w-6" />
-          </button>
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            aria-label={t.expandSidebar}
-            title={t.expandSidebar}
-            className="app-no-drag flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
-          >
-            <PanelLeftOpen className="h-4 w-4" />
+            <span className="flex items-center justify-center transition-all duration-180 group-hover:opacity-0 group-hover:scale-75 group-focus-visible:opacity-0 group-focus-visible:scale-75">
+              <BrandMark className="h-6 w-6" />
+            </span>
+            <PanelLeftOpen
+              aria-hidden="true"
+              className="pointer-events-none absolute h-[18px] w-[18px] text-[var(--text-primary)] opacity-0 scale-75 transition-all duration-180 group-hover:opacity-100 group-hover:scale-100 group-focus-visible:opacity-100 group-focus-visible:scale-100"
+            />
           </button>
         </div>
       ) : (
@@ -82,10 +81,11 @@ export function SidebarBrandAndSearch({
           <div className="app-no-drag flex items-center gap-1">
             <button
               type="button"
+              data-testid="sidebar-collapse-btn"
               onClick={onToggleCollapse}
               aria-label={t.collapseSidebar}
               title={t.collapseSidebar}
-              className="hidden md:flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+              className="hidden md:flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] ag-hover-glow"
             >
               <PanelLeftClose className="h-4 w-4" />
             </button>
@@ -93,7 +93,7 @@ export function SidebarBrandAndSearch({
               type="button"
               onClick={onCloseMobile}
               aria-label={t.closeMenu}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] md:hidden"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-secondary)] ag-hover-glow md:hidden"
             >
               <X className="h-4 w-4" />
             </button>
@@ -105,27 +105,28 @@ export function SidebarBrandAndSearch({
         {compact ? (
           <button
             type="button"
-            onClick={onCollapsedSearchClick}
-            aria-label={t.searchPlaceholder}
-            title={
-              searchQuery
-                ? `${t.searchPlaceholder} ${searchQuery}`
-                : `${t.searchPlaceholder} (Ctrl+K)`
-            }
-            className={`mx-auto flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${
-              searchQuery
-                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
-                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+            data-testid="sidebar-search-trigger"
+            onClick={onOpenCommandPalette}
+            aria-label={t.cmdPaletteTriggerLabel}
+            title={`${t.cmdPaletteTriggerLabel} (Ctrl+K)`}
+            className={`mx-auto flex h-9 w-9 items-center justify-center rounded-lg ag-hover-glow ${
+              searchQuery ? 'ag-minimal-active' : 'text-[var(--text-muted)]'
             }`}
           >
             <Search className="h-4 w-4" />
           </button>
         ) : (
           <div className="relative flex items-center">
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute start-2.5 h-3.5 w-3.5 text-[var(--text-muted)]"
-            />
+            <button
+              type="button"
+              data-testid="sidebar-search-trigger"
+              onClick={onOpenCommandPalette}
+              aria-label={t.cmdPaletteTriggerLabel}
+              title={`${t.cmdPaletteTriggerLabel} (Ctrl+K)`}
+              className="absolute start-1.5 flex h-6 w-6 items-center justify-center rounded text-[var(--text-muted)] ag-hover-glow"
+            >
+              <Search className="h-3.5 w-3.5" />
+            </button>
             <input
               ref={searchInputRef}
               type="text"
@@ -139,16 +140,27 @@ export function SidebarBrandAndSearch({
               }}
               aria-label={t.searchPlaceholder}
               placeholder={t.searchPlaceholder}
-              className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-7 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+              className="h-9 w-full rounded-lg border border-[var(--border)] bg-[var(--canvas)] ps-8 pe-14 text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
             />
-            {searchQuery && (
+            {searchQuery ? (
               <button
                 type="button"
                 onClick={() => onSearchChange('')}
                 aria-label={t.clearSearch}
-                className="absolute end-1.5 flex h-5 w-5 items-center justify-center rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="absolute end-1.5 flex h-5 w-5 items-center justify-center rounded text-[var(--text-muted)] ag-hover-glow"
               >
                 <X className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-testid="sidebar-cmdk-badge"
+                onClick={onOpenCommandPalette}
+                aria-label={t.cmdPaletteAriaLabel}
+                title={`${t.cmdPaletteTriggerLabel} (Ctrl+K)`}
+                className="absolute end-1.5 rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono-tabular text-[10px] text-[var(--text-muted)] ag-hover-card-glow"
+              >
+                Ctrl+K
               </button>
             )}
           </div>
@@ -164,9 +176,15 @@ export function SidebarSmartViewsNav({
   isSettingsOpen,
   smartCounts,
   onSelectView,
+  onSmartViewContextMenu,
 }: Pick<
   SidebarSearchHeaderProps,
-  'compact' | 'activeView' | 'isSettingsOpen' | 'smartCounts' | 'onSelectView'
+  | 'compact'
+  | 'activeView'
+  | 'isSettingsOpen'
+  | 'smartCounts'
+  | 'onSelectView'
+  | 'onSmartViewContextMenu'
 >) {
   const { t } = useI18n();
   const smartItems: Array<{
@@ -194,17 +212,22 @@ export function SidebarSmartViewsNav({
             <button
               key={id}
               type="button"
+              data-testid={`sidebar-smart-${id}`}
               onClick={() => onSelectView({ type: 'smart', id })}
+              onContextMenu={(e) => {
+                if (!onSmartViewContextMenu) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onSmartViewContextMenu(e, id);
+              }}
               aria-label={label}
               aria-current={isActive ? 'page' : undefined}
               title={`${label} (${count})`}
-              className={`mx-auto flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-150 ${
-                isActive
-                  ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
-                  : 'text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+              className={`mx-auto flex h-9 w-9 items-center justify-center rounded-lg ag-hover-glow ${
+                isActive ? 'ag-minimal-active' : 'text-[var(--text-muted)]'
               }`}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              <Icon className="h-[18px] w-[18px] shrink-0" />
             </button>
           );
         }
@@ -213,12 +236,19 @@ export function SidebarSmartViewsNav({
           <button
             key={id}
             type="button"
+            data-testid={`sidebar-smart-${id}`}
             onClick={() => onSelectView({ type: 'smart', id })}
+            onContextMenu={(e) => {
+              if (!onSmartViewContextMenu) return;
+              e.preventDefault();
+              e.stopPropagation();
+              onSmartViewContextMenu(e, id);
+            }}
             aria-current={isActive ? 'page' : undefined}
             className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-[14px] font-medium transition-colors duration-150 ${
               isActive
                 ? 'bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                : 'text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]'
             }`}
           >
             <span className="flex items-center gap-2.5 min-w-0">

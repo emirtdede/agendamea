@@ -32,7 +32,7 @@ const { flushOfflineAutoSync } = require('./cloudSyncOffline.cjs');
 const { dispatchConfiguredWebhookOffline } = require('./webhookOffline.cjs');
 
 const ICON_COLOR_MAP = {
-  obsidian: { bg: '#18181b', fg: '#ffffff' },
+  obsidian: { bg: '#111114', fg: '#fafafa' },
   'obsidian-light': { bg: '#f4f4f5', fg: '#09090b' },
   slate: { bg: '#475569', fg: '#ffffff' },
   navy: { bg: '#1e3a8a', fg: '#ffffff' },

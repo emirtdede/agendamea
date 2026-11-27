@@ -126,6 +126,58 @@ const AiRagSearchBodySchema = z
   })
   .passthrough();
 
+const AppLockTypeSchema = z.enum(['pin4', 'pin6', 'pin8', 'password']);
+const AppLockAutoLockMinutesSchema = z.union([
+  z.literal(0),
+  z.literal(1),
+  z.literal(5),
+  z.literal(15),
+  z.literal(30),
+  z.literal(60),
+]);
+
+const AppLockSetupBodySchema = z
+  .object({
+    type: AppLockTypeSchema,
+    secret: z.string().min(4).max(128),
+    autoLockMinutes: AppLockAutoLockMinutesSchema.optional(),
+    lockOnMinimize: z.boolean().optional(),
+  })
+  .strict();
+
+const AppLockVerifyBodySchema = z
+  .object({
+    secret: z.string().min(1).max(128),
+  })
+  .strict();
+
+const AppLockChangeBodySchema = z
+  .object({
+    currentSecret: z.string().min(1).max(128),
+    type: AppLockTypeSchema,
+    newSecret: z.string().min(4).max(128),
+  })
+  .strict();
+
+const AppLockDisableBodySchema = z
+  .object({
+    currentSecret: z.string().min(1).max(128),
+  })
+  .strict();
+
+const AppLockRecoverBodySchema = z
+  .object({
+    recoveryCode: z.string().min(4).max(64),
+  })
+  .strict();
+
+const AppLockConfigBodySchema = z
+  .object({
+    autoLockMinutes: AppLockAutoLockMinutesSchema.optional(),
+    lockOnMinimize: z.boolean().optional(),
+  })
+  .strict();
+
 // Canonical MCP tool input schemas compiled to JSON Schema via Zod v4 `z.toJSONSchema()`
 const McpAddTaskArgsSchema = z.object({
   title: z.string().describe('Task title'),
@@ -182,6 +234,12 @@ module.exports = {
   CrashReportBodySchema,
   AiAskBodySchema,
   AiRagSearchBodySchema,
+  AppLockSetupBodySchema,
+  AppLockVerifyBodySchema,
+  AppLockChangeBodySchema,
+  AppLockDisableBodySchema,
+  AppLockRecoverBodySchema,
+  AppLockConfigBodySchema,
   McpAddTaskArgsSchema,
   McpListTasksArgsSchema,
   toMcpJsonSchema,

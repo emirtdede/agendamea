@@ -184,17 +184,18 @@ test('QA: Third-pass audit hardening - drop helper, non-destructive categoryId, 
     db.close();
   }
 
-  // 5. Schema v3 upgrades cleanly and creates composite partial indexes
+  // 5. Schema v3 upgrades cleanly to v6 and creates composite partial indexes
   const raw = new Database(dbPath);
   try {
     const version = raw.pragma('user_version', { simple: true });
-    assert.equal(version, 5);
+    assert.equal(version, 6);
     const indexes = raw
       .prepare("SELECT name FROM sqlite_master WHERE type = 'index'")
       .all() as Array<{ name: string }>;
     const names = new Set(indexes.map((i) => i.name));
     assert.ok(names.has('idx_todos_active_order'));
     assert.ok(names.has('idx_categories_active_order'));
+    assert.ok(names.has('idx_todos_active_schedule'));
   } finally {
     raw.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });

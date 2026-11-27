@@ -8,6 +8,7 @@ const {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   Notification,
   session,
   shell,
@@ -15,16 +16,27 @@ const {
 } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { APP_USER_MODEL_ID } = require('./iconGenerator.cjs');
-const { VoiceOverlayManager } = require('./voiceOverlay.cjs');
 const { createBackendManager } = require('./modules/backendProcess.cjs');
 const { registerCoreIpcHandlers } = require('./modules/ipcHandlers.cjs');
 const { registerUpdaterIpcHandlers } = require('./modules/updater.cjs');
 const { createTrayAndShellManager } = require('./modules/trayAndJumpList.cjs');
 const { createShortcutAndStartupManager } = require('./modules/shortcutManager.cjs');
 const { createMainWindow } = require('./modules/windowFactory.cjs');
-const { getAppLogger, closeAllLoggers } = require('../shared/logger.cjs');
-const crashDiagnostics = require('../shared/crashDiagnostics.cjs');
+
+const APP_USER_MODEL_ID = 'dev.vellium.agendamea';
+let _loggerMod = null;
+let _crashDiagnostics = null;
+let _voiceOverlayMod = null;
+
+function getLoggerMod() {
+  if (!_loggerMod) _loggerMod = require('../shared/logger.cjs');
+  return _loggerMod;
+}
+
+function getCrashDiagnostics() {
+  if (!_crashDiagnostics) _crashDiagnostics = require('../shared/crashDiagnostics.cjs');
+  return _crashDiagnostics;
+}
 
 if (process.env.AGENDAMEA_DATA_DIR && String(process.env.AGENDAMEA_DATA_DIR).trim()) {
   const customDataDir = path.resolve(String(process.env.AGENDAMEA_DATA_DIR).trim());
@@ -45,7 +57,7 @@ function getMainLogger() {
     } catch {
       dataDir = undefined;
     }
-    mainLogger = getAppLogger('main', dataDir);
+    mainLogger = getLoggerMod().getAppLogger('main', dataDir);
   }
   return mainLogger;
 }
@@ -53,7 +65,7 @@ function getMainLogger() {
 process.on('uncaughtException', (err) => {
   try {
     getMainLogger().error({ err }, 'Uncaught Electron main exception');
-    crashDiagnostics.writeCrashReport({
+    getCrashDiagnostics().writeCrashReport({
       source: 'electron-main-uncaught',
       error: err,
       dataDir: app.getPath('userData'),
@@ -66,7 +78,7 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   try {
     getMainLogger().error({ err: reason }, 'Unhandled Electron main rejection');
-    crashDiagnostics.writeCrashReport({
+    getCrashDiagnostics().writeCrashReport({
       source: 'electron-main-rejection',
       error: reason,
       dataDir: app.getPath('userData'),
@@ -84,13 +96,14 @@ const PKG_VERSION = (() => {
   }
 })();
 
-if (process.platform === 'win32') {
+if (process.platform === 'win32' && !process.windowsStore) {
   app.setAppUserModelId(APP_USER_MODEL_ID);
 }
 
 let mainWindow = null;
 let isQuitting = false;
 let activeCloseBehavior = 'ask';
+let activeThemeMode = 'light';
 let voiceOverlayManager = null;
 let consumedInstallerLocale;
 
@@ -106,8 +119,16 @@ function readWindowPrefs(userDataDir) {
           parsed.closeBehavior === 'quit')
           ? parsed.closeBehavior
           : 'ask';
+      const themeMode =
+        parsed &&
+        (parsed.themeMode === 'dark' ||
+          parsed.themeMode === 'light' ||
+          parsed.themeMode === 'system')
+          ? parsed.themeMode
+          : 'light';
       return {
         closeBehavior,
+        themeMode,
         launchAtStartup: Boolean(parsed?.launchAtStartup),
         launchMinimizedToTray: Boolean(parsed?.launchMinimizedToTray),
         globalQuickAdd: parsed?.globalQuickAdd !== false,
@@ -127,6 +148,7 @@ function readWindowPrefs(userDataDir) {
   }
   return {
     closeBehavior: 'ask',
+    themeMode: 'light',
     launchAtStartup: false,
     launchMinimizedToTray: false,
     globalQuickAdd: true,
@@ -134,6 +156,12 @@ function readWindowPrefs(userDataDir) {
     voiceShortcutEnabled: true,
     voiceShortcut: 'CommandOrControl+Alt+D',
   };
+}
+
+function resolveWindowBackgroundColor() {
+  if (activeThemeMode === 'dark') return '#09090b';
+  if (activeThemeMode === 'system' && nativeTheme?.shouldUseDarkColors) return '#09090b';
+  return '#fafafa';
 }
 
 function readInstallerSelectedLocale(userDataDir) {
@@ -187,8 +215,15 @@ function showAndFocusMainWindow() {
 
 function ensureVoiceOverlayManager() {
   if (!voiceOverlayManager) {
-    voiceOverlayManager = new VoiceOverlayManager({
+    if (!_voiceOverlayMod) _voiceOverlayMod = require('./voiceOverlay.cjs');
+    voiceOverlayManager = new _voiceOverlayMod.VoiceOverlayManager({
       preloadPath: path.join(__dirname, 'preload.cjs'),
+      onBlockedByLock: showAndFocusMainWindow,
+      onVoiceActivity: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('window:voice-activity');
+        }
+      },
     });
   }
   return voiceOverlayManager;
@@ -211,6 +246,32 @@ function performFullQuit() {
     mainWindow = null;
   }
   app.quit();
+}
+
+function performAppRelaunch() {
+  try {
+    app.releaseSingleInstanceLock();
+  } catch {
+    // Ignore lock release failure
+  }
+  try {
+    const cleanArgs = process.argv
+      .slice(1)
+      .filter((arg) => arg !== '--minimized' && arg !== '--tray' && arg !== '--hidden');
+    app.relaunch({ args: cleanArgs });
+  } catch {
+    try {
+      app.relaunch();
+    } catch {
+      // Ignore relaunch failure
+    }
+  }
+  teardownAppResources();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.destroy();
+    mainWindow = null;
+  }
+  app.exit(0);
 }
 
 const trayShell = createTrayAndShellManager({
@@ -243,7 +304,7 @@ function saveWindowPrefs(userDataDir) {
     const st = shortcuts.getState();
     fs.writeFileSync(
       path.join(userDataDir, 'window-prefs.json'),
-      JSON.stringify({ closeBehavior: activeCloseBehavior, ...st }),
+      JSON.stringify({ closeBehavior: activeCloseBehavior, themeMode: activeThemeMode, ...st }),
       'utf8',
     );
   } catch {
@@ -251,8 +312,34 @@ function saveWindowPrefs(userDataDir) {
   }
 }
 
+function getPortableIdentity() {
+  const portableFile =
+    typeof process.env.PORTABLE_EXECUTABLE_FILE === 'string' &&
+    process.env.PORTABLE_EXECUTABLE_FILE.trim()
+      ? path.resolve(process.env.PORTABLE_EXECUTABLE_FILE.trim())
+      : '';
+  if (!portableFile) {
+    return { portableFile: '', portableSize: 0, portableMtimeMs: 0 };
+  }
+  try {
+    const stat = fs.statSync(portableFile);
+    return {
+      portableFile,
+      portableSize: stat.size,
+      portableMtimeMs: Math.round(stat.mtimeMs),
+    };
+  } catch {
+    return { portableFile, portableSize: 0, portableMtimeMs: 0 };
+  }
+}
+
+const CURRENT_PORTABLE_IDENTITY = getPortableIdentity();
+
 async function acquireSingleInstanceLockWithHandoff() {
-  const lockPayload = { execPath: process.execPath };
+  const lockPayload = {
+    execPath: process.execPath,
+    ...CURRENT_PORTABLE_IDENTITY,
+  };
   if (app.requestSingleInstanceLock(lockPayload)) return true;
   for (let i = 0; i < 20; i += 1) {
     await new Promise((r) => setTimeout(r, 150));
@@ -262,15 +349,36 @@ async function acquireSingleInstanceLockWithHandoff() {
 }
 
 app.on('second-instance', (_event, commandLine, _workingDir, additionalData) => {
-  const extraData = /** @type {{ execPath?: unknown } | null | undefined} */ (additionalData);
+  const extraData =
+    /** @type {{ execPath?: unknown; portableFile?: unknown; portableSize?: unknown; portableMtimeMs?: unknown } | null | undefined} */ (
+      additionalData
+    );
   const incomingExecPath =
     (extraData && typeof extraData.execPath === 'string' && extraData.execPath) ||
     (Array.isArray(commandLine) && typeof commandLine[0] === 'string' ? commandLine[0] : '');
+  const incomingPortableFile =
+    extraData && typeof extraData.portableFile === 'string' ? extraData.portableFile : '';
+  const incomingPortableSize = Number(extraData?.portableSize || 0);
+  const incomingPortableMtimeMs = Number(extraData?.portableMtimeMs || 0);
 
   const runtimeRoot = backend.getRuntimeRoot();
-  const runtimeIntact = fs.existsSync(path.join(runtimeRoot, 'dist-server', 'server.mjs'));
+  const exeDir = path.dirname(process.execPath);
+  const icuPath = path.join(exeDir, 'icudtl.dat');
+  const runtimeIntact =
+    fs.existsSync(path.join(runtimeRoot, 'dist-server', 'server.mjs')) &&
+    fs.existsSync(path.join(runtimeRoot, 'dist', 'voice-worklet.js')) &&
+    (!app.isPackaged || fs.existsSync(icuPath));
+
+  const bothSamePortableExe =
+    Boolean(CURRENT_PORTABLE_IDENTITY.portableFile && incomingPortableFile) &&
+    path.resolve(CURRENT_PORTABLE_IDENTITY.portableFile).toLowerCase() ===
+      path.resolve(incomingPortableFile).toLowerCase() &&
+    CURRENT_PORTABLE_IDENTITY.portableSize === incomingPortableSize &&
+    CURRENT_PORTABLE_IDENTITY.portableMtimeMs === incomingPortableMtimeMs;
+
   const isDifferentExecutable =
-    incomingExecPath &&
+    !bothSamePortableExe &&
+    Boolean(incomingExecPath) &&
     path.resolve(incomingExecPath).toLowerCase() !== path.resolve(process.execPath).toLowerCase();
 
   if (isDifferentExecutable || !runtimeIntact) {
@@ -322,13 +430,40 @@ registerCoreIpcHandlers({
   resolveStartupIcons: trayShell.resolveStartupIcons,
   showAndFocusMainWindow,
   performFullQuit,
+  performAppRelaunch,
   setCloseBehavior: (behavior) => {
     if (behavior === 'ask' || behavior === 'tray' || behavior === 'quit') {
+      if (activeCloseBehavior === behavior) {
+        return { ok: true, closeBehavior: activeCloseBehavior };
+      }
       activeCloseBehavior = behavior;
       saveWindowPrefs(app.getPath('userData'));
       return { ok: true, closeBehavior: activeCloseBehavior };
     }
     return { ok: false, closeBehavior: activeCloseBehavior };
+  },
+  setWindowThemeMode: (mode) => {
+    if (mode === 'light' || mode === 'dark' || mode === 'system') {
+      const changed = activeThemeMode !== mode;
+      activeThemeMode = mode;
+      if (changed) {
+        saveWindowPrefs(app.getPath('userData'));
+      }
+      if (
+        changed &&
+        mainWindow &&
+        !mainWindow.isDestroyed() &&
+        typeof mainWindow.setBackgroundColor === 'function'
+      ) {
+        try {
+          mainWindow.setBackgroundColor(resolveWindowBackgroundColor());
+        } catch {
+          // Ignore background update error
+        }
+      }
+      return { ok: true };
+    }
+    return { ok: false };
   },
   applyLoginItemSetting: shortcuts.applyLoginItemSetting,
   syncGlobalQuickAddShortcut: shortcuts.syncGlobalQuickAddShortcut,
@@ -340,6 +475,7 @@ registerCoreIpcHandlers({
   getVoiceOverlayManager: () => voiceOverlayManager,
   updateTrayLabels: trayShell.updateTrayLabels,
   rebuildWindowsJumpList: trayShell.rebuildWindowsJumpList,
+  invalidateIconCache: trayShell.invalidateIconCache,
   consumeInitialLocaleInfo: () => {
     const info = getInitialLocaleInfo();
     consumedInstallerLocale = null;
@@ -368,10 +504,9 @@ app
       process.exit(0);
       return;
     }
-    backend.lockCriticalRuntimeFiles();
-
     const prefs = readWindowPrefs(app.getPath('userData'));
     activeCloseBehavior = prefs.closeBehavior;
+    activeThemeMode = prefs.themeMode;
     shortcuts.hydrateState(prefs);
     const quickRes = shortcuts.syncGlobalQuickAddShortcut(
       prefs.globalQuickAdd,
@@ -386,13 +521,15 @@ app
     if (quickRes.key !== prefs.globalQuickAddKey || voiceRes.shortcut !== prefs.voiceShortcut) {
       saveWindowPrefs(app.getPath('userData'));
     }
-    trayShell.rebuildWindowsJumpList();
-    trayShell.syncExistingCliShimsOnStartup();
-    trayShell.ensureStartMenuShortcutAumid();
 
     const { port, reusedExternalDaemon } = await backend.detectOrAllocatePort();
     const appUrl = `http://127.0.0.1:${port}`;
     const allowedOrigin = new URL(appUrl).origin;
+
+    if (!reusedExternalDaemon) {
+      backend.startBackend(port);
+    }
+    backend.lockCriticalRuntimeFiles();
 
     session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) => {
       try {
@@ -403,6 +540,7 @@ app
         const isMicOnly =
           (permName === 'media' || permName === 'audioCapture') &&
           (!Array.isArray(mediaTypes) ||
+            mediaTypes.length === 0 ||
             (mediaTypes.includes('audio') && !mediaTypes.includes('video')));
         callback(origin === allowedOrigin && isMicOnly);
       } catch {
@@ -421,9 +559,6 @@ app
       }
     });
 
-    if (!reusedExternalDaemon) {
-      backend.startBackend(port);
-    }
     await createMainWindow({
       app,
       BrowserWindow,
@@ -433,6 +568,7 @@ app
       backend,
       trayShell,
       getInitialLocaleInfo,
+      getBackgroundColor: resolveWindowBackgroundColor,
       getCloseBehavior: () => activeCloseBehavior,
       isQuitting: () => isQuitting,
       setQuitting: (val) => {
@@ -443,13 +579,24 @@ app
       },
       showAndFocusMainWindow,
       getMainLogger,
-      crashDiagnostics,
+      crashDiagnostics: {
+        writeCrashReport: (opts) => getCrashDiagnostics().writeCrashReport(opts),
+      },
     });
+
+    // Defer non-critical Windows shell integration tasks until after window first paint
+    const deferredShellTimer = setTimeout(() => {
+      if (isQuitting) return;
+      trayShell.rebuildWindowsJumpList();
+      trayShell.syncExistingCliShimsOnStartup();
+      trayShell.ensureStartMenuShortcutAumid();
+    }, 1500);
+    deferredShellTimer.unref?.();
   })
   .catch((err) => {
     getMainLogger().error({ err }, 'Agendamea Electron startup error');
     try {
-      crashDiagnostics.writeCrashReport({
+      getCrashDiagnostics().writeCrashReport({
         source: 'electron-startup',
         error: err,
         dataDir: app.getPath('userData'),
@@ -458,7 +605,7 @@ app
       // Ignore crash report failure during early boot
     }
     backend.stopBackend();
-    closeAllLoggers();
+    if (_loggerMod) _loggerMod.closeAllLoggers();
     app.quit();
   });
 
@@ -469,7 +616,7 @@ app.on('before-quit', () => {
     // Ignore
   }
   teardownAppResources();
-  closeAllLoggers();
+  if (_loggerMod) _loggerMod.closeAllLoggers();
 });
 
 app.on('window-all-closed', () => {

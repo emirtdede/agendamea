@@ -274,7 +274,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
                 : void onUpdate(todo.id, { completed: !todo.completed })
             }
             aria-pressed={todo.completed}
-            className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap"
+            className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow transition-colors whitespace-nowrap"
           >
             <span
               className="flex h-4 w-4 items-center justify-center rounded-full border"
@@ -336,7 +336,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
           }}
           aria-label={t.closeMenu}
           title={t.closeMenu}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] ag-hover-card-glow hover:text-[var(--text-primary)] transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
@@ -445,7 +445,7 @@ export const TodoDetailPanel = React.memo(function TodoDetailPanel({
             }
             onDelete(todo.id);
           }}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-500/10 transition-colors whitespace-nowrap"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 ag-hover-danger-glow transition-colors whitespace-nowrap"
         >
           <Trash2 className="h-3.5 w-3.5" />
           <span>{t.deleteToTrashButton}</span>

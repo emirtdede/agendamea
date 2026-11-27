@@ -10,8 +10,10 @@ import { registerAiRoutes } from './server/routes/ai.ts';
 import { registerCoreRoutes } from './server/routes/core.ts';
 import { registerMcpRoutes } from './server/routes/mcp.ts';
 import { registerOneDriveRoutes } from './server/routes/onedrive.ts';
+import { registerSecurityRoutes } from './server/routes/security.ts';
 import { registerWebhookRoutes } from './server/routes/webhooks.ts';
 import { createAiRuntimeService } from './server/services/aiRuntime.ts';
+import { createAppLockService } from './server/services/appLock.ts';
 import { createCloudSyncService } from './server/services/cloudSync.ts';
 import { closeServerLogs, serverLogger } from './server/services/logger.ts';
 import { createWebhookService } from './server/services/webhooks.ts';
@@ -66,6 +68,7 @@ async function startServer() {
     broadcastSseEvent,
     dispatchConfiguredWebhook: webhooks.dispatchConfiguredWebhook,
   });
+  const appLock = createAppLockService(db);
 
   registerRequestLogger(app);
 
@@ -93,8 +96,10 @@ async function startServer() {
     cloudSync,
     webhooks,
     aiRuntime,
+    appLock,
   };
 
+  registerSecurityRoutes(ctx);
   const disposeCoreRoutes = registerCoreRoutes(ctx);
   registerWebhookRoutes(ctx);
   registerMcpRoutes(ctx);
@@ -159,8 +164,10 @@ async function startServer() {
       gzip: Buffer | null;
       contentType: string;
       immutable: boolean;
+      compressible: boolean;
     }
 
+    const RTL_LANGS = new Set(['ar', 'fa', 'he', 'ur']);
     const MIME_BY_EXT: Record<string, string> = {
       '.html': 'text/html; charset=utf-8',
       '.js': 'application/javascript; charset=utf-8',
@@ -193,42 +200,93 @@ async function startServer() {
       '.xml',
       '.txt',
     ]);
-    const MAX_PRELOAD_FILE_BYTES = 2 * 1024 * 1024;
+    const MAX_CACHE_FILE_BYTES = 2 * 1024 * 1024;
+    const MAX_CACHED_ASSETS = 64;
     const inMemoryAssets = new Map<string, InMemoryAsset>();
 
-    const preloadDir = (dir: string, prefix = '') => {
+    const loadCachedAsset = (relKey: string): InMemoryAsset | null => {
+      const existing = inMemoryAssets.get(relKey);
+      if (existing) return existing;
+      if (!hasDistDir || relKey.startsWith('voice-assets/')) return null;
+      const diskPath = path.resolve(distDir, relKey);
+      if (!diskPath.startsWith(distDir + path.sep)) return null;
       try {
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          const fullPath = path.join(dir, entry.name);
-          const relKey = prefix ? `${prefix}/${entry.name}` : entry.name;
-          if (entry.isDirectory()) {
-            if (relKey === 'voice-assets') continue;
-            preloadDir(fullPath, relKey);
-          } else if (entry.isFile()) {
-            const stat = fs.statSync(fullPath);
-            if (stat.size > MAX_PRELOAD_FILE_BYTES) continue;
-            const ext = path.extname(entry.name).toLowerCase();
-            const contentType = MIME_BY_EXT[ext] ?? 'application/octet-stream';
-            const raw = fs.readFileSync(fullPath);
-            const shouldGzip = COMPRESSIBLE_EXT.has(ext) && raw.length >= 512;
-            inMemoryAssets.set(relKey, {
-              raw,
-              gzip: shouldGzip ? zlib.gzipSync(raw, { level: 6 }) : null,
-              contentType,
-              immutable:
-                relKey.startsWith('assets/') &&
-                !relKey.endsWith('index.html') &&
-                !relKey.endsWith('sw.js'),
-            });
+        const stat = fs.statSync(diskPath);
+        if (!stat.isFile() || stat.size > MAX_CACHE_FILE_BYTES) return null;
+        const ext = path.extname(diskPath).toLowerCase();
+        const raw = fs.readFileSync(diskPath);
+        const entry: InMemoryAsset = {
+          raw,
+          gzip: null,
+          contentType: MIME_BY_EXT[ext] ?? 'application/octet-stream',
+          immutable:
+            (relKey.startsWith('assets/') || relKey.startsWith('fonts/')) &&
+            !relKey.endsWith('index.html') &&
+            !relKey.endsWith('overlay.html') &&
+            !relKey.endsWith('sw.js'),
+          compressible: COMPRESSIBLE_EXT.has(ext) && raw.length >= 512,
+        };
+        if (inMemoryAssets.size >= MAX_CACHED_ASSETS) {
+          const oldestKey = inMemoryAssets.keys().next().value;
+          if (oldestKey) inMemoryAssets.delete(oldestKey);
+        }
+        inMemoryAssets.set(relKey, entry);
+        return entry;
+      } catch {
+        return null;
+      }
+    };
+
+    // Pre-index hashed locale chunk filenames once so index.html can modulepreload strictly the active locale
+    const localeChunkByLang = new Map<string, string>();
+    const assetsDir = path.join(distDir, 'assets');
+    if (hasDistDir && fs.existsSync(assetsDir)) {
+      try {
+        for (const file of fs.readdirSync(assetsDir)) {
+          const match = /^([a-z]{2}(?:-[A-Z]{2})?)-[A-Za-z0-9_-]+\.js$/.exec(file);
+          if (match?.[1]) {
+            localeChunkByLang.set(match[1], file);
           }
         }
       } catch {
-        // Ignore directory read errors
+        // Non-fatal: dynamic import still resolves locale chunks normally
       }
-    };
-    if (hasDistDir) {
-      preloadDir(distDir);
     }
+
+    const renderBootHtmlWithActiveLocale = (
+      htmlTemplate: Buffer,
+      preloadActiveLocale: boolean,
+    ): string => {
+      const rawLang = String(db.getSettings().language || 'tr').trim() || 'tr';
+      const activeLang = /^[a-z]{2}(?:-[A-Z]{2})?$/.test(rawLang) ? rawLang : 'tr';
+      const dir = RTL_LANGS.has(activeLang) ? 'rtl' : 'ltr';
+      const localeChunk = preloadActiveLocale ? localeChunkByLang.get(activeLang) : undefined;
+      const preloadTag = localeChunk
+        ? `<link rel="modulepreload" href="/assets/${localeChunk}" crossorigin>`
+        : '';
+      const initialLockStatus = appLock.getStatus();
+      const bootScript = `${preloadTag}<script>window.__AGENDAMEA_INITIAL_LANG__=${JSON.stringify(activeLang)};window.__AGENDAMEA_INITIAL_LOCK__=${JSON.stringify(initialLockStatus)};</script>`;
+      let html = htmlTemplate.toString('utf8');
+      html = html.replace(/<html\b[^>]*>/i, `<html lang="${activeLang}" dir="${dir}">`);
+      const headIdx = html.search(/<head\b[^>]*>/i);
+      if (headIdx !== -1) {
+        const openEnd = html.indexOf('>', headIdx);
+        if (openEnd !== -1) {
+          return `${html.slice(0, openEnd + 1)}${bootScript}${html.slice(openEnd + 1)}`;
+        }
+      }
+      return `${bootScript}${html}`;
+    };
+
+    const serveBootHtml = (res: express.Response, fileName: 'index.html' | 'overlay.html') => {
+      const entry = loadCachedAsset(fileName);
+      if (!entry) return false;
+      const html = renderBootHtmlWithActiveLocale(entry.raw, fileName === 'index.html');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.send(html);
+      return true;
+    };
 
     const serveInMemoryEntry = (
       req: express.Request,
@@ -241,7 +299,11 @@ async function startServer() {
         entry.immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
       );
       const acceptEnc = String(req.headers['accept-encoding'] ?? '');
-      if (entry.gzip && acceptEnc.includes('gzip')) {
+      const onLoopback = isLoopbackAddress(req.socket.remoteAddress);
+      if (!onLoopback && entry.compressible && acceptEnc.includes('gzip')) {
+        if (!entry.gzip) {
+          entry.gzip = zlib.gzipSync(entry.raw, { level: 6 });
+        }
         res.setHeader('Content-Encoding', 'gzip');
         res.setHeader('Vary', 'Accept-Encoding');
         res.send(entry.gzip);
@@ -256,7 +318,10 @@ async function startServer() {
         return;
       }
       const relKey = req.path === '/' ? 'index.html' : req.path.replace(/^\/+/, '');
-      const memEntry = inMemoryAssets.get(relKey);
+      if (relKey === 'index.html' || relKey === 'overlay.html') {
+        if (serveBootHtml(res, relKey)) return;
+      }
+      const memEntry = loadCachedAsset(relKey);
       if (memEntry) {
         serveInMemoryEntry(req, res, memEntry);
         return;
@@ -296,12 +361,8 @@ async function startServer() {
       );
     }
 
-    app.get('*', (req, res) => {
-      const indexEntry = inMemoryAssets.get('index.html');
-      if (indexEntry) {
-        serveInMemoryEntry(req, res, indexEntry);
-        return;
-      }
+    app.get('*', (_req, res) => {
+      if (serveBootHtml(res, 'index.html')) return;
       const indexPath = path.join(distDir, 'index.html');
       if (fs.existsSync(indexPath)) {
         res.setHeader('Cache-Control', 'no-cache');
@@ -420,6 +481,13 @@ async function startServer() {
         );
       } catch {
         // Ignore port file write error
+      }
+    }
+    if (typeof process.send === 'function') {
+      try {
+        process.send({ type: 'ready', port: actualPort });
+      } catch {
+        // Ignore disconnected parent IPC
       }
     }
     serverLogger.info(

@@ -104,6 +104,16 @@ function getCandidateDataDirs() {
   ].filter(Boolean);
 }
 
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return /** @type {NodeJS.ErrnoException} */ (err)?.code === 'EPERM';
+  }
+}
+
 function getCandidateBaseUrls() {
   const urls = [];
   if (process.env.AGENDAMEA_URL) {
@@ -118,6 +128,10 @@ function getCandidateBaseUrls() {
       if (fs.existsSync(portFile)) {
         const parsed = JSON.parse(fs.readFileSync(portFile, 'utf8'));
         const port = Number(parsed?.port);
+        const pid = Number(parsed?.pid);
+        if (Number.isInteger(pid) && pid > 0 && !isPidAlive(pid)) {
+          continue;
+        }
         if (Number.isInteger(port) && port > 0 && port < 65536) {
           urls.push(`http://127.0.0.1:${port}`);
         }
@@ -134,17 +148,42 @@ function getCandidateBaseUrls() {
   return [...new Set(urls)];
 }
 
-async function resolveApiBaseUrl() {
+let _cachedApiBaseUrl;
+let _cachedApiBaseUrlKey = '';
+let _cachedApiBaseUrlAt = 0;
+const API_BASE_CACHE_TTL_MS = 5000;
+
+function clearApiBaseUrlCache() {
+  _cachedApiBaseUrl = undefined;
+  _cachedApiBaseUrlKey = '';
+  _cachedApiBaseUrlAt = 0;
+}
+
+async function resolveApiBaseUrl(options = {}) {
   if (process.env.AGENDAMEA_FORCE_OFFLINE === '1') {
     return null;
   }
+  const envKey = `${process.env.AGENDAMEA_URL || ''}|${process.env.AGENDAMEA_PORT || ''}|${process.env.AGENDAMEA_FORCE_OFFLINE || ''}|${process.env.AGENDAMEA_DATA_DIR || ''}`;
+  if (
+    !options.bypassCache &&
+    _cachedApiBaseUrl !== undefined &&
+    _cachedApiBaseUrlKey === envKey &&
+    Date.now() - _cachedApiBaseUrlAt < API_BASE_CACHE_TTL_MS
+  ) {
+    return _cachedApiBaseUrl;
+  }
   const candidates = getCandidateBaseUrls();
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+    _cachedApiBaseUrl = null;
+    _cachedApiBaseUrlKey = envKey;
+    _cachedApiBaseUrlAt = Date.now();
+    return null;
+  }
   const explicitUrl = process.env.AGENDAMEA_URL
     ? String(process.env.AGENDAMEA_URL).replace(/\/+$/, '')
     : null;
   try {
-    return await Promise.any(
+    const resolved = await Promise.any(
       candidates.map(async (base) => {
         const controller = new AbortController();
         const probeTimeoutMs = explicitUrl && base === explicitUrl ? 1500 : 450;
@@ -167,7 +206,14 @@ async function resolveApiBaseUrl() {
         }
       }),
     );
+    _cachedApiBaseUrl = resolved;
+    _cachedApiBaseUrlKey = envKey;
+    _cachedApiBaseUrlAt = Date.now();
+    return resolved;
   } catch {
+    _cachedApiBaseUrl = null;
+    _cachedApiBaseUrlKey = envKey;
+    _cachedApiBaseUrlAt = Date.now();
     return null;
   }
 }
@@ -215,5 +261,6 @@ module.exports = {
   getCandidateDataDirs,
   getCandidateBaseUrls,
   resolveApiBaseUrl,
+  clearApiBaseUrlCache,
   httpRequest,
 };

@@ -1,7 +1,9 @@
+import express from 'express';
 import sttServiceMod from '../../electron/ai/sttService.cjs';
 import aiCatalog from '../../shared/aiCatalog.cjs';
 import piperVoicesMod from '../../shared/piperVoices.cjs';
 import schemas from '../../shared/schemas/index.cjs';
+import voiceIntentParser from '../../shared/voiceIntentParser.cjs';
 import { sendRouteError } from '../middleware/security.ts';
 import { validateBody } from '../middleware/validate.ts';
 import { createComponentLogger } from '../services/logger.ts';
@@ -11,6 +13,15 @@ const aiRouteLog = createComponentLogger('ai-routes');
 
 const MAX_ASK_TEXT_LEN = 2000;
 const MAX_PCM_SAMPLES = 480_000;
+
+function polishFastTranscript(raw: string): string {
+  const collapsed = String(raw || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .trim();
+  if (!collapsed) return '';
+  return collapsed.charAt(0).toLocaleUpperCase('tr-TR') + collapsed.slice(1);
+}
 
 export function registerAiRoutes(ctx: ServerContext): void {
   const { app, db, aiRuntime, cloudSync, broadcastExternalChange } = ctx;
@@ -55,6 +66,99 @@ export function registerAiRoutes(ctx: ServerContext): void {
     }
   });
 
+  app.get('/api/ai/setup/status', (_req, res) => {
+    try {
+      res.json({ ok: true, setup: aiRuntime.getSetupState() });
+    } catch (err) {
+      sendRouteError(res, 'GET /api/ai/setup/status', err, 'Kurulum durumu alınamadı.');
+    }
+  });
+
+  app.post('/api/ai/setup', async (req, res) => {
+    try {
+      const body = req.body ?? {};
+      const validIds = new Set([
+        'tier-light',
+        'tier-medium',
+        'tier-strong',
+        'cpu-light',
+        'cpu-balanced',
+        'gpu-very-weak',
+        'gpu-weak',
+        'gpu-balanced',
+        'gpu-strong',
+        'gpu-ultra',
+        'custom',
+      ]);
+      const rawProfile =
+        typeof body.profileId === 'string' && validIds.has(body.profileId)
+          ? body.profileId
+          : undefined;
+      const rawTier =
+        typeof body.tier === 'string' && validIds.has(body.tier) ? body.tier : undefined;
+      const customModels =
+        body.customModels && typeof body.customModels === 'object'
+          ? {
+              sttModelId: String(body.customModels.sttModelId || ''),
+              llmModelId: String(body.customModels.llmModelId || ''),
+              embedModelId: String(body.customModels.embedModelId || ''),
+            }
+          : undefined;
+      const setup = await aiRuntime.startOneClickSetup({
+        tier: rawTier as never,
+        profileId: rawProfile as never,
+        customModels,
+      });
+      res.status(setup.active ? 202 : 200).json({ ok: true, setup });
+    } catch (err) {
+      const e = err as Error & { code?: string; missingRoles?: string[]; statusCode?: number };
+      if (e?.code === 'CUSTOM_PROFILE_INCOMPLETE' || e?.statusCode === 400) {
+        res.status(400).json({
+          ok: false,
+          code: e.code || 'CUSTOM_PROFILE_INCOMPLETE',
+          missingRoles: e.missingRoles || [],
+          error: e.message,
+        });
+        return;
+      }
+      sendRouteError(res, 'POST /api/ai/setup', err, 'Tek tıkla kurulum başlatılamadı.');
+    }
+  });
+
+  app.post('/api/ai/setup/cancel', (_req, res) => {
+    try {
+      const setup = aiRuntime.cancelOneClickSetup();
+      res.json({ ok: true, setup });
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/setup/cancel', err, 'Kurulum iptal edilemedi.');
+    }
+  });
+
+  app.post('/api/ai/warmup', async (req, res) => {
+    try {
+      const result = await aiRuntime.warmupEngines({
+        includeLlm: Boolean(req.body?.includeLlm),
+      });
+      res.json(result);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/warmup', err, 'Yapay zeka motoru hazırlanamadı.');
+    }
+  });
+
+  app.post('/api/ai/models/:id/activate', (req, res) => {
+    try {
+      const modelId = req.params.id;
+      const result = aiRuntime.activateModel(modelId);
+      if (!result.ok) {
+        res.status(result.error === 'UNKNOWN_MODEL' ? 404 : 400).json(result);
+        return;
+      }
+      res.json(result);
+    } catch (err) {
+      sendRouteError(res, 'POST /api/ai/models/:id/activate', err, 'Model etkinleştirilemedi.');
+    }
+  });
+
   app.post('/api/ai/models/:id/download', async (req, res) => {
     try {
       const modelId = req.params.id;
@@ -63,14 +167,25 @@ export function registerAiRoutes(ctx: ServerContext): void {
         return;
       }
       const syncWait = req.query.sync === '1' || Boolean(req.body?.sync);
+      const forceActivate = Boolean(req.body?.activate);
       if (syncWait) {
         const result = await modelManager.downloadModel(modelId);
+        if (result?.ok) {
+          aiRuntime.activateModel(modelId, { onlyIfRoleMissing: !forceActivate });
+        }
         res.status(result.ok ? 200 : 400).json(result);
         return;
       }
-      void modelManager.downloadModel(modelId).catch((err: unknown) => {
-        aiRouteLog.warn({ err, modelId }, 'Background model download ended with error');
-      });
+      void modelManager
+        .downloadModel(modelId)
+        .then((result: { ok?: boolean }) => {
+          if (result?.ok) {
+            aiRuntime.activateModel(modelId, { onlyIfRoleMissing: !forceActivate });
+          }
+        })
+        .catch((err: unknown) => {
+          aiRouteLog.warn({ err, modelId }, 'Background model download ended with error');
+        });
       res.status(202).json({
         ok: true,
         started: true,
@@ -225,56 +340,146 @@ export function registerAiRoutes(ctx: ServerContext): void {
     },
   );
 
-  app.post('/api/ai/transcribe', async (req, res) => {
-    try {
-      const body = req.body ?? {};
-      const currentSettings = db.getSettings();
-      const configuredDictationLang =
-        currentSettings.voiceDictationLanguage && currentSettings.voiceDictationLanguage !== 'auto'
-          ? currentSettings.voiceDictationLanguage
-          : currentSettings.language || 'en';
-      const language =
-        typeof body.language === 'string' &&
-        body.language.trim() &&
-        body.language.trim().toLowerCase() !== 'auto'
-          ? body.language.trim()
-          : configuredDictationLang;
+  app.post(
+    '/api/ai/transcribe',
+    express.raw({ type: 'application/octet-stream', limit: '3mb' }),
+    async (req, res) => {
+      try {
+        const isBinaryPcm16 = Buffer.isBuffer(req.body);
+        const body = isBinaryPcm16 ? {} : (req.body ?? {});
+        const currentSettings = db.getSettings();
+        const configuredDictationLang =
+          currentSettings.voiceDictationLanguage &&
+          currentSettings.voiceDictationLanguage !== 'auto'
+            ? currentSettings.voiceDictationLanguage
+            : 'auto';
+        const rawLangParam = isBinaryPcm16 ? req.query.language : body.language;
+        const language =
+          typeof rawLangParam === 'string' && rawLangParam.trim()
+            ? rawLangParam.trim()
+            : configuredDictationLang;
+        const wantCleanup = isBinaryPcm16
+          ? req.query.cleanup === '1' || req.query.cleanup === 'true'
+          : Boolean(body.cleanup);
 
-      let samples: Float32Array | null = null;
-      if (typeof body.pcmBase64 === 'string' && body.pcmBase64.length > 0) {
-        const rawBuf = Buffer.from(body.pcmBase64, 'base64');
-        if (rawBuf.byteLength > MAX_PCM_SAMPLES * 4) {
-          res.status(413).json({
-            ok: false,
-            code: 'AUDIO_TOO_LONG',
-            error: 'Ses kaydı en fazla 30 saniye olabilir.',
+        let samples: Float32Array | Int16Array | null = null;
+        if (isBinaryPcm16) {
+          const rawBuf = req.body as Buffer;
+          if (rawBuf.byteLength > MAX_PCM_SAMPLES * 2) {
+            res.status(413).json({
+              ok: false,
+              code: 'AUDIO_TOO_LONG',
+              error: 'Ses kaydı en fazla 30 saniye olabilir.',
+            });
+            return;
+          }
+          if (rawBuf.byteLength >= 2 && rawBuf.byteLength % 2 === 0) {
+            if (rawBuf.byteOffset % 2 === 0) {
+              samples = new Int16Array(rawBuf.buffer, rawBuf.byteOffset, rawBuf.byteLength / 2);
+            } else {
+              const copy = new Uint8Array(rawBuf.byteLength);
+              copy.set(rawBuf);
+              samples = new Int16Array(copy.buffer);
+            }
+          }
+        } else if (typeof body.pcmBase64 === 'string' && body.pcmBase64.length > 0) {
+          const rawBuf = Buffer.from(body.pcmBase64, 'base64');
+          if (rawBuf.byteLength > MAX_PCM_SAMPLES * 4) {
+            res.status(413).json({
+              ok: false,
+              code: 'AUDIO_TOO_LONG',
+              error: 'Ses kaydı en fazla 30 saniye olabilir.',
+            });
+            return;
+          }
+          samples = sttServiceMod.toFloat32Array(rawBuf);
+        } else if (Array.isArray(body.pcm)) {
+          if (body.pcm.length > MAX_PCM_SAMPLES) {
+            res.status(413).json({
+              ok: false,
+              code: 'AUDIO_TOO_LONG',
+              error: 'Ses kaydı en fazla 30 saniye olabilir.',
+            });
+            return;
+          }
+          samples = sttServiceMod.toFloat32Array(body.pcm);
+        }
+        if (!samples) {
+          res.status(400).json({ ok: false, code: 'INVALID_AUDIO', error: 'Geçersiz ses verisi.' });
+          return;
+        }
+
+        aiRuntime.syncAiRuntimeFromSettings();
+        const sttRes = await sttService.transcribePcm(samples, language);
+        if (sttRes.ok && sttRes.text) {
+          let finalText = polishFastTranscript(sttRes.text);
+          let cleaned = finalText !== sttRes.text;
+          // Only apply LLM dictation polish when local LLM is already warm in memory (zero cold-load stall)
+          const llmSnap = llmService.getStatus();
+          if (
+            wantCleanup &&
+            llmSnap.available &&
+            (llmSnap.loaded || llmSnap.backend !== 'node-llama-cpp')
+          ) {
+            const cleanupLang = language !== 'auto' ? language : currentSettings.language || 'tr';
+            const polished = await llmService.cleanDictationText({
+              text: finalText,
+              language: cleanupLang,
+            });
+            if (polished?.text) {
+              finalText = polishFastTranscript(polished.text);
+              cleaned = cleaned || Boolean(polished.cleaned);
+            }
+          }
+          const intentParsed = voiceIntentParser.parseVoiceIntent(finalText);
+          const extracted = voiceIntentParser.extractUniversalTaskFields(finalText);
+          const parsedTitle =
+            intentParsed.intent === 'add_task' && typeof intentParsed.payload?.title === 'string'
+              ? intentParsed.payload.title
+              : extracted.cleaned || finalText;
+          res.json({
+            ...sttRes,
+            rawText: sttRes.text,
+            text: finalText,
+            cleaned,
+            parsed: {
+              intent: intentParsed.intent,
+              title: parsedTitle,
+              dueDate:
+                intentParsed.intent === 'add_task'
+                  ? (intentParsed.payload?.dueDate ?? extracted.dueDate ?? null)
+                  : (extracted.dueDate ?? null),
+              dueTime:
+                intentParsed.intent === 'add_task'
+                  ? (intentParsed.payload?.dueTime ?? extracted.dueTime ?? null)
+                  : (extracted.dueTime ?? null),
+              priority:
+                intentParsed.intent === 'add_task'
+                  ? (intentParsed.payload?.priority ?? extracted.priority ?? 'normal')
+                  : (extracted.priority ?? 'normal'),
+              important: Boolean(
+                intentParsed.intent === 'add_task'
+                  ? (intentParsed.payload?.important ?? extracted.important)
+                  : extracted.important,
+              ),
+              category:
+                (intentParsed.intent === 'add_task' ? intentParsed.payload?.category : null) ??
+                extracted.category ??
+                null,
+              tags:
+                (intentParsed.intent === 'add_task' ? intentParsed.payload?.tags : null) ??
+                extracted.tags ??
+                [],
+            },
           });
           return;
         }
-        samples = sttServiceMod.toFloat32Array(rawBuf);
-      } else if (Array.isArray(body.pcm)) {
-        if (body.pcm.length > MAX_PCM_SAMPLES) {
-          res.status(413).json({
-            ok: false,
-            code: 'AUDIO_TOO_LONG',
-            error: 'Ses kaydı en fazla 30 saniye olabilir.',
-          });
-          return;
-        }
-        samples = sttServiceMod.toFloat32Array(body.pcm);
+        res.json(sttRes);
+      } catch (err) {
+        sendRouteError(res, 'POST /api/ai/transcribe', err, 'Ses deşifre edilemedi.');
       }
-      if (!samples) {
-        res.status(400).json({ ok: false, code: 'INVALID_AUDIO', error: 'Geçersiz ses verisi.' });
-        return;
-      }
-
-      aiRuntime.syncAiRuntimeFromSettings();
-      const sttRes = await sttService.transcribePcm(samples, language);
-      res.json(sttRes);
-    } catch (err) {
-      sendRouteError(res, 'POST /api/ai/transcribe', err, 'Ses deşifre edilemedi.');
-    }
-  });
+    },
+  );
 
   app.get('/api/ai/tts-voices', (_req, res) => {
     try {

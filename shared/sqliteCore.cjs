@@ -9,10 +9,56 @@
 const ragChunker = require('./ragChunker.cjs');
 const textNormalize = require('./textNormalize.cjs');
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
+
+/** @type {WeakMap<object, Map<string, any>>} */
+const STMT_CACHE = new WeakMap();
+
+/**
+ * Returns a cached better-sqlite3 prepared Statement per database handle.
+ * Eliminates repeated SQL bytecode compilation across hot DAO/repository paths.
+ */
+function prepareCached(db, sql) {
+  let map = STMT_CACHE.get(db);
+  if (!map) {
+    map = new Map();
+    STMT_CACHE.set(db, map);
+  }
+  let stmt = map.get(sql);
+  if (!stmt) {
+    stmt = db.prepare(sql);
+    map.set(sql, stmt);
+  }
+  return stmt;
+}
 
 function applyAgendameaSchema(db, options = {}) {
   const selfHealFts = options.selfHealFts !== false;
+  const currentVersion = Number(db.pragma('user_version', { simple: true }) ?? 0);
+
+  // Fast-path for already-migrated databases: skip all 15+ DDL statements & table_info PRAGMAs
+  if (currentVersion >= SCHEMA_VERSION) {
+    if (selfHealFts) {
+      try {
+        const todoCount = Number(
+          prepareCached(db, 'SELECT COUNT(*) as c FROM todos').get()?.c || 0,
+        );
+        const ftsCount = Number(
+          prepareCached(db, 'SELECT COUNT(*) as c FROM todos_fts').get()?.c || 0,
+        );
+        if (todoCount !== ftsCount) {
+          db.exec("INSERT INTO todos_fts(todos_fts) VALUES('rebuild')");
+        }
+      } catch {
+        try {
+          db.exec("INSERT INTO todos_fts(todos_fts) VALUES('rebuild')");
+        } catch {
+          // Ignore rebuild failure on restricted handles
+        }
+      }
+    }
+    return;
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS categories (
@@ -117,7 +163,6 @@ function applyAgendameaSchema(db, options = {}) {
     CREATE INDEX IF NOT EXISTS idx_embedding_chunks_model ON todo_embedding_chunks(model_id, dims);
   `);
 
-  const currentVersion = Number(db.pragma('user_version', { simple: true }) ?? 0);
   if (currentVersion < SCHEMA_VERSION) {
     const catCols = db.pragma('table_info(categories)');
     if (!catCols.some((c) => c.name === 'deleted_at')) {
@@ -141,6 +186,8 @@ function applyAgendameaSchema(db, options = {}) {
       CREATE INDEX IF NOT EXISTS idx_todos_active_order
         ON todos(pinned DESC, sort_order ASC, created_at DESC)
         WHERE deleted_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_todos_active_schedule
+        ON todos(deleted_at, completed, due_date);
       CREATE INDEX IF NOT EXISTS idx_categories_active_order
         ON categories(pinned DESC, sort_order ASC, created_at ASC)
         WHERE deleted_at IS NULL;
@@ -178,15 +225,28 @@ function applyAgendameaSchema(db, options = {}) {
       INSERT INTO todos_fts(todos_fts, rowid, title, notes, tags)
       VALUES ('delete', old.rowid, old.title, old.notes, old.tags);
     END;
-
-    DROP TRIGGER IF EXISTS todos_fts_au;
-    CREATE TRIGGER todos_fts_au AFTER UPDATE OF title, notes, tags ON todos BEGIN
-      INSERT INTO todos_fts(todos_fts, rowid, title, notes, tags)
-      VALUES ('delete', old.rowid, old.title, old.notes, old.tags);
-      INSERT INTO todos_fts(rowid, title, notes, tags)
-      VALUES (new.rowid, new.title, new.notes, new.tags);
-    END;
   `);
+
+  if (currentVersion < SCHEMA_VERSION) {
+    db.exec(`
+      DROP TRIGGER IF EXISTS todos_fts_au;
+      CREATE TRIGGER todos_fts_au AFTER UPDATE OF title, notes, tags ON todos BEGIN
+        INSERT INTO todos_fts(todos_fts, rowid, title, notes, tags)
+        VALUES ('delete', old.rowid, old.title, old.notes, old.tags);
+        INSERT INTO todos_fts(rowid, title, notes, tags)
+        VALUES (new.rowid, new.title, new.notes, new.tags);
+      END;
+    `);
+  } else {
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS todos_fts_au AFTER UPDATE OF title, notes, tags ON todos BEGIN
+        INSERT INTO todos_fts(todos_fts, rowid, title, notes, tags)
+        VALUES ('delete', old.rowid, old.title, old.notes, old.tags);
+        INSERT INTO todos_fts(rowid, title, notes, tags)
+        VALUES (new.rowid, new.title, new.notes, new.tags);
+      END;
+    `);
+  }
 
   const rebuildFts = () => {
     try {
@@ -212,7 +272,9 @@ function applyAgendameaSchema(db, options = {}) {
   }
 }
 
-function seedDefaultSettings(db) {
+function seedDefaultSettings(db, initialLocale = 'tr') {
+  const safeLocale =
+    typeof initialLocale === 'string' && initialLocale.trim() ? initialLocale.trim() : 'tr';
   const stmt = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   const defaults = [
     ['themeMode', 'light'],
@@ -220,7 +282,7 @@ function seedDefaultSettings(db) {
     ['dragLocked', '0'],
     ['sidebarCollapsed', '0'],
     ['themeCustomized', '0'],
-    ['language', 'tr'],
+    ['language', safeLocale],
     ['autoUpdateCheck', '1'],
     ['onedriveAutoSync', '0'],
     ['onedriveCustomPath', ''],
@@ -400,6 +462,7 @@ function searchHybridRagCore(db, query, options = {}) {
 
 module.exports = {
   SCHEMA_VERSION,
+  prepareCached,
   applyAgendameaSchema,
   seedDefaultSettings,
   searchHybridRagCore,

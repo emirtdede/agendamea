@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   Bell,
   BookOpen,
+  BookOpenText,
   Cloud,
   Keyboard,
   Menu,
@@ -75,7 +76,7 @@ export function SettingsModal({
   onOpenWelcomeGuide,
   actions,
 }: SettingsModalProps) {
-  const { t, meta } = useI18n();
+  const { t, meta, legalDocs } = useI18n();
   const trashCount = useWorkspaceSnapshotSelector(
     (s) => s.trashedTodos.length + s.trashedCategories.length,
     Object.is,
@@ -237,6 +238,12 @@ export function SettingsModal({
     };
   }, [pendingScrollTarget]);
 
+  useEffect(() => {
+    if (activeLegalDoc && contentScrollRef.current) {
+      contentScrollRef.current.scrollTop = 0;
+    }
+  }, [activeLegalDoc]);
+
   const handleSelectTab = useCallback((nextTab: SettingsTabId) => {
     const resolved = resolveCanonicalSettingsTab(nextTab);
     setActiveTab(resolved.tab);
@@ -306,6 +313,7 @@ export function SettingsModal({
       {
         groupTitle: t.settingsNavGroupSystem,
         items: [
+          { id: 'guide', label: t.settingsTabUserGuide, icon: BookOpenText },
           { id: 'docs', label: t.settingsTabAutomation, icon: BookOpen },
           {
             id: 'about',
@@ -328,6 +336,7 @@ export function SettingsModal({
       t.dataAndBackupTitle,
       t.tabTrash,
       t.settingsNavGroupSystem,
+      t.settingsTabUserGuide,
       t.settingsTabAutomation,
       t.settingsTabAbout,
       trashCount,
@@ -372,11 +381,12 @@ export function SettingsModal({
     setSettingsSearch('');
     const subTab = entry.subTab ?? resolved.subTab;
     const expandSectionId = entry.expandSectionId ?? resolved.expandSectionId;
-    if (subTab || expandSectionId) {
-      setNavSignal({ subTab, expandSectionId, seq });
-    } else {
-      setNavSignal(null);
-    }
+    setNavSignal({
+      subTab,
+      expandSectionId,
+      revealSettingId: entry.settingId,
+      seq,
+    });
     setPendingScrollTarget({ id: entry.settingId, seq });
   };
 
@@ -448,7 +458,7 @@ export function SettingsModal({
               type="button"
               data-testid={`settings-search-hit-${entry.id}`}
               onClick={() => handleSelectSearchResult(entry)}
-              className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-start hover:bg-[var(--surface-hover)] transition-colors"
+              className="flex w-full flex-col items-start rounded-md px-2.5 py-1.5 text-start ag-hover-glow transition-colors"
             >
               <span className="text-xs font-medium text-[var(--text-primary)]">
                 {String(t[entry.labelKey] ?? '')}
@@ -527,7 +537,7 @@ export function SettingsModal({
                           className={`group flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-[7px] text-start text-[13px] transition-colors ${
                             active
                               ? 'bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
-                              : 'font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                              : 'font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]'
                           }`}
                         >
                           <span className="flex items-center gap-2.5 min-w-0">
@@ -567,7 +577,7 @@ export function SettingsModal({
                         type="button"
                         data-testid="settings-sidebar-welcome-guide"
                         onClick={onOpenWelcomeGuide}
-                        className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-start text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                        className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-start text-[13px] font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors"
                       >
                         <Sparkles className="h-4 w-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--accent)] transition-colors" />
                         <span className="truncate">{t.welcomeReplayButton}</span>
@@ -586,7 +596,7 @@ export function SettingsModal({
               data-testid="settings-back-button"
               disabled={isImporting}
               onClick={safeClose}
-              className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-[13px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
+              className="group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-[13px] font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-40 transition-colors whitespace-nowrap"
             >
               <ArrowLeft className="h-4 w-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--text-primary)] rtl:rotate-180 transition-colors" />
               <span className="truncate">{t.settingsBackToTasks}</span>
@@ -603,7 +613,7 @@ export function SettingsModal({
                   type="button"
                   onClick={onOpenMobileSidebar}
                   aria-label={t.openMenu}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] md:hidden shrink-0"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] ag-hover-card-glow hover:text-[var(--text-primary)] md:hidden shrink-0"
                 >
                   <Menu className="h-4 w-4" />
                 </button>
@@ -615,7 +625,7 @@ export function SettingsModal({
                 onClick={safeClose}
                 aria-label={t.settingsBackToTasks}
                 title={t.settingsBackToTasks}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] disabled:opacity-40 shrink-0 transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] disabled:opacity-40 shrink-0 transition-colors"
               >
                 <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
               </button>
@@ -659,7 +669,7 @@ export function SettingsModal({
                     className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
                       active
                         ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)] font-semibold'
-                        : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                        : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] ag-hover-card-glow hover:text-[var(--text-primary)]'
                     }`}
                   >
                     <Icon
@@ -692,17 +702,25 @@ export function SettingsModal({
         <header className="app-drag-region hidden lg:flex h-14 shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--canvas)] px-7 pe-36 select-none">
           <div className="app-no-drag flex items-center gap-2.5 min-w-0">
             {activeLegalDoc ? (
-              <button
-                type="button"
-                onClick={() => setActiveLegalDoc(null)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0"
-              >
-                <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" />
-                <span>{t.backToSettingsButton}</span>
-              </button>
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveLegalDoc(null)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)] shrink-0"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 rtl:rotate-180" />
+                  <span>{t.backToSettingsButton}</span>
+                </button>
+                <span aria-hidden="true" className="text-xs text-[var(--border-strong)]">
+                  /
+                </span>
+                <span className="truncate font-display text-[13.5px] font-semibold text-[var(--text-primary)]">
+                  {legalDocs[activeLegalDoc].title}
+                </span>
+              </div>
             ) : (
               <>
-                <ActiveTabIcon className="h-4 w-4 shrink-0 text-[var(--accent)]" />
+                <ActiveTabIcon className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
                 <h2 className="font-display text-[14.5px] font-bold tracking-tight text-[var(--text-primary)] truncate">
                   {activeNavMeta?.label}
                 </h2>
@@ -741,7 +759,12 @@ export function SettingsModal({
                   onOpenLegalDoc={(doc) => {
                     setActiveTab('about');
                     setActiveLegalDoc(doc);
+                    if (contentScrollRef.current) {
+                      contentScrollRef.current.scrollTop = 0;
+                    }
                   }}
+                  onSelectTab={handleSelectTab}
+                  onOpenWelcomeGuide={onOpenWelcomeGuide}
                   actions={actions}
                 />
               </div>

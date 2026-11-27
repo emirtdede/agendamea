@@ -56,7 +56,7 @@ export const OneDriveRecoveryBanner = React.memo(function OneDriveRecoveryBanner
           type="button"
           onClick={onDismiss}
           aria-label={t.closeMenu}
-          className="rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+          className="rounded-md p-1 text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]"
         >
           <X className="h-4 w-4" />
         </button>
@@ -78,7 +78,7 @@ export const OneDriveRecoveryBanner = React.memo(function OneDriveRecoveryBanner
           type="button"
           disabled={isRestoring}
           onClick={onDismiss}
-          className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
+          className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow transition-colors"
         >
           {t.onedriveStartFreshButton}
         </button>
@@ -86,7 +86,7 @@ export const OneDriveRecoveryBanner = React.memo(function OneDriveRecoveryBanner
         <button
           type="button"
           onClick={onOpenFolder}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-card-glow hover:text-[var(--text-primary)] transition-colors"
         >
           <FolderOpen className="h-3.5 w-3.5" />
           <span>{t.onedriveOpenFolderButton}</span>

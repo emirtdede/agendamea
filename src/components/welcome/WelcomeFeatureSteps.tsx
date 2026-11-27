@@ -80,7 +80,7 @@ export function WelcomeFeatureSteps({
       type="button"
       data-testid={testId}
       onClick={() => onComplete(target)}
-      className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors whitespace-nowrap shrink-0 self-center"
+      className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] ag-hover-card-glow transition-colors whitespace-nowrap shrink-0 self-center"
     >
       <span>{t.settings}</span>
       <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180 shrink-0" />

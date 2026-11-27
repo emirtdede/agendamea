@@ -307,28 +307,28 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
 
   return (
     <div className="space-y-5" data-testid="docs-tab-mcp">
-      {/* Main MCP Client Card */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-4">
+      {/* Card 1: MCP Overview, One-Click Client Installer & Config Snippet */}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:p-5 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <Cpu className="h-4 w-4 text-[var(--accent)]" />
-              <span className="font-display text-sm font-semibold text-[var(--text-primary)]">
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <Cpu className="h-3.5 w-3.5 text-[var(--text-muted)] self-center" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
                 {t.docsMcpTitle}
               </span>
-              <span className="font-mono-tabular rounded-full border border-[var(--border)] bg-[var(--surface-subtle)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)]">
-                2025-11-25 · 23 {t.docsMcpToolsShortLabel}
+              <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
+                · 2025-11-25 · 23 {t.docsMcpToolsShortLabel}
               </span>
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{t.docsMcpDesc}</p>
+            <p className="text-xs leading-relaxed text-[var(--text-muted)]">{t.docsMcpDesc}</p>
           </div>
           {hasDesktopBridge && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onRefreshClients}
                 aria-label={t.retry}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface-subtle)] text-[var(--text-muted)] transition-colors ag-hover-card-glow hover:text-[var(--text-primary)]"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
@@ -337,11 +337,9 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                 data-testid="docs-mcp-test-btn"
                 onClick={onTestMcp}
                 disabled={mcpProbing}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors ag-hover-card-glow disabled:opacity-50"
               >
-                <Play
-                  className={`h-3 w-3 ${mcpProbing ? 'animate-pulse text-[var(--accent)]' : ''}`}
-                />
+                <Play className={`h-3 w-3 ${mcpProbing ? 'animate-pulse' : ''}`} />
                 <span>{mcpProbing ? t.docsMcpTestingServerBtn : t.docsMcpTestServerBtn}</span>
               </button>
             </div>
@@ -349,8 +347,8 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
         </div>
 
         {!hasDesktopBridge && (
-          <div className="flex items-start gap-2 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-xs text-[var(--text-secondary)]">
-            <Info className="h-3.5 w-3.5 text-[var(--accent)] shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2 rounded-lg border border-[var(--border)]/70 bg-[var(--canvas)]/50 px-3 py-2 text-xs text-[var(--text-secondary)]">
+            <Info className="h-3.5 w-3.5 text-[var(--text-muted)] shrink-0 mt-0.5" />
             <span>{t.docsDesktopOnlyNotice}</span>
           </div>
         )}
@@ -361,8 +359,8 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
             data-testid="docs-mcp-probe-result"
             className={`rounded-lg border px-3 py-2 text-xs ${
               mcpProbe.ok
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                : 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
+                ? 'border-emerald-500/30 bg-emerald-500/[0.06] text-emerald-700 dark:text-emerald-300'
+                : 'border-red-500/35 bg-red-500/[0.06] text-red-700 dark:text-red-300'
             }`}
           >
             {mcpProbe.ok ? (
@@ -384,34 +382,31 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
           </div>
         )}
 
-        {/* Collapsible One-Click AI Client Installer Grid (12 cards / 6x2, default collapsed) */}
+        {/* Collapsible One-Click AI Client Installer List */}
         {mcpClients.length > 0 && (
-          <div
-            data-testid="mcp-clients-accordion"
-            className="rounded-lg border border-[var(--border)] bg-[var(--canvas)]/60 overflow-hidden"
-          >
+          <div data-testid="mcp-clients-accordion" className="border-y border-[var(--border)]/75">
             <button
               type="button"
               data-testid="mcp-clients-accordion-toggle"
               aria-expanded={isClientsExpanded}
               onClick={() => setClientsOpen((prev) => !prev)}
-              className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-start transition-colors hover:bg-[var(--surface-hover)]"
+              className="flex w-full items-center justify-between gap-2 py-3 text-start transition-colors ag-hover-glow"
             >
-              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                <span className="text-xs font-semibold text-[var(--text-primary)]">
+              <div className="flex flex-wrap items-baseline gap-2 min-w-0">
+                <span className="text-[13px] font-medium text-[var(--text-primary)]">
                   {t.docsMcpAutoClientsTitle}
                 </span>
-                <span className="rounded bg-[var(--surface-subtle)] px-1.5 py-0.5 font-mono-tabular text-[10px] text-[var(--text-muted)]">
+                <span className="font-mono-tabular text-[11px] text-[var(--text-muted)]">
                   {connectedCount}/{totalClientCards}
                 </span>
                 {connectedCount > 0 && (
-                  <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                    {connectedCount} {t.docsMcpClientConnectedBadge}
+                  <span className="text-[11px] text-[var(--text-secondary)]">
+                    · {connectedCount} {t.docsMcpClientConnectedBadge}
                   </span>
                 )}
                 {detectedCount > 0 && (
-                  <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent)]">
-                    {detectedCount} {t.docsMcpClientDetectedBadge}
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    · {detectedCount} {t.docsMcpClientDetectedBadge}
                   </span>
                 )}
               </div>
@@ -423,56 +418,47 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
             </button>
 
             {isClientsExpanded && (
-              <div className="animate-accordion border-t border-[var(--border)] p-2.5 space-y-2">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="animate-accordion border-t border-[var(--border)]/60 pb-3 pt-2 space-y-2">
+                <div className="divide-y divide-[var(--border)]/50">
                   {mcpClients.map((c) => {
                     const isBusy = mcpBusyId === c.id;
-                    const statusBadge = c.parseError
-                      ? {
-                          text: t.docsMcpClientErrorBadge,
-                          cls: 'bg-red-500/15 text-red-600 dark:text-red-400',
-                        }
+                    const statusText = c.parseError
+                      ? t.docsMcpClientErrorBadge
                       : c.configured && c.usesLegacyCmd
-                        ? {
-                            text: t.docsMcpClientLegacyBadge,
-                            cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-                          }
+                        ? t.docsMcpClientLegacyBadge
                         : c.configured
-                          ? {
-                              text: t.docsMcpClientConnectedBadge,
-                              cls: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-                            }
+                          ? t.docsMcpClientConnectedBadge
                           : c.detected
-                            ? {
-                                text: t.docsMcpClientDetectedBadge,
-                                cls: 'bg-[var(--accent-soft)] text-[var(--accent)]',
-                              }
-                            : {
-                                text: t.docsMcpClientNotFoundBadge,
-                                cls: 'bg-[var(--surface-subtle)] text-[var(--text-muted)]',
-                              };
+                            ? t.docsMcpClientDetectedBadge
+                            : t.docsMcpClientNotFoundBadge;
                     return (
                       <div
                         key={c.id}
                         data-testid={`mcp-client-${c.id}`}
-                        className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
+                        className="flex items-center justify-between gap-2 py-2.5"
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
+                          <div className="flex flex-wrap items-baseline gap-2">
                             <span className="text-xs font-semibold text-[var(--text-primary)]">
                               {c.name}
                             </span>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusBadge.cls}`}
+                              className={`text-[10.5px] ${
+                                c.parseError
+                                  ? 'text-red-600 dark:text-red-400'
+                                  : c.configured
+                                    ? 'text-[var(--text-secondary)]'
+                                    : 'text-[var(--text-muted)]'
+                              }`}
                             >
-                              {statusBadge.text}
+                              · {statusText}
                             </span>
                           </div>
-                          <p className="mt-0.5 truncate font-mono-tabular text-[10px] text-[var(--text-muted)]">
+                          <p className="mt-0.5 truncate font-mono-tabular text-[10.5px] text-[var(--text-muted)]">
                             {c.configPath}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex items-center gap-2.5 shrink-0">
                           <button
                             type="button"
                             onClick={() =>
@@ -480,7 +466,7 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                             }
                             aria-label={t.docsMcpOpenConfigFolder}
                             title={t.docsMcpOpenConfigFolder}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                            className="inline-flex h-7 w-7 items-center justify-center text-[var(--text-muted)] transition-colors ag-hover-glow hover:text-[var(--text-primary)]"
                           >
                             <FolderOpen className="h-3.5 w-3.5" />
                           </button>
@@ -489,7 +475,7 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                               type="button"
                               onClick={() => onUninstallMcpClient(c.id)}
                               disabled={isBusy}
-                              className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-red-500 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 text-xs font-medium text-[var(--text-muted)] transition-colors ag-hover-danger-glow hover:text-red-500 disabled:opacity-50"
                             >
                               <Trash2 className="h-3 w-3" />
                               <span>{t.docsMcpClientRemoveBtn}</span>
@@ -499,11 +485,7 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                               type="button"
                               onClick={() => onInstallMcpClient(c.id)}
                               disabled={isBusy}
-                              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
-                              style={{
-                                backgroundColor: 'var(--accent)',
-                                color: 'var(--accent-fg)',
-                              }}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--text-primary)] transition-opacity ag-hover-glow disabled:opacity-50"
                             >
                               <Download className="h-3 w-3" />
                               <span>
@@ -518,33 +500,27 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                     );
                   })}
 
-                  {/* 12th Card: Custom User-Selected MCP Config (.json / .jsonc / .toml) */}
+                  {/* Custom User-Selected MCP Config (.json / .jsonc / .toml) */}
                   {hasDesktopBridge && onInstallCustomMcp && (
                     <div
                       data-testid="mcp-client-custom"
-                      className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface)]/70 px-3 py-2.5 transition-colors hover:border-[var(--accent)]"
+                      className="flex items-center justify-between gap-2 py-2.5"
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <FileCode2 className="h-3.5 w-3.5 text-[var(--accent)] shrink-0" />
+                        <div className="flex flex-wrap items-baseline gap-2">
+                          <FileCode2 className="h-3.5 w-3.5 text-[var(--text-muted)] self-center shrink-0" />
                           <span className="text-xs font-semibold text-[var(--text-primary)]">
                             {t.notificationsProfileCustom} MCP
                           </span>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                              customMcpPath
-                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                                : 'bg-[var(--surface-subtle)] text-[var(--text-muted)]'
-                            }`}
-                          >
-                            {customMcpPath ? t.docsMcpClientConnectedBadge : '.json / .toml'}
+                          <span className="text-[10.5px] text-[var(--text-muted)]">
+                            · {customMcpPath ? t.docsMcpClientConnectedBadge : '.json / .toml'}
                           </span>
                         </div>
-                        <p className="mt-0.5 truncate font-mono-tabular text-[10px] text-[var(--text-muted)]">
+                        <p className="mt-0.5 truncate font-mono-tabular text-[10.5px] text-[var(--text-muted)]">
                           {customMcpPath || 'mcp.json · settings.json · config.toml'}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-2.5 shrink-0">
                         {customMcpPath && (
                           <button
                             type="button"
@@ -553,7 +529,7 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                             }
                             aria-label={t.docsMcpOpenConfigFolder}
                             title={t.docsMcpOpenConfigFolder}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                            className="inline-flex h-7 w-7 items-center justify-center text-[var(--text-muted)] transition-colors ag-hover-glow hover:text-[var(--text-primary)]"
                           >
                             <FolderOpen className="h-3.5 w-3.5" />
                           </button>
@@ -563,9 +539,9 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                           data-testid="mcp-custom-install-btn"
                           onClick={onInstallCustomMcp}
                           disabled={mcpBusyId === 'custom'}
-                          className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-primary)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--text-primary)] transition-colors ag-hover-glow disabled:opacity-50"
                         >
-                          <Download className="h-3 w-3 text-[var(--accent)]" />
+                          <Download className="h-3 w-3" />
                           <span>{t.docsMcpClientInstallBtn}</span>
                         </button>
                       </div>
@@ -573,7 +549,7 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                   )}
                 </div>
                 {mcpActionMsg && (
-                  <p className="text-xs font-medium text-[var(--accent)]">{mcpActionMsg}</p>
+                  <p className="text-xs font-medium text-[var(--text-primary)]">{mcpActionMsg}</p>
                 )}
               </div>
             )}
@@ -581,9 +557,9 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
         )}
 
         {/* Format Switcher & Copyable Config Snippet */}
-        <div className="space-y-2 border-t border-[var(--border)] pt-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5 text-[10.5px]">
+        <div className="space-y-2.5 pt-1">
+          <div className="flex items-start justify-between gap-3 border-b border-[var(--border)]/70 pb-2.5">
+            <div className="flex flex-wrap items-center gap-1 text-[11px]">
               {(
                 [
                   ['standard', t.docsMcpFormatStandard],
@@ -601,8 +577,8 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
                   onClick={() => onSelectFormat(fmt)}
                   className={`rounded-md px-2 py-1 font-medium transition-colors whitespace-nowrap ${
                     mcpFormat === fmt
-                      ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                      ? 'bg-[var(--surface-subtle)] text-[var(--text-primary)]'
+                      : 'text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]'
                   }`}
                 >
                   {label}
@@ -613,12 +589,12 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
               type="button"
               data-testid="docs-copy-mcp-btn"
               onClick={() => onCopy(`mcp-${mcpFormat}`, activeMcpJson)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] whitespace-nowrap"
+              className="shrink-0 inline-flex items-center gap-1.5 py-1 text-xs font-medium text-[var(--text-secondary)] transition-colors ag-hover-glow hover:text-[var(--text-primary)] whitespace-nowrap"
             >
               {copiedKey === `mcp-${mcpFormat}` ? (
-                <Check className="h-3 w-3 text-emerald-500" />
+                <Check className="h-3.5 w-3.5" />
               ) : (
-                <Copy className="h-3 w-3" />
+                <Copy className="h-3.5 w-3.5 text-[var(--text-muted)]" />
               )}
               <span>{copiedKey === `mcp-${mcpFormat}` ? t.docsCopiedLabel : t.docsCopyButton}</span>
             </button>
@@ -629,180 +605,184 @@ export const DocsMcpSection = React.memo(function DocsMcpSection({
               <code className="font-mono-tabular">127.0.0.1:{runtimePort}/api/mcp</code>)
             </p>
           )}
-          <pre className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-3 font-mono-tabular text-[11px] leading-relaxed text-[var(--text-secondary)]">
+          <pre className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--canvas)]/60 p-3 font-mono-tabular text-[11px] leading-relaxed text-[var(--text-secondary)]">
             {activeMcpJson}
           </pre>
         </div>
       </div>
 
-      {/* Interactive 23 MCP Tools Explorer with Live Read-Only JSON Tester */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-        <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-2.5">
-          <h4 className="font-display text-xs font-semibold text-[var(--text-primary)]">
-            {t.docsMcpToolsTitle} ({filteredTools.length})
-          </h4>
-          <span className="text-[11px] text-[var(--text-muted)]">{t.docsMcpTryLiveHint}</span>
-        </div>
-        <div className="divide-y divide-[var(--border)]">
-          {filteredTools.map((tool) => {
-            const isOpen = expandedTool === tool.name;
-            const liveJson = toolOutputs[tool.name];
-            return (
-              <div key={tool.name}>
-                <button
-                  type="button"
-                  data-testid={`mcp-tool-card-${tool.name}`}
-                  aria-expanded={isOpen}
-                  onClick={() => setExpandedTool((prev) => (prev === tool.name ? null : tool.name))}
-                  className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-start hover:bg-[var(--surface-hover)]/70 transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <code className="font-mono-tabular text-[11.5px] font-semibold text-[var(--text-primary)]">
-                        {tool.name}
-                      </code>
-                      {tool.readOnly ? (
-                        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9.5px] font-semibold text-emerald-600 dark:text-emerald-400">
-                          {t.docsMcpBadgeReadOnly}
-                        </span>
-                      ) : tool.destructive ? (
-                        <span className="inline-flex items-center gap-0.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9.5px] font-semibold text-amber-700 dark:text-amber-300">
-                          <AlertTriangle className="h-2.5 w-2.5" />
-                          <span>{t.docsMcpBadgeDestructive}</span>
-                        </span>
-                      ) : null}
+      {/* Card 2: Interactive 23 MCP Tools Explorer + Resources & Prompts */}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 divide-y divide-[var(--border)]/70">
+        <section className="p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t.docsMcpToolsTitle} ({filteredTools.length})
+            </h4>
+            <span className="text-[11px] text-[var(--text-muted)]">{t.docsMcpTryLiveHint}</span>
+          </div>
+          <div className="border-t border-[var(--border)]/70 divide-y divide-[var(--border)]/60">
+            {filteredTools.map((tool) => {
+              const isOpen = expandedTool === tool.name;
+              const liveJson = toolOutputs[tool.name];
+              return (
+                <div key={tool.name}>
+                  <button
+                    type="button"
+                    data-testid={`mcp-tool-card-${tool.name}`}
+                    aria-expanded={isOpen}
+                    onClick={() =>
+                      setExpandedTool((prev) => (prev === tool.name ? null : tool.name))
+                    }
+                    className="flex w-full items-center justify-between gap-2 py-2.5 text-start ag-row-luminous transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <code className="font-mono-tabular text-[12px] font-semibold text-[var(--text-primary)]">
+                          {tool.name}
+                        </code>
+                        {tool.readOnly ? (
+                          <span className="text-[10.5px] text-[var(--text-muted)]">
+                            · {t.docsMcpBadgeReadOnly}
+                          </span>
+                        ) : tool.destructive ? (
+                          <span className="inline-flex items-center gap-0.5 text-[10.5px] text-amber-600 dark:text-amber-400">
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            <span>{t.docsMcpBadgeDestructive}</span>
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
+                        {String(t[tool.descKey] ?? '')}
+                      </p>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
-                      {String(t[tool.descKey] ?? '')}
-                    </p>
-                  </div>
-                  {isOpen ? (
-                    <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
-                  )}
-                </button>
+                    {isOpen ? (
+                      <ChevronDown className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-[var(--text-muted)] shrink-0" />
+                    )}
+                  </button>
 
-                {isOpen && (
-                  <div className="animate-accordion border-t border-[var(--border)]/60 bg-[var(--canvas)] px-4 py-3 space-y-2.5">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                        <span className="font-medium text-[var(--text-muted)]">
-                          {t.docsMcpParamsLabel}:
-                        </span>
-                        {tool.params.length === 0 ? (
-                          <span className="font-mono-tabular text-[var(--text-muted)]">()</span>
-                        ) : (
-                          tool.params.map((p) => (
-                            <code
-                              key={p}
-                              className="rounded border border-[var(--border)] bg-[var(--surface)] px-1.5 py-0.5 font-mono-tabular text-[10.5px] text-[var(--text-secondary)]"
-                            >
-                              {p}
-                            </code>
-                          ))
+                  {isOpen && (
+                    <div className="animate-accordion pb-3 ps-3 border-s-2 border-[var(--border)] space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                          <span className="font-medium text-[var(--text-muted)]">
+                            {t.docsMcpParamsLabel}:
+                          </span>
+                          {tool.params.length === 0 ? (
+                            <span className="font-mono-tabular text-[var(--text-muted)]">()</span>
+                          ) : (
+                            tool.params.map((p) => (
+                              <code
+                                key={p}
+                                className="font-mono-tabular text-[11px] text-[var(--text-secondary)]"
+                              >
+                                {p}
+                              </code>
+                            ))
+                          )}
+                        </div>
+                        {tool.readOnly && tool.sampleArgs && (
+                          <button
+                            type="button"
+                            data-testid={`mcp-tool-run-${tool.name}`}
+                            disabled={runningTool === tool.name}
+                            onClick={() => void handleRunReadOnlyTool(tool)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--text-primary)] ag-hover-glow disabled:opacity-50"
+                          >
+                            <Play className="h-3 w-3" />
+                            <span>{t.docsMcpRunNowButton}</span>
+                          </button>
                         )}
                       </div>
-                      {tool.readOnly && tool.sampleArgs && (
-                        <button
-                          type="button"
-                          data-testid={`mcp-tool-run-${tool.name}`}
-                          disabled={runningTool === tool.name}
-                          onClick={() => void handleRunReadOnlyTool(tool)}
-                          className="inline-flex items-center gap-1 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-primary)] hover:opacity-90 disabled:opacity-50"
+                      {liveJson && (
+                        <pre
+                          data-testid={`mcp-tool-output-${tool.name}`}
+                          className="max-h-52 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--canvas)]/60 p-2.5 font-mono-tabular text-[10.5px] text-[var(--text-secondary)]"
                         >
-                          <Play className="h-3 w-3 text-[var(--accent)]" />
-                          <span>{t.docsMcpRunNowButton}</span>
-                        </button>
+                          {liveJson}
+                        </pre>
                       )}
                     </div>
-                    {liveJson && (
-                      <pre
-                        data-testid={`mcp-tool-output-${tool.name}`}
-                        className="max-h-52 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2.5 font-mono-tabular text-[10.5px] text-[var(--text-secondary)]"
-                      >
-                        {liveJson}
-                      </pre>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Resources, Resource Templates & Prompts */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-semibold text-[var(--text-secondary)]">
-            {t.docsMcpResourcesLabel} ({MCP_RESOURCES_URIS.length})
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {MCP_RESOURCES_URIS.map((uri) => (
-              <button
-                key={uri}
-                type="button"
-                onClick={() => onCopy(`res-${uri}`, uri)}
-                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 font-mono-tabular text-[10.5px] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
-              >
-                <span>{uri}</span>
-                {copiedKey === `res-${uri}` ? (
-                  <Check className="h-3 w-3 text-emerald-500" />
-                ) : (
-                  <Copy className="h-2.5 w-2.5 opacity-60" />
-                )}
-              </button>
-            ))}
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-1.5 border-t border-[var(--border)] pt-3">
-          <p className="text-[11px] font-semibold text-[var(--text-secondary)]">
-            {t.docsMcpTemplatesTitle} ({MCP_RESOURCE_TEMPLATES.length})
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {MCP_RESOURCE_TEMPLATES.map((uri) => (
-              <button
-                key={uri}
-                type="button"
-                onClick={() => onCopy(`tpl-${uri}`, uri)}
-                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 font-mono-tabular text-[10.5px] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
-              >
-                <span>{uri}</span>
-                {copiedKey === `tpl-${uri}` ? (
-                  <Check className="h-3 w-3 text-emerald-500" />
-                ) : (
-                  <Copy className="h-2.5 w-2.5 opacity-60" />
-                )}
-              </button>
-            ))}
+        {/* Resources, Resource Templates & Prompts */}
+        <section className="p-4 sm:p-5 space-y-4">
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t.docsMcpResourcesLabel} ({MCP_RESOURCES_URIS.length})
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {MCP_RESOURCES_URIS.map((uri) => (
+                <button
+                  key={uri}
+                  type="button"
+                  onClick={() => onCopy(`res-${uri}`, uri)}
+                  className="inline-flex items-center gap-1 font-mono-tabular text-[11px] text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]"
+                >
+                  <span>{uri}</span>
+                  {copiedKey === `res-${uri}` ? (
+                    <Check className="h-3 w-3" />
+                  ) : (
+                    <Copy className="h-2.5 w-2.5 opacity-60" />
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-1.5 border-t border-[var(--border)] pt-3">
-          <p className="text-[11px] font-semibold text-[var(--text-secondary)]">
-            {t.docsMcpPromptsLabel} ({MCP_PROMPTS.length})
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {MCP_PROMPTS.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onClick={() => onCopy(`prompt-${name}`, name)}
-                className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2 py-1 font-mono-tabular text-[10.5px] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)]"
-              >
-                <span>{name}</span>
-                {copiedKey === `prompt-${name}` ? (
-                  <Check className="h-3 w-3 text-emerald-500" />
-                ) : (
-                  <Copy className="h-2.5 w-2.5 opacity-60" />
-                )}
-              </button>
-            ))}
+          <div className="space-y-1.5 border-t border-[var(--border)]/60 pt-3.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t.docsMcpTemplatesTitle} ({MCP_RESOURCE_TEMPLATES.length})
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {MCP_RESOURCE_TEMPLATES.map((uri) => (
+                <button
+                  key={uri}
+                  type="button"
+                  onClick={() => onCopy(`tpl-${uri}`, uri)}
+                  className="inline-flex items-center gap-1 font-mono-tabular text-[11px] text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]"
+                >
+                  <span>{uri}</span>
+                  {copiedKey === `tpl-${uri}` ? (
+                    <Check className="h-3 w-3" />
+                  ) : (
+                    <Copy className="h-2.5 w-2.5 opacity-60" />
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+
+          <div className="space-y-1.5 border-t border-[var(--border)]/60 pt-3.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              {t.docsMcpPromptsLabel} ({MCP_PROMPTS.length})
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {MCP_PROMPTS.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => onCopy(`prompt-${name}`, name)}
+                  className="inline-flex items-center gap-1 font-mono-tabular text-[11px] text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]"
+                >
+                  <span>{name}</span>
+                  {copiedKey === `prompt-${name}` ? (
+                    <Check className="h-3 w-3" />
+                  ) : (
+                    <Copy className="h-2.5 w-2.5 opacity-60" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   );
 });

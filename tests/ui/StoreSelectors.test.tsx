@@ -247,8 +247,12 @@ describe('Selector Store Isolation (React 19 useSyncExternalStore)', () => {
     expect(prefs.consumeIconDirty()).toBe(true);
     expect(prefs.consumeIconDirty()).toBe(false);
     prefs.setZoomPercent(110);
+    prefs.setFontScale('large');
+    prefs.setReadableSpacing(true);
     prefs.setHighContrast(true);
     prefs.setReducedMotion(true);
+    expect(prefs.getState().fontScale).toBe('large');
+    expect(prefs.getState().readableSpacing).toBe(true);
     await prefs.setCloseBehavior('tray');
     await prefs.setCloseBehavior('quit', { persist: false });
     prefs.setLaunchAtStartup(true);

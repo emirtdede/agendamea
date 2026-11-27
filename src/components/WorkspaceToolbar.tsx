@@ -171,7 +171,7 @@ export const WorkspaceToolbar = React.memo(function WorkspaceToolbar({
             className={`inline-flex h-[30px] items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
               hasDateRangeFilter || isDateFilterOpen
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] ag-hover-card-glow hover:text-[var(--text-primary)]'
             }`}
           >
             <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
@@ -187,7 +187,7 @@ export const WorkspaceToolbar = React.memo(function WorkspaceToolbar({
               value={sortBy}
               onChange={(e) => onChangeSortBy(e.target.value as SortOption)}
               aria-label={t.sortCustom}
-              selectClassName="h-[30px] bg-[var(--surface)] ps-8 pe-8 font-medium hover:bg-[var(--surface-hover)] cursor-pointer"
+              selectClassName="h-[30px] bg-[var(--surface)] ps-8 pe-8 font-medium ag-hover-glow cursor-pointer"
             >
               <option value="manual">{t.sortCustom}</option>
               <option value="priority">{t.sortPriority}</option>
@@ -239,7 +239,7 @@ export const WorkspaceToolbar = React.memo(function WorkspaceToolbar({
                 type="button"
                 data-testid="tasks-date-clear"
                 onClick={onClearDateRange}
-                className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-[11px] font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
+                className="h-7 rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 text-[11px] font-medium text-[var(--text-secondary)] ag-hover-card-glow hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
               >
                 {t.clearDate}
               </button>
@@ -249,7 +249,7 @@ export const WorkspaceToolbar = React.memo(function WorkspaceToolbar({
                 type="button"
                 onClick={onCloseDateRangeBar}
                 aria-label={t.closeMenu}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160" width="640" height="160">
   <g transform="translate(20 20) scale(0.234375)">
-    <rect x="16" y="16" width="480" height="480" rx="112" fill="#ffffff" />
+    <rect x="16" y="16" width="480" height="480" rx="112" fill="#111114" stroke="#ffffff" stroke-opacity="0.18" stroke-width="8" />
     
     <g transform="translate(-4 3)" fill="none" stroke-linecap="round" stroke-linejoin="round">
       <!-- Left leg + Apex + Upper right shoulder of A -->
-      <path d="M 144 378 L 252 128 L 294 224" stroke="#09090b" stroke-width="40" />
+      <path d="M 144 378 L 252 128 L 294 224" stroke="#ffffff" stroke-width="40" />
       <!-- Lower right foot of A -->
-      <path d="M 332 312 L 360 378" stroke="#09090b" stroke-width="40" />
+      <path d="M 332 312 L 360 378" stroke="#ffffff" stroke-width="40" />
       <!-- Integrated Checkmark Crossbar -->
-      <path d="M 202 288 L 252 336 L 376 198" stroke="#09090b" stroke-width="40" />
+      <path d="M 202 288 L 252 336 L 376 198" stroke="#ffffff" stroke-width="40" />
     </g>
   
   </g>

@@ -18,6 +18,7 @@ const {
   cosineSimilarity,
 } = require('../../shared/ragChunker.cjs');
 const { getAppLogger } = require('../../shared/logger.cjs');
+const { acquireSharedLlama, releaseSharedLlama } = require('./sharedLlama.cjs');
 
 const embLog = () => getAppLogger('server');
 
@@ -47,6 +48,7 @@ class EmbeddingService {
   constructor(options = {}) {
     this.modelPath = options.modelPath || null;
     this.modelId = options.modelId || 'multilingual-e5-small-q8_0';
+    this._usesCustomImporter = typeof options.importer === 'function';
     this.importer = options.importer || (() => import('node-llama-cpp'));
     this.customEmbedFn = typeof options.embedFn === 'function' ? options.embedFn : null;
     this.idleUnloadMs =
@@ -54,16 +56,20 @@ class EmbeddingService {
     this.batchSize = Math.max(1, Number(options.batchSize) || DEFAULT_BATCH_SIZE);
     this.yieldMs = Math.max(0, Number(options.yieldMs ?? DEFAULT_YIELD_MS));
     this.llama = null;
+    this._holdsSharedLlama = false;
     this.model = null;
     this.embedContext = null;
     this.gpuFallbackUsed = false;
     this.idleTimer = null;
     this.isIndexing = false;
+    this._syncGeneration = 0;
     this._loadingPromise = null;
     this._syncPromise = null;
     this._opChain = Promise.resolve();
     this._vectorCacheKey = null;
     this._vectorCache = null;
+    this._incompatibleModelPath = null;
+    this._incompatibleError = null;
   }
 
   _enqueue(task) {
@@ -86,6 +92,8 @@ class EmbeddingService {
     this.modelPath = nextPath;
     this.modelId = nextId;
     if (changed) {
+      this._incompatibleModelPath = null;
+      this._incompatibleError = null;
       this.invalidateVectorCache();
       void this.unload();
     }
@@ -93,6 +101,9 @@ class EmbeddingService {
 
   isAvailable() {
     if (this.customEmbedFn) return true;
+    if (this._incompatibleModelPath && this._incompatibleModelPath === this.modelPath) {
+      return false;
+    }
     return Boolean(this.modelPath && fs.existsSync(this.modelPath));
   }
 
@@ -104,6 +115,8 @@ class EmbeddingService {
       modelPath: this.modelPath,
       gpuFallbackUsed: this.gpuFallbackUsed,
       isIndexing: this.isIndexing,
+      incompatibleReason:
+        this._incompatibleModelPath === this.modelPath ? this._incompatibleError : null,
     };
   }
 
@@ -143,31 +156,47 @@ class EmbeddingService {
     if (!this.modelPath || !fs.existsSync(this.modelPath)) {
       throw new Error('EMBED_MODEL_MISSING');
     }
-    const mod = await this.importer();
-    if (!mod || typeof mod.getLlama !== 'function') {
-      throw new Error('EMBED_ENGINE_UNAVAILABLE');
+    if (this._incompatibleModelPath && this._incompatibleModelPath === this.modelPath) {
+      throw new Error(this._incompatibleError || 'EMBED_MODEL_INCOMPATIBLE');
     }
-
     if (!this.llama) {
-      try {
-        this.llama = await mod.getLlama({ gpu: 'vulkan' });
-        this.gpuFallbackUsed = false;
-      } catch {
-        this.llama = await mod.getLlama({ gpu: false });
-        this.gpuFallbackUsed = true;
+      if (!this._usesCustomImporter) {
+        const acquired = await acquireSharedLlama(this.importer);
+        this.llama = acquired.llama;
+        this.gpuFallbackUsed = acquired.gpuFallbackUsed;
+        this._holdsSharedLlama = true;
+      } else {
+        const mod = await this.importer();
+        if (!mod || typeof mod.getLlama !== 'function') {
+          throw new Error('EMBED_ENGINE_UNAVAILABLE');
+        }
+        try {
+          this.llama = await mod.getLlama({ gpu: 'vulkan' });
+          this.gpuFallbackUsed = false;
+        } catch {
+          this.llama = await mod.getLlama({ gpu: false });
+          this.gpuFallbackUsed = true;
+        }
       }
     }
 
     let model = null;
     let ctx = null;
+    const attemptingPath = this.modelPath;
     try {
-      model = await this.llama.loadModel({ modelPath: this.modelPath });
+      model = await this.llama.loadModel({ modelPath: attemptingPath });
       ctx = await model.createEmbeddingContext();
       this.model = model;
       this.embedContext = ctx;
       this.touch();
       return this.embedContext;
     } catch (err) {
+      this._incompatibleModelPath = attemptingPath;
+      this._incompatibleError = err instanceof Error ? err.message : String(err);
+      embLog().warn(
+        { modelId: this.modelId, reason: this._incompatibleError },
+        'Embedding model failed to load; falling back to fast SQLite FTS5 search',
+      );
       try {
         if (ctx && typeof ctx.dispose === 'function') await ctx.dispose();
       } catch {
@@ -232,6 +261,7 @@ class EmbeddingService {
     }
 
     this.isIndexing = true;
+    const syncGen = ++this._syncGeneration;
     let recomputed = 0;
     let skipped = 0;
     let totalChunks = 0;
@@ -251,9 +281,26 @@ class EmbeddingService {
         'DELETE FROM todo_embedding_chunks WHERE todo_id = ? AND chunk_index >= ?',
       );
       const checkTodoExists = db.prepare('SELECT 1 FROM todos WHERE id = ? AND deleted_at IS NULL');
+      const flushBatchTx = db.transaction((writes) => {
+        for (const w of writes) {
+          if (!checkTodoExists.get(w.todoId)) continue;
+          upsertChunk.run(
+            w.todoId,
+            w.chunkIndex,
+            w.chunkText,
+            w.contentHash,
+            w.modelId,
+            w.dims,
+            w.blob,
+            w.updatedAt,
+          );
+        }
+      });
 
+      const pendingWrites = [];
       let batchCount = 0;
       for (const todo of list) {
+        if (syncGen !== this._syncGeneration) break;
         if (!todo || todo.deletedAt) continue;
         const chunks = chunkTaskDocument(todo);
         totalChunks += chunks.length;
@@ -263,30 +310,36 @@ class EmbeddingService {
         let todoDeletedMidSync = false;
 
         for (const ch of chunks) {
+          if (syncGen !== this._syncGeneration) break;
           const prev = existingMap.get(ch.chunkIndex);
           if (prev && prev.content_hash === ch.contentHash && prev.model_id === this.modelId) {
             skipped += 1;
             continue;
           }
           const vec = await this.embedText(ch.chunkText, 'passage');
+          if (syncGen !== this._syncGeneration) break;
           if (vec && vec.length > 0) {
             if (!checkTodoExists.get(todo.id)) {
               todoDeletedMidSync = true;
               break;
             }
-            upsertChunk.run(
-              todo.id,
-              ch.chunkIndex,
-              ch.chunkText,
-              ch.contentHash,
-              this.modelId,
-              vec.length,
-              encodeFloat32Blob(vec),
-              new Date().toISOString(),
-            );
+            pendingWrites.push({
+              todoId: todo.id,
+              chunkIndex: ch.chunkIndex,
+              chunkText: ch.chunkText,
+              contentHash: ch.contentHash,
+              modelId: this.modelId,
+              dims: vec.length,
+              blob: encodeFloat32Blob(vec),
+              updatedAt: new Date().toISOString(),
+            });
             recomputed += 1;
             batchCount += 1;
             if (batchCount >= this.batchSize) {
+              if (pendingWrites.length > 0) {
+                flushBatchTx(pendingWrites);
+                pendingWrites.length = 0;
+              }
               batchCount = 0;
               if (this.yieldMs > 0) {
                 await sleep(this.yieldMs);
@@ -295,21 +348,42 @@ class EmbeddingService {
           }
         }
 
-        if (!todoDeletedMidSync && checkTodoExists.get(todo.id)) {
+        if (pendingWrites.length > 0) {
+          flushBatchTx(pendingWrites);
+          pendingWrites.length = 0;
+        }
+
+        if (
+          syncGen === this._syncGeneration &&
+          !todoDeletedMidSync &&
+          checkTodoExists.get(todo.id)
+        ) {
           deleteStaleChunks.run(todo.id, chunks.length);
         }
       }
 
-      // Clean chunks for deleted/trashed todos
-      const allIndexedTodoIds = db
-        .prepare('SELECT DISTINCT todo_id FROM todo_embedding_chunks')
-        .all();
-      const delRemoved = db.prepare('DELETE FROM todo_embedding_chunks WHERE todo_id = ?');
+      if (pendingWrites.length > 0 && syncGen === this._syncGeneration) {
+        flushBatchTx(pendingWrites);
+        pendingWrites.length = 0;
+      }
+
+      // Clean chunks for deleted/trashed todos in a single transaction
       let removedCount = 0;
-      for (const row of allIndexedTodoIds) {
-        if (!activeIds.has(row.todo_id)) {
-          delRemoved.run(row.todo_id);
-          removedCount += 1;
+      if (syncGen === this._syncGeneration) {
+        const allIndexedTodoIds = db
+          .prepare('SELECT DISTINCT todo_id FROM todo_embedding_chunks')
+          .all();
+        const delRemoved = db.prepare('DELETE FROM todo_embedding_chunks WHERE todo_id = ?');
+        const staleTodoIds = allIndexedTodoIds
+          .filter((row) => !activeIds.has(row.todo_id))
+          .map((row) => row.todo_id);
+        if (staleTodoIds.length > 0) {
+          db.transaction((ids) => {
+            for (const tid of ids) {
+              delRemoved.run(tid);
+            }
+          })(staleTodoIds);
+          removedCount = staleTodoIds.length;
         }
       }
 
@@ -325,6 +399,15 @@ class EmbeddingService {
         totalChunks,
       };
     } catch (err) {
+      if (this._incompatibleModelPath && this._incompatibleModelPath === this.modelPath) {
+        return {
+          ok: true,
+          mode: 'fts5-only',
+          recomputed,
+          skipped,
+          totalChunks,
+        };
+      }
       embLog().error({ err }, 'EmbeddingService syncTodosIndex failed');
       return {
         ok: false,
@@ -417,6 +500,7 @@ class EmbeddingService {
   }
 
   async unload() {
+    this._syncGeneration += 1;
     this.invalidateVectorCache();
     return this._enqueue(async () => {
       if (this.idleTimer) {
@@ -439,6 +523,18 @@ class EmbeddingService {
       }
       this.embedContext = null;
       this.model = null;
+      if (this._holdsSharedLlama) {
+        this._holdsSharedLlama = false;
+        this.llama = null;
+        await releaseSharedLlama();
+      } else if (this.llama && typeof this.llama.dispose === 'function') {
+        try {
+          await this.llama.dispose();
+        } catch {
+          // Ignore dispose failure
+        }
+        this.llama = null;
+      }
     });
   }
 }

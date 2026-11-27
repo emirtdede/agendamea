@@ -133,6 +133,10 @@ function decodeFloat32Blob(buf) {
   if (!buf) return new Float32Array(0);
   const nodeBuf = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
   if (nodeBuf.byteLength === 0 || nodeBuf.byteLength % 4 !== 0) return new Float32Array(0);
+  // Zero-copy view when 4-byte aligned; safe copy fallback for unaligned pooled Buffer slices
+  if (nodeBuf.byteOffset % 4 === 0) {
+    return new Float32Array(nodeBuf.buffer, nodeBuf.byteOffset, nodeBuf.byteLength / 4);
+  }
   const copy = new Uint8Array(nodeBuf.byteLength);
   copy.set(nodeBuf);
   return new Float32Array(copy.buffer);
@@ -155,20 +159,112 @@ function cosineSimilarity(a, b) {
   return dot / denom;
 }
 
+const RAG_STOPWORDS = new Set([
+  'gorev',
+  'gorevler',
+  'gorevlerim',
+  'gorevlerimde',
+  'gorevleri',
+  'gorevimi',
+  'görev',
+  'görevler',
+  'görevlerim',
+  'görevlerimde',
+  'görevleri',
+  'görevimi',
+  'not',
+  'notlar',
+  'notlarim',
+  'notlarım',
+  'notlarimda',
+  'notlarımda',
+  'notumu',
+  'arasinda',
+  'arasında',
+  'hangi',
+  'neler',
+  'nedir',
+  'var',
+  'yok',
+  'mi',
+  'mı',
+  'mu',
+  'mü',
+  'ne',
+  'icin',
+  'için',
+  'ile',
+  'ilgili',
+  'hakkinda',
+  'hakkında',
+  'hakkindaki',
+  'hakkındaki',
+  'bana',
+  'benim',
+  'bu',
+  'su',
+  'şu',
+  'bir',
+  've',
+  'veya',
+  'my',
+  'task',
+  'tasks',
+  'note',
+  'notes',
+  'which',
+  'what',
+  'who',
+  'where',
+  'when',
+  'are',
+  'is',
+  'was',
+  'were',
+  'the',
+  'and',
+  'for',
+  'about',
+  'have',
+  'has',
+  'do',
+  'does',
+  'in',
+  'on',
+  'of',
+  'with',
+  'any',
+  'me',
+  'to',
+  'there',
+]);
+
+function normalizeQueryTokens(rawQuery) {
+  const clean = String(rawQuery || '')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[^\p{L}\p{N}_-]+/gu, ' ')
+    .trim();
+  if (!clean) return [];
+  const all = Array.from(new Set(clean.split(/\s+/).filter((t) => t.length >= 2)));
+  const content = all.filter((t) => !RAG_STOPWORDS.has(t));
+  return content.length > 0 ? content : all;
+}
+
 /**
  * Converts arbitrary user query text into a safe SQLite FTS5 MATCH expression.
- * Strips all FTS5 control chars and returns null if no searchable tokens remain.
+ * Strips all FTS5 control chars and question stopwords, returning null if no searchable tokens remain.
  */
 function buildFtsQuery(rawQuery) {
   const clean = String(rawQuery || '')
     .replace(/["'()*^:{}[\];<>\\/!@#$%&=+?~`|,.-]+/g, ' ')
     .trim();
   if (!clean) return null;
-  const rawTerms = clean
+  const allTerms = clean
     .split(/\s+/)
     .map((t) => t.trim())
-    .filter((t) => t.length >= 2)
-    .slice(0, 12);
+    .filter((t) => t.length >= 2);
+  const contentTerms = allTerms.filter((t) => !RAG_STOPWORDS.has(t.toLocaleLowerCase('tr-TR')));
+  const rawTerms = (contentTerms.length > 0 ? contentTerms : allTerms).slice(0, 12);
 
   if (rawTerms.length === 0) {
     const single = clean.replace(/\s+/g, '');
@@ -178,24 +274,19 @@ function buildFtsQuery(rawQuery) {
   return rawTerms.map((term) => `"${term}"*`).join(' OR ');
 }
 
-function normalizeQueryTokens(rawQuery) {
-  const clean = String(rawQuery || '')
-    .toLocaleLowerCase('tr-TR')
-    .replace(/[^\p{L}\p{N}_-]+/gu, ' ')
-    .trim();
-  if (!clean) return [];
-  return Array.from(new Set(clean.split(/\s+/).filter((t) => t.length >= 2)));
-}
-
 function computeLexicalCoverage(query, text) {
   const tokens = normalizeQueryTokens(query);
   if (tokens.length === 0) return 0;
   const hay = String(text || '').toLocaleLowerCase('tr-TR');
   let hits = 0;
   for (const tok of tokens) {
-    if (hay.includes(tok)) hits += 1;
+    if (hay.includes(tok)) {
+      hits += 1;
+    } else if (tok.length >= 6 && hay.includes(tok.slice(0, tok.length - 1))) {
+      hits += 0.9;
+    }
   }
-  return hits / tokens.length;
+  return Math.min(1, hits / tokens.length);
 }
 
 /**

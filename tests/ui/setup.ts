@@ -1,6 +1,16 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
+import { seedLoadedLocaleBundle } from '../../src/i18n/localeLoader';
+import {
+  EN_DICTIONARY,
+  EN_LEGAL_DOCUMENTS,
+  TR_DICTIONARY,
+  TR_LEGAL_DOCUMENTS,
+} from '../../src/i18n/translations';
+
+seedLoadedLocaleBundle('en', { dict: EN_DICTIONARY, legal: EN_LEGAL_DOCUMENTS });
+seedLoadedLocaleBundle('tr', { dict: TR_DICTIONARY, legal: TR_LEGAL_DOCUMENTS });
 
 afterEach(() => {
   cleanup();

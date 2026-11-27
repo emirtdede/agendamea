@@ -90,7 +90,7 @@ export function TodoScheduleSection({
               onClick={() =>
                 void onUpdate(todo.id, { startDate: null, dueDate: null, dueTime: null })
               }
-              className="rounded-md px-2 py-0.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] whitespace-nowrap"
+              className="rounded-md px-2 py-0.5 text-xs font-medium text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] whitespace-nowrap"
             >
               {t.clearDate}
             </button>
@@ -104,7 +104,7 @@ export function TodoScheduleSection({
             className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
               todo.dueDate === todayStr && !todo.startDate
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] ag-hover-card-glow'
             }`}
           >
             {t.today}
@@ -115,7 +115,7 @@ export function TodoScheduleSection({
             className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
               todo.dueDate === tomorrowStr && !todo.startDate
                 ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
-                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]'
+                : 'border-[var(--border)] bg-[var(--canvas)] text-[var(--text-secondary)] ag-hover-card-glow'
             }`}
           >
             {t.tomorrow}
@@ -192,7 +192,7 @@ export function TodoScheduleSection({
                 type="button"
                 onClick={() => void onUpdate(todo.id, { dueTime: null })}
                 aria-label={t.clearDate}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--canvas)] text-[var(--text-muted)] ag-hover-card-glow hover:text-[var(--text-primary)]"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

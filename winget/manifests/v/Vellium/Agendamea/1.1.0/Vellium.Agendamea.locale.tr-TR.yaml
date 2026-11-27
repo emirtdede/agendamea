@@ -5,7 +5,7 @@ PackageLocale: tr-TR
 Publisher: Vellium
 PublisherUrl: https://vellium.dev
 PublisherSupportUrl: https://github.com/emirtdede/agendamea/issues
-PrivacyUrl: https://vellium.dev
+PrivacyUrl: https://vellium.dev/tr/yasal/gizlilik-politikasi
 Author: Vellium
 PackageName: Agendamea
 PackageUrl: https://github.com/emirtdede/agendamea
@@ -13,6 +13,6 @@ License: MIT
 LicenseUrl: https://github.com/emirtdede/agendamea/blob/main/LICENSE
 Copyright: Copyright (c) 2026 Vellium (vellium.dev)
 ShortDescription: Windows 10/11 icin internetsiz calisan, yerel yapay zeka ve sesli dikte destekli hizli gunluk gorev yoneticisi.
-Description: Agendamea; yerel SQLite WAL v4 Hibrit RAG veritabani, 4 farkli gorunum (Liste, Kanban, Takvim, Eisenhower Matrisi), %100 cihaz ici RNNoise/Silero VAD/Piper Neural TTS/Whisper/Qwen3/Ollama sesli dikte, Odak Modu destekli Bildirim Merkezi, tam ozellestirilebilir klavye kisayollari, sag tik baglam menuleri, 22 aracli yerlesik MCP sunucusu, kisa terminal CLI (ag), cift yonlu webhook otomasyonu, sunucusuz coklu bulut klasor esitlemesi, ozel HEX temalari, 73 dil ve modern cercevesiz monokrom kurulum sunan hizli Windows gorev yoneticisidir.
+Description: Agendamea; yerel SQLite WAL v5 Hibrit RAG veritabani, 4 farkli gorunum (Liste, Kanban, Takvim, Eisenhower Matrisi), Spotlight Komut Paleti (Ctrl+K), opsiyonel 4/6/8 haneli PIN veya Sifre Kilidi ve Kurtarma Kodu, %100 cihaz ici RNNoise/Silero VAD/Piper Neural TTS/Whisper/Qwen3/Ollama sesli dikte, Odak Modu destekli Bildirim Merkezi, tam ozellestirilebilir klavye kisayollari, sag tik baglam menuleri, 12 istemcili 23 aracli yerlesik MCP sunucusu, yerel terminal CLI (ag.exe), cift yonlu webhook otomasyonu, sunucusuz coklu bulut klasor esitlemesi, ozel HEX temalari, 73 dil ve modern cercevesiz monokrom WPF kurulum sunan ucretsiz ve acik kaynak Windows gorev yoneticisidir.
 ManifestType: locale
 ManifestVersion: 1.6.0

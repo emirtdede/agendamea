@@ -66,31 +66,30 @@ export const DocsRestApiTab = React.memo(function DocsRestApiTab({
 
   return (
     <div className="space-y-5" data-testid="docs-tab-api">
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 space-y-3">
+      {/* Card 1: REST API Overview & Copyable Snippet */}
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 p-4 sm:p-5 space-y-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Server className="h-4 w-4 text-[var(--accent)]" />
-            <h4 className="font-display text-xs font-semibold text-[var(--text-primary)]">
+            <Server className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+            <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
               {t.docsApiSectionTitle}
             </h4>
           </div>
-          <code className="rounded-md border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 font-mono-tabular text-[11px] font-semibold text-[var(--accent)]">
-            {baseUrl}
-          </code>
+          <code className="font-mono-tabular text-xs text-[var(--text-secondary)]">{baseUrl}</code>
         </div>
-        <p className="text-xs text-[var(--text-muted)]">{t.docsApiSectionDesc}</p>
+        <p className="text-xs leading-relaxed text-[var(--text-muted)]">{t.docsApiSectionDesc}</p>
 
         {/* Live Copyable Snippet */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-0.5 text-[11px]">
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)]/70 pb-1.5">
+            <div className="inline-flex items-center gap-4 text-xs">
               <button
                 type="button"
                 onClick={() => setShellKind('curl')}
-                className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                className={`-mb-1.5 border-b-2 pb-1.5 font-medium transition-colors ${
                   shellKind === 'curl'
-                    ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                    : 'text-[var(--text-secondary)]'
+                    ? 'border-[var(--text-primary)] text-[var(--text-primary)]'
+                    : 'border-transparent text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]'
                 }`}
               >
                 cURL
@@ -98,10 +97,10 @@ export const DocsRestApiTab = React.memo(function DocsRestApiTab({
               <button
                 type="button"
                 onClick={() => setShellKind('powershell')}
-                className={`rounded-md px-2.5 py-1 font-medium transition-colors ${
+                className={`-mb-1.5 border-b-2 pb-1.5 font-medium transition-colors ${
                   shellKind === 'powershell'
-                    ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                    : 'text-[var(--text-secondary)]'
+                    ? 'border-[var(--text-primary)] text-[var(--text-primary)]'
+                    : 'border-transparent text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]'
                 }`}
               >
                 PowerShell
@@ -110,52 +109,40 @@ export const DocsRestApiTab = React.memo(function DocsRestApiTab({
             <button
               type="button"
               onClick={() => onCopy(`api-${shellKind}`, snippet)}
-              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ag-hover-glow hover:text-[var(--text-primary)]"
             >
               {copiedKey === `api-${shellKind}` ? (
-                <Check className="h-3 w-3 text-emerald-500" />
+                <Check className="h-3.5 w-3.5" />
               ) : (
-                <Copy className="h-3 w-3" />
+                <Copy className="h-3.5 w-3.5 text-[var(--text-muted)]" />
               )}
               <span>{copiedKey === `api-${shellKind}` ? t.docsCopiedLabel : t.docsCopyButton}</span>
             </button>
           </div>
-          <pre className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--canvas)] p-3 font-mono-tabular text-[11px] text-[var(--text-secondary)]">
+          <pre className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--canvas)]/60 p-3 font-mono-tabular text-[11px] text-[var(--text-secondary)]">
             {snippet}
           </pre>
         </div>
       </section>
 
-      {/* Endpoints Reference Table */}
-      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-        <div className="divide-y divide-[var(--border)]">
-          {filtered.map((ep) => (
-            <div
-              key={`${ep.method}-${ep.path}`}
-              className="flex flex-col gap-1.5 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-            >
-              <div className="flex items-center gap-2 shrink-0">
-                <span
-                  className={`inline-flex w-14 shrink-0 justify-center rounded px-1.5 py-0.5 font-mono-tabular text-[10px] font-bold ${
-                    ep.method === 'GET'
-                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                      : ep.method === 'POST'
-                        ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
-                        : ep.method === 'PATCH'
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                          : 'bg-red-500/15 text-red-600 dark:text-red-400'
-                  }`}
-                >
-                  {ep.method}
-                </span>
-                <code className="font-mono-tabular text-[11.5px] font-medium text-[var(--text-primary)] whitespace-nowrap">
-                  {ep.path}
-                </code>
-              </div>
-              <span className="text-[11px] text-[var(--text-muted)] sm:text-end">{ep.desc}</span>
+      {/* Card 2: Endpoints Reference Directory */}
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/75 px-4 sm:px-5 divide-y divide-[var(--border)]/70">
+        {filtered.map((ep) => (
+          <div
+            key={`${ep.method}-${ep.path}`}
+            className="flex flex-col gap-1.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+          >
+            <div className="flex items-center gap-2.5 shrink-0">
+              <span className="inline-flex w-12 shrink-0 font-mono-tabular text-[10.5px] font-semibold text-[var(--text-muted)]">
+                {ep.method}
+              </span>
+              <code className="font-mono-tabular text-[12px] font-medium text-[var(--text-primary)] whitespace-nowrap">
+                {ep.path}
+              </code>
             </div>
-          ))}
-        </div>
+            <span className="text-[11px] text-[var(--text-muted)] sm:text-end">{ep.desc}</span>
+          </div>
+        ))}
       </section>
     </div>
   );

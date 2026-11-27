@@ -21,7 +21,7 @@ export const SettingsTabHeader = React.memo(function SettingsTabHeader({
 
   return (
     <div
-      className={`flex flex-wrap items-center gap-2.5 ${
+      className={`flex flex-wrap items-center gap-3 border-b border-[var(--border)] pb-4 ${
         subtitle ? 'justify-between' : 'justify-end'
       }`}
     >
@@ -31,14 +31,14 @@ export const SettingsTabHeader = React.memo(function SettingsTabHeader({
         </p>
       )}
       {(actions || onReset) && (
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-4 shrink-0">
           {actions}
           {onReset && (
             <button
               type="button"
               data-testid={resetTestId}
               onClick={onReset}
-              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)] transition-colors shrink-0 whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)] transition-colors shrink-0 whitespace-nowrap"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span>{resetLabel ?? t.resetTabDefaultsButton}</span>

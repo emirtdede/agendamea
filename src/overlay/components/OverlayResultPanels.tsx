@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Send, Volume2 } from 'lucide-react';
+import { AlertTriangle, Check, Loader2, Mic, Send, Volume2 } from 'lucide-react';
 import type React from 'react';
 import type { UiDictionary } from '../../i18n/translations';
 import type { VoiceAskResponse } from '../../types';
@@ -13,9 +13,15 @@ interface OverlayResultPanelsProps {
   missingVoicePack: boolean;
   isKeyboardMode: boolean;
   keyboardInput: string;
+  previewTitle: string;
+  isConfirmingPreview: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  previewInputRef: React.RefObject<HTMLInputElement | null>;
   onChangeKeyboardInput: (value: string) => void;
+  onChangePreviewTitle: (value: string) => void;
   onKeyboardSubmit: (e: React.FormEvent) => void;
+  onConfirmPreviewAdd: (e?: React.FormEvent) => void;
+  onRetryDictation: () => void;
   onDismiss: () => void;
   onConfirmAction: (confirmToken: string) => void;
   onSelectCandidate: (todoId: string) => void;
@@ -30,15 +36,74 @@ export function OverlayResultPanels({
   missingVoicePack,
   isKeyboardMode,
   keyboardInput,
+  previewTitle,
+  isConfirmingPreview,
   inputRef,
+  previewInputRef,
   onChangeKeyboardInput,
+  onChangePreviewTitle,
   onKeyboardSubmit,
+  onConfirmPreviewAdd,
+  onRetryDictation,
   onDismiss,
   onConfirmAction,
   onSelectCandidate,
 }: OverlayResultPanelsProps) {
   return (
     <>
+      {phase === 'preview' && (
+        <form
+          onSubmit={onConfirmPreviewAdd}
+          data-testid="overlay-preview-panel"
+          className="mt-2.5 flex flex-col gap-2 border-t border-zinc-800/90 pt-2.5"
+        >
+          <input
+            ref={previewInputRef}
+            type="text"
+            data-testid="overlay-preview-input"
+            value={previewTitle}
+            onChange={(e) => onChangePreviewTitle(e.target.value)}
+            maxLength={300}
+            aria-label={t.addTaskPlaceholder}
+            className="min-w-0 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:border-zinc-500 focus:outline-none"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              data-testid="overlay-preview-retry-btn"
+              onClick={onRetryDictation}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-zinc-400 hover:text-zinc-100 transition-colors"
+            >
+              <Mic className="h-3 w-3" />
+              <span>{t.overlayTryAgainLabel}</span>
+            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                data-testid="overlay-preview-cancel-btn"
+                onClick={onDismiss}
+                className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-300 hover:bg-zinc-800"
+              >
+                {t.overlayCancelButton}
+              </button>
+              <button
+                type="submit"
+                data-testid="overlay-preview-add-btn"
+                disabled={!previewTitle.trim() || isConfirmingPreview}
+                className="inline-flex items-center gap-1 rounded-lg bg-zinc-100 px-2.5 py-1 text-[11px] font-semibold text-zinc-950 hover:bg-white disabled:opacity-40"
+              >
+                {isConfirmingPreview ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Check className="h-3 w-3" />
+                )}
+                <span>{t.aiLiveTestAddAsTask}</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
       {phase === 'result' && response && (
         <div
           data-testid="overlay-result-card"

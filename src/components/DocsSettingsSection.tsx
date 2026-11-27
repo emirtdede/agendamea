@@ -289,14 +289,14 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
     <section
       aria-label={t.settingsTabAutomation}
       data-setting-id="docs-main"
-      className="space-y-4"
+      className="space-y-6 pb-4"
       data-testid="docs-settings-section"
     >
-      {/* 4-Way Developer Segmented Control (single clean horizontal row, zero nested tablist) */}
-      <div className="flex flex-col gap-3">
+      {/* 4-Way Developer Hairline Underline Switcher (zero chunky box, zero nested tablist) */}
+      <div className="space-y-3.5">
         <fieldset
           aria-label={t.settingsTabAutomation}
-          className="inline-flex w-fit max-w-full flex-wrap gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1"
+          className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-[var(--border)]"
         >
           {subTabs.map((tab) => {
             const Icon = tab.icon;
@@ -308,10 +308,10 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
                 aria-pressed={active}
                 data-testid={`docs-subtab-${tab.id}`}
                 onClick={() => setActiveSubTab(tab.id)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2.5 pt-0.5 text-xs font-medium transition-colors whitespace-nowrap ${
                   active
-                    ? 'bg-[var(--accent)] text-[var(--accent-fg)]'
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]'
+                    ? 'border-[var(--text-primary)] text-[var(--text-primary)]'
+                    : 'border-transparent text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]'
                 }`}
               >
                 <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -331,14 +331,14 @@ export const DocsSettingsSection = React.memo(function DocsSettingsSection({
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t.docsSearchPlaceholder}
               aria-label={t.docsSearchPlaceholder}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-1.5 ps-8 pe-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
+              className="w-full rounded-lg border border-[var(--border)] bg-transparent py-1.5 ps-8 pe-7 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--text-secondary)]"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
                 aria-label={t.clearSearch}
-                className="absolute end-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="absolute end-1.5 top-1/2 -translate-y-1/2 p-0.5 text-[var(--text-muted)] ag-hover-glow hover:text-[var(--text-primary)]"
               >
                 <X className="h-3 w-3" />
               </button>

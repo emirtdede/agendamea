@@ -211,11 +211,11 @@ const installerSidebarSvg = `<?xml version="1.0" encoding="UTF-8"?>
   <circle cx="290" cy="72" r="96" fill="none" stroke="#ffffff" stroke-opacity="0.035" stroke-width="2" />
   <circle cx="290" cy="72" r="144" fill="none" stroke="#ffffff" stroke-opacity="0.02" stroke-width="2" />
 
-  <!-- Emblem Tile -->
+  <!-- Emblem Tile (Dark Obsidian Default) -->
   <g transform="translate(36 56)">
-    <rect x="0" y="0" width="96" height="96" rx="24" fill="#fafafa" />
+    <rect x="0" y="0" width="96" height="96" rx="24" fill="#18181b" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" />
     <g transform="translate(6 6) scale(0.164)">
-      ${monogramPaths('#09090b', '#09090b')}
+      ${monogramPaths('#fafafa', '#fafafa')}
     </g>
   </g>
 

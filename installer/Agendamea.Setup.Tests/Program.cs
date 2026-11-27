@@ -143,6 +143,35 @@ try
     await engine.UninstallAsync(uninstallOpts, tr, sfxExe, progress: null);
     Check(!File.Exists(installedAppExe) && !Directory.Exists(installDir),
         "UninstallEngine cleanly removes installed app files and directory");
+
+    // 4. Parallel Brotli AGM_SFX2 Build -> Trailer -> Parallel Extract -> Clean Uninstaller -> Path Traversal Defense
+    var sfxV2Exe = Path.Combine(tmpRoot, "Agendamea-Setup-V2-Test.exe");
+    SfxPayloadReader.BuildV2Bundle(fakeStub, payloadSrcDir, sfxV2Exe);
+    var trailerV2 = SfxPayloadReader.TryReadTrailer(sfxV2Exe);
+    Check(trailerV2 is not null && trailerV2.Value.FormatVersion == 2 && trailerV2.Value.PayloadOffset == fakeStubBytes.Length,
+        "AGM_SFX2 trailer reads version 2 and exact stub offset");
+
+    var installV2Dir = Path.Combine(tmpRoot, "installed-v2");
+    await engine.InstallAsync(new CliOptions { Silent = true, InstallDir = installV2Dir, SkipWindowsIntegration = true }, tr, sfxV2Exe, progress: null);
+    Check(
+        File.Exists(Path.Combine(installV2Dir, "Agendamea.exe")) &&
+        File.ReadAllText(Path.Combine(installV2Dir, "Agendamea.exe")) == "FAKE_ELECTRON_APP" &&
+        File.Exists(Path.Combine(installV2Dir, "resources", "app.asar.unpacked", "cli", "agendamea.cjs")) &&
+        new FileInfo(Path.Combine(installV2Dir, "uninstall.exe")).Length == fakeStubBytes.Length,
+        "AGM_SFX2 parallel Brotli extraction preserves file bytes and strips payload from uninstall.exe");
+
+    var badV2Exe = Path.Combine(tmpRoot, "bad-v2.exe");
+    SfxPayloadReader.BuildV2Bundle(fakeStub, payloadSrcDir, badV2Exe, customEntries: [("../evil-v2.txt", Encoding.UTF8.GetBytes("bad"))]);
+    var v2ZipSlipRejected = false;
+    try
+    {
+        SfxPayloadReader.ExtractPayload(badV2Exe, Path.Combine(tmpRoot, "bad-v2-out"), null, null, CancellationToken.None);
+    }
+    catch (InvalidOperationException)
+    {
+        v2ZipSlipRejected = true;
+    }
+    Check(v2ZipSlipRejected, "AGM_SFX2 rejects Zip-Slip path traversal entries");
 }
 finally
 {

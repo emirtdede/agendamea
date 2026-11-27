@@ -26,7 +26,7 @@ test('WBS-2.2: Schema v3 -> v4 upgrade, 9,500-char chunking (XYZ-99 at tail) & i
 
     const db = new TodoDatabase(dbPath);
     try {
-      assert.equal(db.getRawDb().pragma('user_version', { simple: true }), 5);
+      assert.equal(db.getRawDb().pragma('user_version', { simple: true }), 6);
       assert.equal(db.getTodos().length, 1);
 
       // Add a 9,500-character note with "vergi iade kodu XYZ-99" in the final paragraph!
@@ -111,6 +111,51 @@ test('WBS-2.3: GGUF Embedding content_hash cache (recomputed === 0 on unchanged)
     const ftsFallback = db.searchHybridRag('butce raporu');
     assert.equal(ftsFallback.mode, 'fts5-only');
     assert.ok(ftsFallback.hits.length > 0);
+
+    // Incompatible GGUF model circuit-breaker: loadModel attempted ONCE, then degrades instantly to FTS5
+    const tmpEmbDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agendamea-emb-cb-'));
+    const brokenGguf = path.join(tmpEmbDir, 'broken-bert.gguf');
+    fs.writeFileSync(brokenGguf, Buffer.alloc(16));
+    let loadAttempts = 0;
+    try {
+      const brokenWorker = new embeddingWorkerMod.EmbeddingService({
+        modelPath: brokenGguf,
+        modelId: 'broken-bert-test-model',
+        importer: async () => ({
+          async getLlama() {
+            return {
+              async loadModel() {
+                loadAttempts += 1;
+                throw new Error('bert model needs to define token type count');
+              },
+            };
+          },
+        }),
+      });
+      const firstBroken = await brokenWorker.syncTodosIndex(db.getRawDb(), todos.slice(0, 3));
+      assert.equal(firstBroken.ok, true);
+      assert.equal(firstBroken.mode, 'fts5-only');
+      assert.equal(loadAttempts, 1);
+      assert.equal(brokenWorker.isAvailable(), false);
+
+      // Subsequent sync and search must NOT retry the broken GGUF file
+      await brokenWorker.syncTodosIndex(db.getRawDb(), todos.slice(0, 3));
+      const vecHits = await brokenWorker.searchVectors(db.getRawDb(), 'butce raporu', { topK: 5 });
+      assert.deepEqual(vecHits, []);
+      assert.equal(loadAttempts, 1);
+    } finally {
+      fs.rmSync(tmpEmbDir, { recursive: true, force: true, maxRetries: 6, retryDelay: 50 });
+    }
+
+    // Natural Turkish question recall (stopwords stripped + stem coverage)
+    const presTodo = db.createTodo({
+      title: 'Haftalık ürün sunumunu hazırla',
+      notes: 'Q4 hedefleri ve sesli dikte demosu eklenecek.',
+    });
+    const naturalRes = db.searchHybridRag('Görevlerim arasında hangi ürün sunumu var?');
+    assert.ok(naturalRes.hits.length >= 1);
+    assert.equal(naturalRes.hits[0]?.todoId, presTodo.id);
+    assert.ok((naturalRes.hits[0]?.score ?? 0) >= 0.7);
   } finally {
     db.close();
   }

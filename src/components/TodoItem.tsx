@@ -2,7 +2,7 @@ import { Check, Pin, Star, Trash2 } from 'lucide-react';
 import React, { useMemo } from 'react';
 import { useI18n } from '../i18n/I18nContext';
 import { usePreferencesSelector } from '../store/preferencesStore';
-import type { Category, Todo } from '../types';
+import type { Category, TimeFormatPreference, Todo } from '../types';
 import { formatTodoDateSchedule } from '../utils/todoLogic';
 import { ColorDot } from './ColorDot';
 
@@ -28,10 +28,17 @@ interface TodoItemProps {
   onContextMenu?: (e: React.MouseEvent, todo: Todo) => void;
 }
 
-export const TodoItem = React.memo(function TodoItem({
+interface TodoItemViewProps extends TodoItemProps {
+  timeFormat: TimeFormatPreference;
+  colorBlindShapes: boolean;
+}
+
+export const TodoItemView = React.memo(function TodoItemView({
   todo,
   category,
   todayStr,
+  timeFormat,
+  colorBlindShapes,
   isSelected,
   canDrag,
   isDragging,
@@ -48,10 +55,8 @@ export const TodoItem = React.memo(function TodoItem({
   onDragEnd,
   onTagClick,
   onContextMenu,
-}: TodoItemProps) {
+}: TodoItemViewProps) {
   const { t, meta } = useI18n();
-  const timeFormat = usePreferencesSelector((s) => s.timeFormat, Object.is);
-  const colorBlindShapes = usePreferencesSelector((s) => s.colorBlindShapes, Object.is);
   const dueInfo = useMemo(
     () =>
       formatTodoDateSchedule(
@@ -217,7 +222,7 @@ export const TodoItem = React.memo(function TodoItem({
         onContextMenu(e, todo);
       }}
       className={`ag-todo-row group relative flex items-start gap-3 px-4 py-3 border-b border-[var(--border)] last:border-b-0 transition-colors duration-150 ${
-        isSelected ? 'bg-[var(--accent-soft)]' : 'hover:bg-[var(--surface-hover)]/70'
+        isSelected ? 'bg-[var(--accent-soft)]' : 'ag-row-luminous'
       } ${isDragging ? 'opacity-45' : ''}`}
     >
       {/* Subtle insertion indicator during drag-over (no static icons) */}
@@ -244,7 +249,7 @@ export const TodoItem = React.memo(function TodoItem({
             : `${t.markComplete}: ${todo.title}`
         }
         aria-pressed={todo.completed}
-        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all duration-150"
+        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors duration-150"
         style={
           todo.completed
             ? {
@@ -306,8 +311,8 @@ export const TodoItem = React.memo(function TodoItem({
           title={todo.pinned ? t.unpinLabel : t.pinLabel}
           className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
             todo.pinned
-              ? 'text-[var(--accent)] hover:bg-[var(--surface)]'
-              : 'text-[var(--text-muted)] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+              ? 'text-[var(--accent)] ag-hover-glow'
+              : 'text-[var(--text-muted)] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 ag-hover-glow hover:text-[var(--text-primary)]'
           }`}
         >
           <Pin className={`h-3.5 w-3.5 ${todo.pinned ? 'fill-current' : ''}`} />
@@ -322,7 +327,7 @@ export const TodoItem = React.memo(function TodoItem({
           className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
             todo.important
               ? 'text-amber-500'
-              : 'text-[var(--text-muted)] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-[var(--surface)] hover:text-[var(--text-primary)]'
+              : 'text-[var(--text-muted)] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 ag-hover-glow hover:text-[var(--text-primary)]'
           }`}
         >
           <Star className={`h-4 w-4 ${todo.important ? 'fill-current' : ''}`} />
@@ -333,11 +338,17 @@ export const TodoItem = React.memo(function TodoItem({
           onClick={() => onDelete(todo.id)}
           aria-label={`${t.deleteToTrashButton}: ${todo.title}`}
           title={t.deleteToTrashButton}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-[var(--surface)] hover:text-red-500 transition-colors"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-muted)] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 ag-hover-danger-glow hover:text-red-500 transition-colors"
         >
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
     </div>
   );
+});
+
+export const TodoItem = React.memo(function TodoItem(props: TodoItemProps) {
+  const timeFormat = usePreferencesSelector((s) => s.timeFormat, Object.is);
+  const colorBlindShapes = usePreferencesSelector((s) => s.colorBlindShapes, Object.is);
+  return <TodoItemView {...props} timeFormat={timeFormat} colorBlindShapes={colorBlindShapes} />;
 });

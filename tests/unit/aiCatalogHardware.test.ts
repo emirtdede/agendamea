@@ -187,3 +187,72 @@ test('WBS-5.3 & WBS-6.1: 73-language AI keys, zero Turkish leakage in new TSX, z
   );
   assert.equal(builderYml.includes('win-x64-cuda'), false, 'CUDA binaries must never be bundled');
 });
+
+test('CPU (2) & GPU (5) AI Profile Presets, hardware auto-recommendation, and strict 3-role Custom Profile validation', () => {
+  const presets = Object.values(aiCatalog.AI_PROFILE_PRESETS);
+  const cpuPresets = presets.filter((p: { group: string }) => p.group === 'cpu');
+  const gpuPresets = presets.filter((p: { group: string }) => p.group === 'gpu');
+  assert.equal(cpuPresets.length, 2);
+  assert.equal(gpuPresets.length, 5);
+  assert.equal(aiCatalog.AI_PROFILE_ORDER.length, 7);
+
+  // CPU-only hardware recommends cpu-light (<12GB) or cpu-balanced (>=12GB)
+  assert.equal(
+    aiCatalog.recommendProfileForHardware({ ramGb: 8, vramGb: 0, hasDiscreteGpu: false }).profileId,
+    'cpu-light',
+  );
+  assert.equal(
+    aiCatalog.recommendProfileForHardware({ ramGb: 16, vramGb: 0, hasDiscreteGpu: false })
+      .profileId,
+    'cpu-balanced',
+  );
+
+  // GPU hardware tiers map across all 5 GPU presets
+  assert.equal(
+    aiCatalog.recommendProfileForHardware({ ramGb: 8, vramGb: 2, hasDiscreteGpu: true }).profileId,
+    'gpu-very-weak',
+  );
+  assert.equal(
+    aiCatalog.recommendProfileForHardware({ ramGb: 16, vramGb: 4, hasDiscreteGpu: true }).profileId,
+    'gpu-weak',
+  );
+  assert.equal(
+    aiCatalog.recommendProfileForHardware({ ramGb: 16, vramGb: 6, hasDiscreteGpu: true }).profileId,
+    'gpu-balanced',
+  );
+  assert.equal(
+    aiCatalog.recommendProfileForHardware({ ramGb: 16, vramGb: 8, hasDiscreteGpu: true }).profileId,
+    'gpu-strong',
+  );
+  assert.equal(
+    aiCatalog.recommendProfileForHardware({ ramGb: 32, vramGb: 12, hasDiscreteGpu: true })
+      .profileId,
+    'gpu-ultra',
+  );
+
+  // Custom Profile Validation requires exactly 1 valid STT + 1 valid LLM + 1 valid Embedding model
+  const incomplete = aiCatalog.validateCustomProfileSelection({
+    sttModelId: 'whisper-base-q5_1',
+    llmModelId: '',
+    embedModelId: 'multilingual-e5-small-q8_0',
+  });
+  assert.equal(incomplete.ok, false);
+  assert.deepEqual(incomplete.missingRoles, ['llm']);
+
+  const wrongRole = aiCatalog.validateCustomProfileSelection({
+    sttModelId: 'qwen3-0.6b-q8_0', // LLM mistakenly placed in STT slot
+    llmModelId: 'qwen3-0.6b-q8_0',
+    embedModelId: 'multilingual-e5-small-q8_0',
+  });
+  assert.equal(wrongRole.ok, false);
+  assert.deepEqual(wrongRole.missingRoles, ['stt']);
+
+  const valid = aiCatalog.validateCustomProfileSelection({
+    sttModelId: 'whisper-small-q5_1',
+    llmModelId: 'qwen3-4b-q4_k_m',
+    embedModelId: 'multilingual-e5-small-q8_0',
+  });
+  assert.equal(valid.ok, true);
+  assert.deepEqual(valid.missingRoles, []);
+  assert.ok(valid.totalBytes > 1_000_000_000);
+});

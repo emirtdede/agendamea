@@ -16,6 +16,16 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
     ipcRenderer.on('window:close-requested', listener);
     return () => ipcRenderer.removeListener('window:close-requested', listener);
   },
+  onWindowMinimizedOrHidden: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('window:hidden-or-minimized', listener);
+    return () => ipcRenderer.removeListener('window:hidden-or-minimized', listener);
+  },
+  onVoiceActivity: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('window:voice-activity', listener);
+    return () => ipcRenderer.removeListener('window:voice-activity', listener);
+  },
   onFocusQuickAdd: (callback) => {
     const listener = () => callback();
     ipcRenderer.on('app:focus-quick-add', listener);
@@ -62,7 +72,9 @@ contextBridge.exposeInMainWorld('agendameaWindow', {
   updateTrayLabels: (labels) => ipcRenderer.invoke('tray:update-labels', labels),
   applyAppIcon: (payload) => ipcRenderer.invoke('icon:apply', payload),
   setZoomFactor: (factor) => ipcRenderer.invoke('window:set-zoom', factor),
+  setWindowThemeMode: (mode) => ipcRenderer.invoke('window:set-theme-mode', String(mode || '')),
   getInitialLocale: () => ipcRenderer.invoke('app:get-initial-locale'),
+  relaunch: () => ipcRenderer.invoke('app:relaunch'),
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   downloadAndInstallUpdate: (url) => ipcRenderer.invoke('updater:download-and-install', url),
   cancelUpdateDownload: () => ipcRenderer.invoke('updater:cancel-download'),

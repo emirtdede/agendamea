@@ -181,7 +181,7 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 
-  it('T-2.1a/b/c: renders exactly 10 tabs, zero nested tablists across all 10 tabs, keyboard navigation, alias routing & live initialTab re-sync', async () => {
+  it('T-2.1a/b/c: renders exactly 11 tabs, zero nested tablists across all 11 tabs, keyboard navigation, alias routing & live initialTab re-sync', async () => {
     const user = userEvent.setup();
     vi.spyOn(api, 'getAiStatus').mockResolvedValue(createMockAiStatus(147_000_000));
     vi.spyOn(api, 'getPiperVoices').mockResolvedValue({ voices: [] });
@@ -210,7 +210,8 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
 
     const tablist = screen.getByRole('tablist');
     const tabs = within(tablist).getAllByRole('tab');
-    expect(tabs).toHaveLength(10);
+    expect(tabs).toHaveLength(11);
+    expect(screen.getByTestId('settings-tab-guide')).toBeInTheDocument();
     expect(screen.queryByTestId('settings-tab-webhooks')).not.toBeInTheDocument();
     expect(screen.queryByTestId('settings-tab-legal')).not.toBeInTheDocument();
 
@@ -237,7 +238,10 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
       </I18nProvider>,
     );
     expect(screen.getByTestId('settings-tab-docs')).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('docs-subtab-webhooks')).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByTestId('docs-subtab-webhooks')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     expect(screen.getByTestId('docs-webhook-section')).toBeInTheDocument();
 
     rerender(
@@ -246,7 +250,7 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
       </I18nProvider>,
     );
     expect(screen.getByTestId('settings-tab-about')).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('about-legal-section')).toBeInTheDocument();
+    expect(await screen.findByTestId('about-legal-section')).toBeInTheDocument();
   });
 
   it('T-2.3: 73-language deep search matches localized German descriptions and resolves 100% of search entries to real DOM targets', async () => {
@@ -318,18 +322,25 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
     });
   }, 15000);
 
-  it('T-3.1: Accessibility tab uses dedicated subtitle and 4 unified ToggleSwitch controls', () => {
+  it('T-3.1: Accessibility tab renders Power Pilot card with zoom, font scale, 4 primary switches, and Colorblind toggle under Advanced', async () => {
+    const user = userEvent.setup();
+    const onChangeFontScale = vi.fn();
+    const onToggleReadableSpacing = vi.fn();
     render(
       <I18nProvider lang="en" onChangeLanguage={vi.fn()}>
         <AccessibilitySettingsTab
           zoomPercent={100}
+          fontScale="normal"
           highContrast={false}
           reducedMotion={false}
+          readableSpacing={false}
           colorBlindShapes={false}
           strongFocusRing={false}
           onChangeZoomPercent={vi.fn()}
+          onChangeFontScale={onChangeFontScale}
           onToggleHighContrast={vi.fn()}
           onToggleReducedMotion={vi.fn()}
+          onToggleReadableSpacing={onToggleReadableSpacing}
           onToggleColorBlindShapes={vi.fn()}
           onToggleStrongFocusRing={vi.fn()}
           onResetAccessibility={vi.fn()}
@@ -339,10 +350,23 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
 
     expect(screen.queryByText(EN_DICTIONARY.settingsSubtitle)).not.toBeInTheDocument();
     expect(screen.getByText(EN_DICTIONARY.accessibilitySectionSubtitle)).toBeInTheDocument();
+    expect(screen.getByTestId('a11y-font-scale-select')).toBeInTheDocument();
     expect(screen.getAllByRole('switch')).toHaveLength(4);
+
+    await user.selectOptions(screen.getByTestId('a11y-font-scale-select'), 'large');
+    expect(onChangeFontScale).toHaveBeenCalledWith('large');
+
+    await user.click(screen.getByTestId('a11y-toggle-readable-spacing'));
+    expect(onToggleReadableSpacing).toHaveBeenCalledWith(true);
+
+    // Colorblind shapes sits behind Advanced toggle by default
+    expect(screen.queryByTestId('a11y-toggle-colorblind-shapes')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('a11y-advanced-toggle'));
+    expect(screen.getByTestId('a11y-toggle-colorblind-shapes')).toBeInTheDocument();
+    expect(screen.getAllByRole('switch')).toHaveLength(5);
   });
 
-  it('T-4.1: General tab collapses 73 languages by default, closes on Escape without closing modal, removes trash purge, and uses ToggleSwitch for drag lock', async () => {
+  it('T-4.1: General tab collapses 73 languages by default, closes on Escape without closing modal, removes trash purge, and keeps safety/drag lock in Advanced', async () => {
     const user = userEvent.setup();
     const onEscapeWindow = vi.fn();
     window.addEventListener('keydown', onEscapeWindow);
@@ -382,6 +406,9 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
 
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
       expect(screen.queryByTestId('general-trash-purge-select')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('general-drag-lock-toggle')).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId('general-advanced-toggle'));
       expect(screen.getByTestId('general-drag-lock-toggle')).toHaveAttribute('role', 'switch');
 
       await user.click(screen.getByTestId('general-language-toggle-btn'));
@@ -398,7 +425,7 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
     }
   });
 
-  it('T-4.2: Trash tab shows retention & cleanup card even when Trash is empty, and uses role=group for filters', async () => {
+  it('T-4.2: Trash tab reveals retention & cleanup card inside Advanced even when Trash is empty, and avoids nested tablists', async () => {
     const user = userEvent.setup();
     const onChangePurge = vi.fn();
     const onClearCompleted = vi.fn().mockResolvedValue(undefined);
@@ -422,6 +449,8 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
       </I18nProvider>,
     );
 
+    expect(screen.queryByTestId('trash-retention-card')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('trash-advanced-toggle'));
     expect(screen.getByTestId('trash-retention-card')).toBeInTheDocument();
     await user.selectOptions(screen.getByTestId('general-trash-purge-select'), '30');
     expect(onChangePurge).toHaveBeenCalledWith(30);
@@ -430,7 +459,8 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
     expect(screen.queryAllByRole('tablist')).toHaveLength(0);
   });
 
-  it('T-5.1 & T-5.2: Shortcuts uses System-Wide header and Notifications uses distinct icons & deep-search targets', () => {
+  it('T-5.1 & T-5.2: Shortcuts uses System-Wide header and Notifications splits everyday controls from Advanced quiet hours/channels', async () => {
+    const user = userEvent.setup();
     const prevBridge = window.agendameaWindow;
     window.agendameaWindow = {
       setGlobalQuickAddShortcut: vi.fn(),
@@ -497,6 +527,10 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
         .querySelector('svg')?.innerHTML;
       expect(balancedSvg).not.toEqual(silentSvg);
       expect(container.querySelector('[data-setting-id="notif-lead-time"]')).not.toBeNull();
+      expect(screen.getAllByRole('switch')).toHaveLength(1);
+      expect(container.querySelector('[data-setting-id="notif-channels"]')).toBeNull();
+
+      await user.click(screen.getByTestId('notif-advanced-toggle'));
       expect(container.querySelector('[data-setting-id="notif-channels"]')).not.toBeNull();
       expect(screen.getAllByRole('switch')).toHaveLength(3);
     } finally {
@@ -543,7 +577,8 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
     expect(screen.queryAllByRole('tablist')).toHaveLength(0);
   });
 
-  it('T-7.1: Data Backup tab renders 3 separate cards with isolated Danger Zone and no Move Completed row', () => {
+  it('T-7.1: Data Backup tab renders primary backup/cloud cards and tucks Danger Zone & extra export formats under Advanced', async () => {
+    const user = userEvent.setup();
     vi.spyOn(api, 'getSystemInfo').mockResolvedValue({
       runtimePort: 38721,
       schemaVersion: 5,
@@ -577,11 +612,14 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
 
     expect(container.querySelector('section[data-setting-id="data-export-import"]')).not.toBeNull();
     expect(container.querySelector('section[data-setting-id="data-cloud"]')).not.toBeNull();
+    expect(screen.queryByTestId('data-danger-zone-card')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('data-advanced-toggle'));
     expect(screen.getByTestId('data-danger-zone-card')).toBeInTheDocument();
     expect(screen.queryByText(EN_DICTIONARY.moveCompletedToTrashTitle)).not.toBeInTheDocument();
   });
 
-  it('T-7.3: About tab collapses System Health by default, keeps Data+Logs folders, embeds Legal & User Guide, and returns to About from legal view', async () => {
+  it('T-7.3: About tab uses Power Pilot layout, collapses System Health by default, keeps Data+Logs folders, opens single-card Legal doc with Back button', async () => {
     const user = userEvent.setup();
     const prevBridge = window.agendameaWindow;
     window.agendameaWindow = {
@@ -599,6 +637,7 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
       activeTodos: 0,
       completedTodos: 0,
       trashedTodos: 0,
+      categoriesCount: 2,
       appVersion: '1.1.0',
     } as never);
     vi.spyOn(api, 'getOneDriveStatus').mockResolvedValue(null as never);
@@ -610,6 +649,9 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
         </I18nProvider>,
       );
 
+      // Power Pilot website CTA present
+      expect(screen.getByTestId('about-website-link')).toBeInTheDocument();
+
       // System Health collapsed by default; expands on click
       expect(screen.queryByTestId('about-workspace-counters')).not.toBeInTheDocument();
       await user.click(screen.getByTestId('about-health-toggle'));
@@ -619,15 +661,15 @@ describe('Settings IA v2 Regression Suite (T-1.1 .. T-7.3)', () => {
       expect(screen.getByTestId('about-open-data-folder-btn')).toBeInTheDocument();
       expect(screen.getByTestId('about-open-logs-folder-btn')).toBeInTheDocument();
 
-      // User Guide view works cleanly inside About
-      await user.click(screen.getByTestId('about-subtab-guide'));
-      expect(screen.getByTestId('about-guide-search-input')).toBeInTheDocument();
-      await user.click(screen.getByTestId('about-subtab-about'));
+      // Dedicated User Guide tab works cleanly under System & About
+      await user.click(screen.getByTestId('settings-tab-guide'));
+      expect(screen.getByTestId('user-guide-search-input')).toBeInTheDocument();
+      await user.click(screen.getByTestId('settings-tab-about'));
 
-      // Legal document opens and Back returns directly to About tab
+      // Legal document opens in single card with visible top Back button and returns directly to About tab
       await user.click(screen.getByTestId('legal-doc-row-privacy'));
-      const backBtns = screen.getAllByRole('button', { name: EN_DICTIONARY.backToSettingsButton });
-      await user.click(backBtns[0]!);
+      expect(screen.getByTestId('legal-document-card')).toBeInTheDocument();
+      await user.click(screen.getByTestId('legal-doc-back-btn'));
       expect(screen.getByTestId('settings-tab-about')).toHaveAttribute('aria-selected', 'true');
       expect(screen.getByTestId('about-legal-section')).toBeInTheDocument();
     } finally {

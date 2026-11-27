@@ -16,11 +16,11 @@ export function BrandMark({
       aria-hidden="true"
       className={`inline-flex shrink-0 items-center justify-center rounded-lg ${className}`}
       style={{
-        backgroundColor: bgColor ?? 'var(--app-icon-bg, var(--accent))',
-        color: fgColor ?? 'var(--app-icon-fg, var(--accent-fg))',
+        backgroundColor: bgColor ?? 'var(--app-icon-bg, #111114)',
+        color: fgColor ?? 'var(--app-icon-fg, #fafafa)',
         boxShadow: borderColor
           ? `inset 0 0 0 1px ${borderColor}`
-          : 'inset 0 0 0 1px var(--app-icon-border, transparent)',
+          : 'inset 0 0 0 1px var(--app-icon-border, rgba(255,255,255,0.18))',
       }}
     >
       <svg
